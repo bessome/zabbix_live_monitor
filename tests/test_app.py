@@ -357,6 +357,8 @@ class AppTests(unittest.TestCase):
             self.assertIn('id="optical-monitor"', detail.text)
             self.assertIn('/static/optical.js', detail.text)
             self.assertIn('device-monitor-grid', detail.text)
+            self.assertLess(detail.text.index('id="optical-monitor"'),
+                            detail.text.index('id="ping-monitor"'))
             self.assertEqual(self.client.get(path.replace("/42/", "/99/")).status_code, 404)
             self.assertEqual(self.client.get(path.replace("/TV_Amplifires/", "/VOIP/")).status_code, 404)
 

@@ -2,7 +2,13 @@
 {% block content %}
 <p><a href="/devices/{{ category }}">← {{ category }}</a></p>
 <h1>{{ device.name }}</h1>
-<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires') else '' }}">
+<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires') else '' }}{{ ' tv-amplifier-grid' if category == 'TV_Amplifires' else '' }}">
+{% if category == 'TV_Amplifires' %}
+<section class="panel optical-panel" id="optical-monitor" aria-label="Оптическая мощность" data-category="{{ category }}" data-host-id="{{ device.id }}">
+<p id="optical-state" class="modem-state" aria-live="polite">Загрузка Optical input power…</p>
+<div id="optical-channels" class="optical-channels"></div>
+</section>
+{% endif %}
 <section class="panel ping-panel" id="ping-monitor" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <div class="ping-heading"><h2>Пинг устройства</h2><span id="ping-state" class="ping-state">Ожидание…</span></div>
 <div class="ping-chart"><canvas id="ping-canvas" role="img" aria-label="График времени отклика и потерь пакетов за последнюю минуту"></canvas>
@@ -20,12 +26,6 @@
 <section class="panel modem-panel" id="modem-monitor" aria-label="Показатели каналов модема" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <p id="modem-state" class="modem-state" aria-live="polite">Загрузка каналов…</p>
 <div id="modem-channels" class="modem-channels"></div>
-</section>
-{% endif %}
-{% if category == 'TV_Amplifires' %}
-<section class="panel optical-panel" id="optical-monitor" aria-label="Оптическая мощность" data-category="{{ category }}" data-host-id="{{ device.id }}">
-<p id="optical-state" class="modem-state" aria-live="polite">Загрузка Optical input power…</p>
-<div id="optical-channels" class="optical-channels"></div>
 </section>
 {% endif %}
 <dialog id="modem-history-dialog" class="modem-history-dialog" aria-labelledby="modem-history-title">

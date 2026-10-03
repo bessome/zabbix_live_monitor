@@ -23,6 +23,7 @@
 #ping-message{font-size:13px;color:#5d6976;margin-bottom:0}
 #ping-message:empty{display:none}
 .device-monitor-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:16px;align-items:start}
+.tv-amplifier-grid{grid-template-columns:minmax(300px,.85fr) minmax(0,1.15fr)}
 .device-monitor-grid>.panel{min-width:0;margin:18px 0}
 .modem-panel>p{color:#5d6976;margin:0 0 12px}
 .modem-state{font-size:13px}
