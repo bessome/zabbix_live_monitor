@@ -2,7 +2,11 @@ name: zabbix-monitor
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        http_proxy: ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
     restart: unless-stopped
     init: true
     env_file:
