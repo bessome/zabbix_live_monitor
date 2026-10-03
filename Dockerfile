@@ -18,7 +18,7 @@ RUN groupadd --gid 10001 monitor \
 
 COPY main.py app_config.py app_storage.py app_web.py zabbix_service.py \
      routes_account.py routes_devices.py routes_settings.py \
-     ping_monitor.py snmp_monitor.py ./
+     ping_monitor.py snmp_monitor.py switch_monitor.py ./
 COPY templates ./templates
 COPY static ./static
 
