@@ -46,9 +46,7 @@
 <dt>Техническое имя</dt><dd>{{ device.technical_name }}</dd>
 <dt>Device description</dt><dd class="device-detail-description">{{ device.device_description or "—" }}</dd>
 <dt>Адрес</dt><dd>{{ device.address }}</dd>
-<dt>Хост</dt><dd>{{ "Включён" if device.enabled else "Отключён" }}</dd>
-<dt>Доступность интерфейса Zabbix</dt><dd>{{ device.availability }}</dd>
-</dl><p>Метрики и действия для этого типа устройства добавим по мере развития проекта.</p></section>
+</dl></section>
 <script src="{{ url_for('static', path='/ping.js') }}?v={{ asset_version }}" defer></script>
 {% if category == 'Modems' %}<script src="{{ url_for('static', path='/modem.js') }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'TV_Amplifires' %}<script src="{{ url_for('static', path='/optical.js') }}?v={{ asset_version }}" defer></script>{% endif %}
