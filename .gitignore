@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+instance/
+.env
+.env.*
+!.env.example
+.idea/*
+!.idea/runConfigurations/
+.idea/runConfigurations/*
+!.idea/runConfigurations/Zabbix_Monitor_Local.xml
+*.db
+*.sqlite*
+.pytest_cache/
+.ruff_cache/
+dist/
+build/

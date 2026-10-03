@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% block title %}{{ device.name }} · Zabbix Monitor{% endblock %}
+{% block content %}
+<p><a href="/devices/{{ category }}">← {{ category }}</a></p>
+<h1>{{ device.name }}</h1>
+<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires') else '' }}">
+<section class="panel ping-panel" id="ping-monitor" data-category="{{ category }}" data-host-id="{{ device.id }}">
+<div class="ping-heading"><h2>Пинг устройства</h2><span id="ping-state" class="ping-state">Ожидание…</span></div>
+<div class="ping-chart"><canvas id="ping-canvas" role="img" aria-label="График времени отклика и потерь пакетов за последнюю минуту"></canvas>
+<div class="ping-overlay" aria-label="Текущая статистика пинга">
+<div><small>Сейчас</small><strong id="ping-current">—</strong></div>
+<div><small>Мин</small><strong id="ping-min">—</strong></div>
+<div><small>Среднее</small><strong id="ping-avg">—</strong></div>
+<div><small>Макс</small><strong id="ping-max">—</strong></div>
+<div><button type="button" id="ping-loss-history" class="ping-loss-trigger" aria-label="Открыть историю потерь Zabbix" title="Открыть график потерь"><small>Потери</small><strong id="ping-loss">—</strong></button></div>
+</div></div>
+<div class="ping-legend"><span><i class="ping-line"></i>Время отклика</span><span><i class="ping-loss-mark"></i>Потеря пакета</span></div>
+<p id="ping-message" aria-live="polite">Ожидание первого результата…</p>
+</section>
+{% if category == 'Modems' %}
+<section class="panel modem-panel" id="modem-monitor" aria-label="Показатели каналов модема" data-category="{{ category }}" data-host-id="{{ device.id }}">
+<p id="modem-state" class="modem-state" aria-live="polite">Загрузка каналов…</p>
+<div id="modem-channels" class="modem-channels"></div>
+</section>
+{% endif %}
+{% if category == 'TV_Amplifires' %}
+<section class="panel optical-panel" id="optical-monitor" aria-label="Оптическая мощность" data-category="{{ category }}" data-host-id="{{ device.id }}">
+<p id="optical-state" class="modem-state" aria-live="polite">Загрузка Optical input power…</p>
+<div id="optical-channels" class="optical-channels"></div>
+</section>
+{% endif %}
+<dialog id="modem-history-dialog" class="modem-history-dialog" aria-labelledby="modem-history-title">
+<div class="modem-history-heading"><h2 id="modem-history-title">История канала</h2><button type="button" id="modem-history-close" aria-label="Закрыть график">×</button></div>
+<div id="modem-history-periods" class="modem-history-periods" role="group" aria-label="Период графика">
+<button type="button" data-period="1h" aria-pressed="true">1h</button>
+<button type="button" data-period="12h" aria-pressed="false">12h</button>
+<button type="button" data-period="24h" aria-pressed="false">24h</button>
+<button type="button" data-period="2d" aria-pressed="false">2d</button>
+</div>
+<p id="modem-history-status" role="status">Загрузка…</p>
+<div class="modem-history-chart"><canvas id="modem-history-canvas" role="img" aria-label="График значений канала за 1h"></canvas></div>
+<div id="modem-history-stats" class="modem-history-stats"></div>
+</dialog>
+</div>
+<section class="panel"><h2>Устройство</h2><dl>
+<dt>ID Zabbix</dt><dd>{{ device.id }}</dd>
+<dt>Техническое имя</dt><dd>{{ device.technical_name }}</dd>
+<dt>Device description</dt><dd class="device-detail-description">{{ device.device_description or "—" }}</dd>
+<dt>Адрес</dt><dd>{{ device.address }}</dd>
+<dt>Хост</dt><dd>{{ "Включён" if device.enabled else "Отключён" }}</dd>
+<dt>Доступность интерфейса Zabbix</dt><dd>{{ device.availability }}</dd>
+</dl><p>Метрики и действия для этого типа устройства добавим по мере развития проекта.</p></section>
+<script src="{{ url_for('static', path='/ping.js') }}?v={{ asset_version }}" defer></script>
+{% if category == 'Modems' %}<script src="{{ url_for('static', path='/modem.js') }}?v={{ asset_version }}" defer></script>{% endif %}
+{% if category == 'TV_Amplifires' %}<script src="{{ url_for('static', path='/optical.js') }}?v={{ asset_version }}" defer></script>{% endif %}
+<script src="{{ url_for('static', path='/metric-history.js') }}?v={{ asset_version }}" defer></script>
+{% endblock %}

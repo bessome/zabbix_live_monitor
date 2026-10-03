@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.venv
+.git
+.idea
+instance
+__pycache__
+*.pyc
+tests
+README.md
+compose*.yaml
+Caddyfile

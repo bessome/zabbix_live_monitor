@@ -1,0 +1,64 @@
+"""Session authorization and shared template rendering."""
+import hmac
+import secrets
+from contextlib import closing
+
+from fastapi import HTTPException
+from fastapi.templating import Jinja2Templates
+
+from app_config import CATEGORIES, ROOT
+from app_storage import connect
+
+templates = Jinja2Templates(directory=ROOT / "templates")
+
+def user_for(request):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return None
+    with closing(connect()) as con:
+        user = con.execute("SELECT id,username,role,theme FROM users WHERE id=? AND active=1",
+                           (user_id,)).fetchone()
+    if user is None:
+        request.session.clear()
+    return user
+
+
+def require_user(request, api=False):
+    user = user_for(request)
+    if user is None:
+        if api:
+            raise HTTPException(401, "Authentication required")
+        raise HTTPException(303, headers={"Location": "/login"})
+    return user
+
+
+def require_admin(request):
+    user = require_user(request)
+    if user["role"] != "admin":
+        raise HTTPException(403)
+    return user
+
+
+def add_message(request, text, kind="success"):
+    request.session.setdefault("messages", []).append({"text": text, "kind": kind})
+
+
+def render(request, name, **context):
+    token = request.session.setdefault("csrf_token", secrets.token_urlsafe(32))
+    current_user = user_for(request)
+    return templates.TemplateResponse(
+        request=request, name=name,
+        context={"categories": CATEGORIES, "current_user": current_user,
+                 "asset_version": max(file.stat().st_mtime_ns
+                                      for file in (ROOT / "static").iterdir() if file.is_file()),
+                 "csrf_token": token, "messages": request.session.pop("messages", []),
+                 **context})
+
+
+async def checked_form(request):
+    form = await request.form()
+    expected = request.session.get("csrf_token", "")
+    supplied = str(form.get("csrf_token", ""))
+    if not expected or not hmac.compare_digest(expected, supplied):
+        raise HTTPException(400, "Invalid CSRF token")
+    return form

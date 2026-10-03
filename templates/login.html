@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block title %}Вход · Zabbix Monitor{% endblock %}
+{% block content %}<section class="panel narrow"><h1>Вход</h1>
+<form method="post" action="/login">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Пользователь <input name="username" autocomplete="username" required autofocus></label>
+<label>Пароль <input type="password" name="password" autocomplete="current-password" required></label>
+<button type="submit">Войти</button></form></section>{% endblock %}

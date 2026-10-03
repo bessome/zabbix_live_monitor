@@ -1,0 +1,140 @@
+{% extends "base.html" %}{% block title %}Настройки · Zabbix Monitor{% endblock %}
+{% block content %}<h1>Настройки приложения</h1>
+<section class="panel"><h2>Zabbix API</h2>
+<p>Токен: <strong>{{ "задан через ZABBIX_API_TOKEN" if token_configured else "не задан" }}</strong>. Секрет хранится вне базы данных.</p>
+<form method="post" action="/settings/check"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Проверить соединение</button></form></section>
+<form method="post" action="/settings" class="panel">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>URL API <input type="url" name="zabbix_url" value="{{ zabbix_url }}" placeholder="https://zabbix.example/api_jsonrpc.php"></label>
+<h2>Фильтры меню</h2>
+<p>Выберите группы или шаблоны Zabbix для каждого меню. Можно отметить несколько пунктов. Списки загружаются из сохранённого URL API; после его изменения сначала сохраните настройки.</p>
+<div class="filter-grid">{% for item in categories %}
+<details class="filter-card" data-category="{{ item }}" open>
+<summary><span>{{ item }}</span><small class="filter-count"></small></summary>
+<label>Источник
+<select class="catalog-mode" name="mode:{{ item }}">
+{% if filters[item][0] == "group" %}
+<option value="group" selected>Группы хостов</option><option value="template">Шаблоны</option>
+{% else %}
+<option value="group">Группы хостов</option><option value="template" selected>Шаблоны</option>
+{% endif %}
+</select></label>
+<label>Поиск <input class="catalog-search" type="search" placeholder="Название или ID" autocomplete="off"></label>
+<input class="catalog-ids" type="hidden" name="ids:{{ item }}" value="{{ filters[item][1]|join(',') }}">
+<div class="catalog-selected" aria-live="polite"></div>
+<p class="catalog-status" aria-live="polite">Загрузка списка…</p>
+<div class="catalog-list" role="group" aria-label="Доступные группы или шаблоны"></div>
+<label>SNMP community для {{ item }}
+<input type="password" name="snmp_community:{{ item }}" autocomplete="new-password" placeholder="{{ 'Задана — оставьте пустым, чтобы сохранить' if snmp_configured[item] else 'Не задана — используется public' }}">
+</label>
+<label class="snmp-clear"><input type="checkbox" name="clear_snmp:{{ item }}" value="1"> Сбросить community на public</label>
+</details>
+{% endfor %}</div>
+<button type="submit">Сохранить настройки</button></form>
+<script>
+const catalogCache = {};
+function catalog(mode) {
+  if (!catalogCache[mode]) {
+    catalogCache[mode] = fetch("/api/zabbix/catalog/" + mode, {credentials: "same-origin"})
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Не удалось загрузить список");
+        return data.items;
+      }).catch(error => { delete catalogCache[mode]; throw error; });
+  }
+  return catalogCache[mode];
+}
+function normalizeCatalogSearch(value) {
+  return value.toLocaleLowerCase().replace(/[äöõü]/g, letter =>
+    ({ä: "a", ö: "o", õ: "o", ü: "u"})[letter]);
+}
+for (const card of document.querySelectorAll(".filter-card")) {
+  const mode = card.querySelector(".catalog-mode");
+  const search = card.querySelector(".catalog-search");
+  const hidden = card.querySelector(".catalog-ids");
+  const list = card.querySelector(".catalog-list");
+  const status = card.querySelector(".catalog-status");
+  const summary = card.querySelector(".catalog-selected");
+  const count = card.querySelector(".filter-count");
+  const selected = new Set(hidden.value.split(",").filter(Boolean));
+  let items = [];
+  let generation = 0;
+  function saveSelection() {
+    hidden.value = [...selected].join(",");
+    summary.replaceChildren();
+    const label = document.createElement("strong");
+    label.textContent = "Выбрано: " + selected.size;
+    count.textContent = selected.size ? "Выбрано: " + selected.size : "Не выбрано";
+    summary.appendChild(label);
+    const names = new Map(items.map(item => [item.id, item.name]));
+    for (const id of selected) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "selected-chip";
+      chip.textContent = names.get(id) || ("ID " + id);
+      chip.title = "Убрать из фильтра";
+      chip.addEventListener("click", () => {
+        selected.delete(id);
+        saveSelection();
+        renderList();
+      });
+      summary.appendChild(chip);
+    }
+  }
+  function renderList() {
+    list.replaceChildren();
+    const q = normalizeCatalogSearch(search.value.trim());
+    const matches = items.filter(item => normalizeCatalogSearch(item.name).includes(q) || item.id.includes(q));
+    const visible = matches.slice(0, 200);
+    for (const item of visible) {
+      const label = document.createElement("label");
+      label.className = "catalog-option";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = selected.has(item.id);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) selected.add(item.id);
+        else selected.delete(item.id);
+        saveSelection();
+      });
+      const name = document.createElement("span");
+      name.textContent = item.name;
+      const id = document.createElement("small");
+      id.textContent = "ID " + item.id;
+      label.append(checkbox, name, id);
+      list.appendChild(label);
+    }
+    status.textContent = matches.length
+      ? "Найдено: " + matches.length + (matches.length > visible.length ? " · показаны первые 200, уточните поиск" : "")
+      : "Совпадений нет. Если список пуст без поиска, проверьте права токена Zabbix.";
+  }
+  async function load() {
+    const current = ++generation;
+    status.textContent = "Загрузка списка…";
+    list.replaceChildren();
+    items = [];
+    saveSelection();
+    try {
+      const result = await catalog(mode.value);
+      if (current !== generation) return;
+      items = result;
+      saveSelection();
+      renderList();
+    } catch (error) {
+      if (current === generation) status.textContent = error.message;
+    }
+  }
+  mode.addEventListener("change", () => {
+    selected.clear();
+    search.value = "";
+    saveSelection();
+    load();
+  });
+  search.addEventListener("input", renderList);
+  saveSelection();
+  load();
+}
+if (window.matchMedia("(max-width: 720px)").matches) {
+  document.querySelectorAll(".filter-card").forEach((card, index) => { card.open = index === 0; });
+}
+</script>{% endblock %}

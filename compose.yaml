@@ -1,0 +1,29 @@
+name: zabbix-monitor
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      APP_DB_PATH: /data/monitor.db
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - monitor_data:/data
+    cap_add:
+      - NET_RAW
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  monitor_data:

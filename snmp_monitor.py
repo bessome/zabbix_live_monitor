@@ -1,0 +1,177 @@
+"""Direct SNMPv2c polling for device metrics."""
+import asyncio
+from decimal import Decimal, InvalidOperation
+import hashlib
+import ipaddress
+import re
+import threading
+import time
+
+from pysnmp.hlapi.v3arch.asyncio import (
+    CommunityData, ContextData, ObjectIdentity, ObjectType, SnmpEngine,
+    Udp6TransportTarget, UdpTransportTarget, get_cmd,
+)
+from pysnmp.proto.rfc1905 import EndOfMibView, NoSuchInstance, NoSuchObject
+
+from ping_monitor import validate_target
+
+POLL_SECONDS = 5
+CACHE_SECONDS = 4.5
+MAX_ENTRIES = 80
+_oid_pattern = re.compile(r"^\.?\d+(?:\.\d+)+$")
+_us_pattern = re.compile(r"^Upstream channel\s+(US\d*)\s+Level$", re.I)
+_ds_pattern = re.compile(
+    r"^Downstream channel\s+(\d+)\s+(\S+MHz)\s+(Level|SNR)$", re.I,
+)
+_ds_generic_pattern = re.compile(r"^Downstream channel\s+(Level|SNR)$", re.I)
+_entries = {}
+_entries_lock = threading.Lock()
+
+
+def channel_definition(item):
+    """Map a Zabbix SNMP item to a compact label and numeric OID."""
+    name = str(item.get("name", "")).strip()
+    upstream = _us_pattern.fullmatch(name)
+    downstream = _ds_pattern.fullmatch(name)
+    downstream_generic = _ds_generic_pattern.fullmatch(name)
+    if upstream:
+        channel_text = upstream.group(1)[2:]
+        channel = int(channel_text) if channel_text else 0
+        label = f"US{channel_text} Level"
+        order = (0, channel, 0, 0)
+    elif downstream:
+        channel = int(downstream.group(1))
+        frequency = downstream.group(2)
+        metric = downstream.group(3).upper()
+        display_metric = "Level" if metric == "LEVEL" else "SNR"
+        label = f"DS{channel} {frequency} {display_metric}"
+        order = (1, channel, 0 if metric == "LEVEL" else 1, frequency)
+    elif downstream_generic:
+        metric = downstream_generic.group(1).upper()
+        label = "DS Level" if metric == "LEVEL" else "DS SNR"
+        order = (1, 0, 0 if metric == "LEVEL" else 1, "")
+    else:
+        return None
+    definition = snmp_item_definition(item, label)
+    if definition is not None:
+        definition["order"] = order
+    return definition
+
+
+def optical_definition(item):
+    """Map the TV amplifier's Optical input power item to a direct SNMP read."""
+    if str(item.get("name", "")).strip().casefold() != "optical input power":
+        return None
+    return snmp_item_definition(item, "Optical input power")
+
+
+def snmp_item_definition(item, label):
+    if str(item.get("type")) != "20" or str(item.get("status", "0")) != "0":
+        return None
+    oid = str(item.get("snmp_oid", "")).strip()
+    if oid.lower().startswith("get[") and oid.endswith("]"):
+        oid = oid[4:-1].strip()
+    if not _oid_pattern.fullmatch(oid):
+        return None
+    multiplier = Decimal(1)
+    try:
+        for step in item.get("preprocessing", []):
+            if str(step.get("type")) != "1":
+                return None
+            multiplier *= Decimal(str(step["params"]).strip())
+    except (InvalidOperation, KeyError):
+        return None
+    return {
+        "id": str(item["itemid"]),
+        "label": label,
+        "oid": oid.lstrip("."),
+        "units": str(item.get("units", "")),
+        "value_type": str(item.get("value_type", "0")),
+        "multiplier": str(multiplier),
+    }
+
+
+def _format_value(value, multiplier):
+    if isinstance(value, (NoSuchObject, NoSuchInstance, EndOfMibView)):
+        return None
+    try:
+        number = Decimal(value.prettyPrint()) * Decimal(multiplier)
+    except (InvalidOperation, ValueError, AttributeError):
+        return None
+    result = format(number, "f")
+    return result.rstrip("0").rstrip(".") if "." in result else result
+
+
+async def poll_values(address, port, community, definitions):
+    """Send batched SNMP GET requests directly to the device."""
+    if not validate_target(address) or not 1 <= int(port) <= 65535:
+        raise ValueError("Нет корректного адреса или порта SNMP-интерфейса.")
+    if not definitions:
+        return []
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        ip = None
+    transport_class = Udp6TransportTarget if ip and ip.version == 6 else UdpTransportTarget
+    try:
+        target = await transport_class.create((address, int(port)), timeout=1.5, retries=0)
+        with SnmpEngine() as engine:
+            async def batch(items):
+                result = await get_cmd(
+                    engine, CommunityData(community, mpModel=1), target, ContextData(),
+                    *(ObjectType(ObjectIdentity(item["oid"])) for item in items),
+                    lookupMib=False,
+                )
+                indication, status, _, bindings = result
+                if indication:
+                    raise RuntimeError("SNMP: " + str(indication))
+                if status:
+                    raise RuntimeError("SNMP: " + status.prettyPrint())
+                return [
+                    {
+                        "id": item["id"],
+                        "label": item["label"],
+                        "value": _format_value(binding[1], item["multiplier"]),
+                        "units": item["units"],
+                    }
+                    for item, binding in zip(items, bindings)
+                ]
+            chunks = [definitions[i:i + 16] for i in range(0, len(definitions), 16)]
+            results = await asyncio.gather(*(batch(chunk) for chunk in chunks))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("Не удалось опросить SNMP: " + str(exc)) from exc
+    return [item for result in results for item in result]
+
+
+class _Entry:
+    def __init__(self):
+        self.lock = asyncio.Lock()
+        self.last_seen = time.monotonic()
+        self.updated = 0.0
+        self.data = None
+
+
+async def snapshot_for(host_id, address, port, community, definitions):
+    """Share one result across viewers and refresh it about every five seconds."""
+    signature = tuple((item["id"], item["oid"], item["multiplier"]) for item in definitions)
+    credential_id = hashlib.sha256(community.encode()).digest()
+    key = (str(host_id), address, int(port), credential_id, signature)
+    with _entries_lock:
+        now = time.monotonic()
+        for old_key, old_entry in list(_entries.items()):
+            if now - old_entry.last_seen > 60:
+                del _entries[old_key]
+        entry = _entries.get(key)
+        if entry is None:
+            if len(_entries) >= MAX_ENTRIES:
+                raise RuntimeError("Слишком много активных SNMP-опросов.")
+            entry = _Entry()
+            _entries[key] = entry
+        entry.last_seen = now
+    async with entry.lock:
+        if entry.data is not None and time.monotonic() - entry.updated < CACHE_SECONDS:
+            return entry.data
+        values = await poll_values(address, port, community, definitions)
+        entry.data = {"items": values, "updated_at": int(time.time())}
+        entry.updated = time.monotonic()
+        return entry.data

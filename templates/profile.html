@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% block title %}Мои настройки · Zabbix Monitor{% endblock %}
+{% block content %}
+<h1>Мои настройки</h1>
+<form method="post" action="/profile" class="panel profile-panel">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<fieldset class="theme-options">
+<legend>Тема оформления</legend>
+<label class="theme-option">
+{% if current_user.theme == "light" %}
+<input type="radio" name="theme" value="light" checked>
+{% else %}
+<input type="radio" name="theme" value="light">
+{% endif %}
+<span><strong>Светлая</strong><small>Светлый фон и тёмный текст</small></span>
+</label>
+<label class="theme-option">
+{% if current_user.theme == "dark" %}
+<input type="radio" name="theme" value="dark" checked>
+{% else %}
+<input type="radio" name="theme" value="dark">
+{% endif %}
+<span><strong>Тёмная</strong><small>Тёмный фон и светлый текст</small></span>
+</label>
+</fieldset>
+<button type="submit">Сохранить</button>
+</form>
+{% endblock %}

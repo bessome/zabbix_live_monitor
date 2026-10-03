@@ -1,0 +1,102 @@
+{% extends "base.html" %}{% block title %}{{ category }} · Zabbix Monitor{% endblock %}
+{% block content %}<section class="heading"><div><h1>{{ category }}</h1>
+<p>Данные Zabbix обновляются каждые 15 секунд. Доступность определяется по интерфейсам хоста.</p></div>
+<span id="updated">—</span></section>
+{% if not configured %}<p class="message">Для этого меню пока не задан фильтр. Администратор может выбрать группы или шаблоны в настройках.</p>{% endif %}
+<section class="panel" id="device-list" data-category="{{ category }}">
+<div class="device-toolbar">
+<label>Поиск устройства <input id="search" type="search" placeholder="Имя, техническое имя или адрес" autocomplete="off"></label>
+<label>Строк на странице <select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="250">250</option></select></label>
+</div>
+<p id="status" aria-live="polite"></p>
+<div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th><th>Хост</th><th>Доступность</th></tr></thead>
+<tbody id="rows"></tbody></table></div>
+<div class="pagination" aria-label="Навигация по страницам">
+<button id="first-page" type="button" aria-label="Первая страница">«</button>
+<button id="prev-page" type="button" aria-label="Предыдущая страница">‹</button>
+<span id="page-info" aria-live="polite">Страница 1 из 1</span>
+<button id="next-page" type="button" aria-label="Следующая страница">›</button>
+<button id="last-page" type="button" aria-label="Последняя страница">»</button>
+</div></section>
+<script>
+const category = document.getElementById("device-list").dataset.category;
+const rows = document.getElementById("rows");
+const status = document.getElementById("status");
+const search = document.getElementById("search");
+const pageSize = document.getElementById("page-size");
+const first = document.getElementById("first-page");
+const previous = document.getElementById("prev-page");
+const next = document.getElementById("next-page");
+const last = document.getElementById("last-page");
+const pageInfo = document.getElementById("page-info");
+let currentPage = 1;
+let lastPage = 1;
+let requestSequence = 0;
+function cell(tr, label, value) {
+  const td = document.createElement("td");
+  td.dataset.label = label;
+  td.textContent = value;
+  tr.appendChild(td);
+}
+async function refresh() {
+  const sequence = ++requestSequence;
+  const params = new URLSearchParams({q: search.value.trim(), page: String(currentPage), per_page: pageSize.value});
+  try {
+    const response = await fetch("/api/devices/" + encodeURIComponent(category) + "?" + params.toString(), {credentials: "same-origin"});
+    if (response.status === 401) { location.href = "/login"; return; }
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Ошибка загрузки");
+    if (sequence !== requestSequence) return;
+    currentPage = data.page;
+    lastPage = data.pages;
+    rows.replaceChildren();
+    for (const device of data.devices) {
+      const tr = document.createElement("tr");
+      const nameCell = document.createElement("td");
+      const link = document.createElement("a");
+      link.href = "/devices/" + encodeURIComponent(category) + "/" + encodeURIComponent(device.id);
+      link.textContent = device.name;
+      nameCell.appendChild(link);
+      const description = document.createElement("small");
+      description.className = "device-description";
+      description.textContent = "Описание: " + (device.device_description || "—");
+      nameCell.appendChild(description);
+      tr.appendChild(nameCell);
+      cell(tr, "Адрес", device.address);
+      cell(tr, "Хост", device.enabled ? "Включён" : "Отключён");
+      const state = document.createElement("td");
+      state.dataset.label = "Доступность";
+      state.textContent = device.availability === "available" ? "Доступен" : device.availability === "unavailable" ? "Недоступен" : "Нет данных";
+      state.className = device.availability;
+      tr.appendChild(state);
+      rows.appendChild(tr);
+    }
+    const from = data.total ? (data.page - 1) * data.per_page + 1 : 0;
+    const to = data.total ? from + data.devices.length - 1 : 0;
+    status.textContent = "Показано " + from + "–" + to + " из " + data.total;
+    pageInfo.textContent = window.matchMedia("(max-width: 480px)").matches
+      ? data.page + " / " + data.pages
+      : "Страница " + data.page + " из " + data.pages;
+    first.disabled = previous.disabled = data.page <= 1;
+    next.disabled = last.disabled = data.page >= data.pages;
+    document.getElementById("updated").textContent = "Обновлено: " + new Date(data.updated_at * 1000).toLocaleTimeString();
+  } catch (error) {
+    if (sequence === requestSequence) status.textContent = error.message;
+  }
+}
+function goTo(page) { currentPage = page; refresh(); }
+first.addEventListener("click", () => goTo(1));
+previous.addEventListener("click", () => goTo(currentPage - 1));
+next.addEventListener("click", () => goTo(currentPage + 1));
+last.addEventListener("click", () => goTo(lastPage));
+let timer;
+search.addEventListener("input", () => {
+  currentPage = 1;
+  requestSequence++;
+  clearTimeout(timer);
+  timer = setTimeout(refresh, 250);
+});
+pageSize.addEventListener("change", () => { currentPage = 1; refresh(); });
+refresh();
+setInterval(refresh, 15000);
+</script>{% endblock %}
