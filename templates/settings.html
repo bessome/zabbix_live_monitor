@@ -11,6 +11,14 @@
 </label>
 <p>От 1 до 3650 дней; 0 — без удаления. При сокращении срока старые записи удаляются сразу.</p>
 <button type="submit">Сохранить срок</button></form></section>
+<section class="panel"><h2>Порты Switches</h2>
+<form method="post" action="/settings/switch-ports">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Не показывать интерфейсы, если имя содержит
+<input type="text" name="switch_port_exclude" value="{{ switch_port_exclude }}" maxlength="300" placeholder="Vlan|AUX|Loop">
+</label>
+<p>Фрагменты через |, без учёта регистра. Проверяются ifName и ifDescr. Пустое поле отключает этот фильтр.</p>
+<button type="submit">Сохранить фильтр</button></form></section>
 <form method="post" action="/settings" class="panel">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>URL API <input type="url" name="zabbix_url" value="{{ zabbix_url }}" placeholder="https://zabbix.example/api_jsonrpc.php"></label>

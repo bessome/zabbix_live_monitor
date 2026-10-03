@@ -3,7 +3,8 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from switch_monitor import OID, build_ports, poll_ports, snapshot_for
+from switch_monitor import (DEFAULT_EXCLUDED_NAMES, OID, build_ports,
+                            parse_excluded_names, poll_ports, snapshot_for)
 
 
 class SwitchTests(unittest.TestCase):
@@ -13,7 +14,7 @@ class SwitchTests(unittest.TestCase):
         columns["ifType"] = {1: "6", 2: "6", 3: "6", 4: "135", 5: "6"}
         columns["ifName"] = {1: "Gi1/0/1", 2: "Gi1/0/2", 3: "Gi1/0/3", 4: "Vlan1"}
         columns["ifDescr"] = {5: "Ethernet 5"}
-        columns["ifConnectorPresent"] = {1: "1", 2: "1", 3: "1", 4: "2"}
+        columns["ifConnectorPresent"] = {1: "1", 2: "1", 3: "1", 4: "2", 5: "1"}
         columns["ifHighSpeed"] = {1: "100", 2: "1000", 3: "1000", 5: "0"}
         columns["ifSpeed"] = {5: "2500000000"}
         ports = build_ports(columns)
@@ -23,6 +24,52 @@ class SwitchTests(unittest.TestCase):
         self.assertEqual([item["speed_mbps"] for item in ports],
                          [100, 1000, 1000, 2500])
         self.assertEqual(ports[-1]["name"], "Ethernet 5")
+        self.assertEqual([item["label"] for item in ports], ["1", "2", "3", "5"])
+
+    def test_number_order_excludes_nonphysical_duplicates(self):
+        columns = {name: {} for name in OID}
+        for index in range(1, 29):
+            if_index = 100 + index * 3
+            columns["ifOperStatus"][if_index] = "1"
+            columns["ifType"][if_index] = "6"
+            columns["ifName"][if_index] = f"Gi1/0/{index}"
+            columns["ifConnectorPresent"][if_index] = "1"
+            columns["ifHighSpeed"][if_index] = "1000"
+        for if_index, name in ((1, "1"), (2, "22"), (3, "42")):
+            columns["ifOperStatus"][if_index] = "1"
+            columns["ifType"][if_index] = "6"
+            columns["ifName"][if_index] = name
+        ports = build_ports(columns)
+        self.assertEqual([port["label"] for port in ports],
+                         [str(number) for number in range(1, 29)])
+
+    def test_duplicate_physical_numbers_get_unique_labels(self):
+        columns = {name: {} for name in OID}
+        columns["ifOperStatus"] = {10: "1", 20: "1"}
+        columns["ifType"] = {10: "6", 20: "6"}
+        columns["ifName"] = {10: "Gi1/0/1", 20: "Gi2/0/1"}
+        columns["ifConnectorPresent"] = {10: "1", 20: "1"}
+        ports = build_ports(columns)
+        self.assertEqual([port["label"] for port in ports], ["1:1", "2:1"])
+        columns["ifName"][20] = "Eth1/0/1"
+        ports = build_ports(columns)
+        self.assertEqual(len({port["label"] for port in ports}), 2)
+
+    def test_configured_fragments_hide_matching_name_or_description(self):
+        columns = {name: {} for name in OID}
+        columns["ifOperStatus"] = {index: "1" for index in range(1, 6)}
+        columns["ifType"] = {index: "6" for index in range(1, 6)}
+        columns["ifName"] = {1: "Gi1/0/1", 2: "Vlan22", 3: "Aux42",
+                             4: "Loopback5", 5: "Gi1/0/5"}
+        columns["ifDescr"] = {5: "Virtual AUX uplink"}
+        excluded = parse_excluded_names(DEFAULT_EXCLUDED_NAMES)
+        self.assertEqual(excluded, ("vlan", "aux", "loop"))
+        self.assertEqual([port["label"] for port in build_ports(columns, excluded)], ["1"])
+        self.assertEqual(len(build_ports(columns)), 5)
+        self.assertEqual(parse_excluded_names("(Vlan|AUX|Loop)"), excluded)
+        self.assertEqual(parse_excluded_names(""), ())
+        with self.assertRaises(ValueError):
+            parse_excluded_names("Vlan||Loop")
 
     def test_direct_if_mib_walk(self):
         rows = {

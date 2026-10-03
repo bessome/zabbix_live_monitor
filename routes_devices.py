@@ -6,11 +6,12 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app_storage import snmp_community_for
+from app_storage import setting, snmp_community_for
 from app_web import render, require_user
 from ping_monitor import snapshot_for
 from snmp_monitor import snapshot_for as snmp_snapshot_for
-from switch_monitor import snapshot_for as switch_snapshot_for
+from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
+                            snapshot_for as switch_snapshot_for)
 from zabbix_service import (category_filter, device_descriptions, host_rows,
                             modem_channel_definitions, normalize_device_search,
                             optical_power_definitions, ping_loss_definition,
@@ -187,8 +188,11 @@ async def switch_ports(request: Request, category: str, host_id: str):
         if device is None:
             raise HTTPException(404)
         community = snmp_community_for(category)
+        excluded_names = parse_excluded_names(
+            setting("switch_port_exclude", DEFAULT_EXCLUDED_NAMES))
         result = await switch_snapshot_for(host_id, device["snmp_address"],
-                                           device["snmp_port"], community)
+                                           device["snmp_port"], community,
+                                           excluded_names)
     except (RuntimeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})

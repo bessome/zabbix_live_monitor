@@ -370,7 +370,7 @@ class AppTests(unittest.TestCase):
         with (patch("routes_devices.host_rows", return_value=[device]),
               patch("routes_devices.device_descriptions", return_value={}),
               patch("routes_devices.switch_snapshot_for", new_callable=AsyncMock,
-                    return_value={"ports": [{"index": 1, "name": "Gi1", "state": "fast",
+                    return_value={"ports": [{"index": 1, "name": "Gi1", "label": "1", "state": "fast",
                                              "speed_mbps": 1000}], "updated_at": 1}) as poll):
             detail = self.client.get("/devices/Switches/42")
             self.assertIn('id="switch-monitor"', detail.text)
@@ -381,9 +381,39 @@ class AppTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["ports"][0]["state"], "fast")
             self.assertEqual(poll.call_args.args,
-                             ("42", "192.0.2.42", "161", "public"))
+                              ("42", "192.0.2.42", "161", "public",
+                               ("vlan", "aux", "loop")))
             self.assertEqual(self.client.get(
                 "/api/devices/Modems/42/switch-ports").status_code, 404)
+
+    def test_switch_port_filter_is_admin_setting(self):
+        self.login()
+        self.assertIn('value="Vlan|AUX|Loop"', self.client.get("/settings").text)
+        response = self.client.post("/settings/switch-ports", data={
+            "csrf_token": self.token("/settings"),
+            "switch_port_exclude": "Vlan|AUX|Loop|Virtual",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.storage.setting("switch_port_exclude"),
+                         "Vlan|AUX|Loop|Virtual")
+        self.assertIn('value="Vlan|AUX|Loop|Virtual"', response.text)
+        with (patch("routes_devices.host_rows", return_value=[{
+                  "id": "42", "snmp_address": "192.0.2.42", "snmp_port": "161"}]),
+              patch("routes_devices.switch_snapshot_for", new_callable=AsyncMock,
+                    return_value={"ports": [], "updated_at": 1}) as poll):
+            self.assertEqual(self.client.get(
+                "/api/devices/Switches/42/switch-ports").status_code, 200)
+            self.assertEqual(poll.call_args.args[-1],
+                             ("vlan", "aux", "loop", "virtual"))
+        self.client.post("/settings/switch-ports", data={
+            "csrf_token": self.token("/settings"), "switch_port_exclude": "Vlan||AUX",
+        })
+        self.assertEqual(self.storage.setting("switch_port_exclude"),
+                         "Vlan|AUX|Loop|Virtual")
+        self.client.post("/settings/switch-ports", data={
+            "csrf_token": self.token("/settings"), "switch_port_exclude": "",
+        })
+        self.assertEqual(self.storage.setting("switch_port_exclude"), "")
 
     def test_tv_optical_history_uses_selected_zabbix_item(self):
         path = "/api/devices/TV_Amplifires/42/optical-power/81/history"

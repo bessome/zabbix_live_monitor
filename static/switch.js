@@ -7,10 +7,6 @@
     + "/" + encodeURIComponent(root.dataset.hostId) + "/switch-ports";
   let inFlight = false;
 
-  function portNumber(port) {
-    return port.name.match(/\d+$/)?.[0] || String(port.index);
-  }
-
   function render(ports) {
     const fragment = document.createDocumentFragment();
     for (const port of ports) {
@@ -23,7 +19,7 @@
       tile.className = "switch-port " + port.state;
       tile.title = port.name + " · " + status;
       tile.setAttribute("aria-label", tile.title);
-      label.textContent = portNumber(port);
+      label.textContent = port.label;
       tile.append(label);
       fragment.appendChild(tile);
     }

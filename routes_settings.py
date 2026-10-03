@@ -13,6 +13,7 @@ from app_storage import (DEFAULT_ACTIVITY_RETENTION_DAYS, check_password,
                          connect, encrypt_community, hash_password,
                          purge_expired_activity, setting)
 from app_web import add_message, checked_form, render, require_admin
+from switch_monitor import DEFAULT_EXCLUDED_NAMES, parse_excluded_names
 from zabbix_service import category_filter, clear_caches, zabbix_call, zabbix_catalog
 
 router = APIRouter()
@@ -23,6 +24,7 @@ def settings_page(request: Request):
     filters = {category: category_filter(category) for category in CATEGORIES}
     return render(request, "settings.html", zabbix_url=setting("zabbix_url"),
                    filters=filters,
+                   switch_port_exclude=setting("switch_port_exclude", DEFAULT_EXCLUDED_NAMES),
                    activity_retention_days=int(setting(
                        "activity_retention_days", str(DEFAULT_ACTIVITY_RETENTION_DAYS))),
                    snmp_configured={category: bool(setting("snmp_community:" + category))
@@ -48,6 +50,26 @@ async def save_activity_retention(request: Request):
         purge_expired_activity(con)
         con.commit()
     add_message(request, "Срок хранения журнала сохранён.")
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/switch-ports")
+async def save_switch_port_filter(request: Request):
+    require_admin(request)
+    form = await checked_form(request)
+    value = str(form.get("switch_port_exclude", "")).strip()
+    try:
+        parse_excluded_names(value)
+    except ValueError as exc:
+        add_message(request, str(exc), "error")
+        return RedirectResponse("/settings", status_code=303)
+    with closing(connect()) as con:
+        con.execute(
+            "INSERT INTO settings(key,value) VALUES ('switch_port_exclude',?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (value,)
+        )
+        con.commit()
+    add_message(request, "Фильтр портов Switches сохранён.")
     return RedirectResponse("/settings", status_code=303)
 
 
