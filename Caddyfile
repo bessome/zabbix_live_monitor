@@ -1,3 +1,7 @@
+{
+    default_sni {$APP_DOMAIN}
+}
+
 {$APP_DOMAIN} {
     tls internal
     encode zstd gzip
