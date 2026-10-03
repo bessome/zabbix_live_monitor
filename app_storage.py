@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from app_config import CATEGORIES, DB_PATH, SECRET
 
 _community_cipher = Fernet(base64.urlsafe_b64encode(hashlib.sha256(SECRET.encode()).digest()))
+DEFAULT_ACTIVITY_RETENTION_DAYS = 90
 
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -63,6 +64,7 @@ def init_db():
                 path TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS activity_log_recent ON activity_log(id DESC);
+            CREATE INDEX IF NOT EXISTS activity_log_expiry ON activity_log(occurred_at);
         """)
         columns = {row["name"] for row in con.execute("PRAGMA table_info(users)")}
         if "theme" not in columns:
@@ -77,9 +79,21 @@ def init_db():
         con.commit()
 
 
+def purge_expired_activity(con):
+    """Apply the configured retention period inside the caller's transaction."""
+    row = con.execute(
+        "SELECT value FROM settings WHERE key='activity_retention_days'"
+    ).fetchone()
+    days = int(row["value"]) if row else DEFAULT_ACTIVITY_RETENTION_DAYS
+    if days:
+        con.execute("DELETE FROM activity_log WHERE occurred_at < ?",
+                    (int(time.time()) - days * 86400,))
+
+
 def record_activity(user, event, section, path):
     """Persist a successful sign-in or a user-visible page visit."""
     with closing(connect()) as con:
+        purge_expired_activity(con)
         con.execute(
             "INSERT INTO activity_log(occurred_at,user_id,username,event,section,path) "
             "VALUES (?,?,?,?,?,?)",

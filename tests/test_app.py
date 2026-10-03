@@ -3,6 +3,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import time
 import unittest
 from contextlib import closing
 from pathlib import Path
@@ -104,7 +105,7 @@ class AppTests(unittest.TestCase):
             con.executemany(
                 "INSERT INTO activity_log(occurred_at,user_id,username,event,section,path) "
                 "VALUES (?,?,?,?,?,?)",
-                [(1, 999, "PaginationOnly", "view", f"Раздел {i}", "/")
+                [(int(time.time()), 999, "PaginationOnly", "view", f"Раздел {i}", "/")
                  for i in range(201)],
             )
             con.commit()
@@ -123,6 +124,42 @@ class AppTests(unittest.TestCase):
         self.login("AuditReader", "audit-password-123")
         self.assertEqual(self.client.get("/settings/activity").status_code, 403)
         self.assertNotIn('href="/settings/activity"', self.client.get("/").text)
+
+    def test_activity_retention_setting_removes_old_entries(self):
+        self.login()
+        self.assertIn('name="activity_retention_days"', self.client.get("/settings").text)
+        now = int(time.time())
+        with closing(self.storage.connect()) as con:
+            con.executemany(
+                "INSERT INTO activity_log(occurred_at,user_id,username,event,section,path) "
+                "VALUES (?,?,?,?,?,?)",
+                [(now - 8 * 86400, 999, "RetentionProbe", "view", "Old", "/"),
+                 (now - 86400, 999, "RetentionProbe", "view", "Recent", "/")],
+            )
+            con.commit()
+        response = self.client.post("/settings/activity-retention", data={
+            "csrf_token": self.token("/settings"), "activity_retention_days": "7"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('name="activity_retention_days" min="0" max="3650" step="1" value="7"',
+                      response.text)
+        with closing(self.storage.connect()) as con:
+            sections = [row[0] for row in con.execute(
+                "SELECT section FROM activity_log WHERE username='RetentionProbe'")]
+        self.assertEqual(sections, ["Recent"])
+        self.client.post("/settings/activity-retention", data={
+            "csrf_token": self.token("/settings"), "activity_retention_days": "0"})
+        with closing(self.storage.connect()) as con:
+            con.execute(
+                "INSERT INTO activity_log(occurred_at,user_id,username,event,section,path) "
+                "VALUES (?,?,?,?,?,?)", (1, 999, "RetentionProbe", "view", "Ancient", "/"))
+            con.commit()
+        self.assertIn("Ancient", self.client.get(
+            "/settings/activity?username=RetentionProbe").text)
+        self.client.post("/settings/activity-retention", data={
+            "csrf_token": self.token("/settings"), "activity_retention_days": "90"})
+        self.client.post("/settings/activity-retention", data={
+            "csrf_token": self.token("/settings"), "activity_retention_days": "-1"})
+        self.assertEqual(self.storage.setting("activity_retention_days"), "90")
 
     def test_admin_configuration_and_device_search(self):
         self.assertEqual(self.login().status_code, 200)

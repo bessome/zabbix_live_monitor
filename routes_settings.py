@@ -9,8 +9,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app_config import CATEGORIES
-from app_storage import (check_password, connect, encrypt_community,
-                         hash_password, setting)
+from app_storage import (DEFAULT_ACTIVITY_RETENTION_DAYS, check_password,
+                         connect, encrypt_community, hash_password,
+                         purge_expired_activity, setting)
 from app_web import add_message, checked_form, render, require_admin
 from zabbix_service import category_filter, clear_caches, zabbix_call, zabbix_catalog
 
@@ -22,9 +23,32 @@ def settings_page(request: Request):
     filters = {category: category_filter(category) for category in CATEGORIES}
     return render(request, "settings.html", zabbix_url=setting("zabbix_url"),
                    filters=filters,
+                   activity_retention_days=int(setting(
+                       "activity_retention_days", str(DEFAULT_ACTIVITY_RETENTION_DAYS))),
                    snmp_configured={category: bool(setting("snmp_community:" + category))
                                     for category in CATEGORIES},
                    token_configured=bool(os.environ.get("ZABBIX_API_TOKEN")))
+
+
+@router.post("/settings/activity-retention")
+async def save_activity_retention(request: Request):
+    require_admin(request)
+    form = await checked_form(request)
+    raw = str(form.get("activity_retention_days", ""))
+    if not raw.isdecimal() or not 0 <= int(raw) <= 3650:
+        add_message(request, "Выберите срок хранения журнала от 1 до 3650 дней или без удаления.",
+                    "error")
+        return RedirectResponse("/settings", status_code=303)
+    days = int(raw)
+    with closing(connect()) as con:
+        con.execute(
+            "INSERT INTO settings(key,value) VALUES ('activity_retention_days',?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(days),)
+        )
+        purge_expired_activity(con)
+        con.commit()
+    add_message(request, "Срок хранения журнала сохранён.")
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.get("/api/zabbix/catalog/{kind}")
@@ -118,6 +142,8 @@ def activity_page(request: Request, page: int = 1, username: str = ""):
     where = "WHERE instr(lower(username), lower(?)) > 0" if username else ""
     params = (username,) if username else ()
     with closing(connect()) as con:
+        purge_expired_activity(con)
+        con.commit()
         total = con.execute("SELECT COUNT(*) FROM activity_log " + where, params).fetchone()[0]
         pages = max(1, (total + 199) // 200)
         page = min(page, pages)

@@ -1,6 +1,5 @@
 {% extends "base.html" %}{% block title %}{{ category }} · Zabbix Live Monitoring{% endblock %}
-{% block content %}<section class="heading"><div><h1>{{ category }}</h1>
-<p>Данные Zabbix обновляются каждые 15 секунд. Доступность определяется по интерфейсам хоста.</p></div>
+{% block content %}<section class="heading"><div><h1>{{ category }}</h1></div>
 <span id="updated">—</span></section>
 {% if not configured %}<p class="message">Для этого меню пока не задан фильтр. Администратор может выбрать группы или шаблоны в настройках.</p>{% endif %}
 <section class="panel" id="device-list" data-category="{{ category }}">
