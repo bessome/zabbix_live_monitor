@@ -10,6 +10,7 @@ from app_storage import snmp_community_for
 from app_web import render, require_user
 from ping_monitor import snapshot_for
 from snmp_monitor import snapshot_for as snmp_snapshot_for
+from switch_monitor import snapshot_for as switch_snapshot_for
 from zabbix_service import (category_filter, device_descriptions, host_rows,
                             modem_channel_definitions, normalize_device_search,
                             optical_power_definitions, ping_loss_definition,
@@ -172,6 +173,24 @@ async def modem_channels(request: Request, category: str, host_id: str):
             {"id": item["id"], "label": item["label"], "value": None,
              "units": item["units"]} for item in definitions
         ]}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/switch-ports")
+async def switch_ports(request: Request, category: str, host_id: str):
+    require_user(request, api=True)
+    if category != "Switches":
+        raise HTTPException(404)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        device = next((row for row in rows if row["id"] == host_id), None)
+        if device is None:
+            raise HTTPException(404)
+        community = snmp_community_for(category)
+        result = await switch_snapshot_for(host_id, device["snmp_address"],
+                                           device["snmp_port"], community)
+    except (RuntimeError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 

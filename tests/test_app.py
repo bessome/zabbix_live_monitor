@@ -362,6 +362,29 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.client.get(path.replace("/42/", "/99/")).status_code, 404)
             self.assertEqual(self.client.get(path.replace("/TV_Amplifires/", "/VOIP/")).status_code, 404)
 
+    def test_switch_card_and_port_api(self):
+        self.login()
+        device = {"id": "42", "name": "Switch 42", "technical_name": "sw-42",
+                  "address": "192.0.2.42", "snmp_address": "192.0.2.42",
+                  "snmp_port": "161", "enabled": True, "availability": "available"}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.device_descriptions", return_value={}),
+              patch("routes_devices.switch_snapshot_for", new_callable=AsyncMock,
+                    return_value={"ports": [{"index": 1, "name": "Gi1", "state": "fast",
+                                             "speed_mbps": 1000}], "updated_at": 1}) as poll):
+            detail = self.client.get("/devices/Switches/42")
+            self.assertIn('id="switch-monitor"', detail.text)
+            self.assertLess(detail.text.index('id="switch-monitor"'),
+                            detail.text.index('id="ping-monitor"'))
+            self.assertIn('/static/switch.js', detail.text)
+            response = self.client.get("/api/devices/Switches/42/switch-ports")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["ports"][0]["state"], "fast")
+            self.assertEqual(poll.call_args.args,
+                             ("42", "192.0.2.42", "161", "public"))
+            self.assertEqual(self.client.get(
+                "/api/devices/Modems/42/switch-ports").status_code, 404)
+
     def test_tv_optical_history_uses_selected_zabbix_item(self):
         path = "/api/devices/TV_Amplifires/42/optical-power/81/history"
         self.assertEqual(self.client.get(path).status_code, 401)
