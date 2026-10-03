@@ -11,6 +11,7 @@ instance/
 !.idea/runConfigurations/Zabbix_Monitor_Local.xml
 *.db
 *.sqlite*
+caddy-root.crt
 .pytest_cache/
 .ruff_cache/
 dist/
