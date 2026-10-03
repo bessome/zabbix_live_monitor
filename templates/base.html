@@ -13,7 +13,7 @@
 <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Выйти</button></form>{% endif %}
 </header>
 {% if current_user %}<nav class="site-nav" aria-label="Разделы приложения">
-<div class="device-nav"><a href="/" class="{% if request.url.path == '/' %}active{% endif %}" aria-current="{{ 'page' if request.url.path == '/' else 'false' }}">Главная</a>{% for item in categories %}<a href="/devices/{{ item }}" class="{% if category is defined and category == item %}active{% endif %}">{{ item }}</a>{% endfor %}</div>
+<div class="device-nav">{% for item in categories %}<a href="/devices/{{ item }}" class="{% if category is defined and category == item %}active{% endif %}">{{ item }}</a>{% endfor %}</div>
 <details class="settings-menu">
 <summary class="{% if request.url.path.startswith('/settings') or request.url.path == '/profile' %}active{% endif %}">Настройки</summary>
 <div class="settings-submenu">

@@ -60,8 +60,11 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.url.path, "/")
         self.assertIn("Добро пожаловать в Zabbix Live Monitoring!", response.text)
-        self.assertIn('href="/" class="active"', response.text)
-        self.assertIn('href="/devices/VOIP"', response.text)
+        self.assertIn('<a class="brand" href="/">Zabbix Live Monitoring</a>', response.text)
+        nav = response.text.split('<div class="device-nav">', 1)[1].split("</div>", 1)[0]
+        self.assertNotIn(">Главная</a>", nav)
+        links = re.findall(r'href="/devices/([^"]+)"', nav)
+        self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "VOIP", "Routers"])
 
     def test_admin_configuration_and_device_search(self):
         self.assertEqual(self.login().status_code, 200)
