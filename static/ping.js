@@ -12,13 +12,14 @@
     state: document.getElementById("ping-state"),
     message: document.getElementById("ping-message")
   };
+  const currentUnit = root.querySelector(".ping-unit");
   const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
     + "/" + encodeURIComponent(root.dataset.hostId) + "/ping";
   let latest = null;
   let inFlight = false;
 
   function millis(value) {
-    return value == null ? "—" : Number(value).toFixed(value < 10 ? 1 : 0) + " мс";
+    return value == null ? "—" : Number(value).toFixed(value < 10 ? 1 : 0);
   }
 
   function draw(data) {
@@ -139,7 +140,9 @@
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Пинг недоступен");
       latest = data;
-      fields.current.textContent = data.sent && data.current_ms == null ? "Потеря" : millis(data.current_ms);
+      fields.current.textContent = data.sent && data.current_ms == null ? "×" : millis(data.current_ms);
+      fields.current.title = data.sent && data.current_ms == null ? "Последний запрос потерян" : "";
+      currentUnit.hidden = data.current_ms == null;
       fields.min.textContent = millis(data.min_ms);
       fields.avg.textContent = millis(data.avg_ms);
       fields.max.textContent = millis(data.max_ms);
