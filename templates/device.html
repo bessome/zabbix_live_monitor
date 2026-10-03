@@ -5,7 +5,7 @@
 {% if category == 'Switches' %}
 <section class="panel switch-panel" id="switch-monitor" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <div class="switch-heading"><h2>Порты</h2><span id="switch-state" role="status">Загрузка…</span></div>
-<div class="switch-legend" aria-label="Состояния портов"><span><i class="switch-swatch down"></i>Нет линка</span><span><i class="switch-swatch slow"></i>100/10мб</span><span><i class="switch-swatch fast"></i>1 Гбит/с и выше</span><span><i class="switch-swatch unknown"></i>Скорость неизвестна</span></div>
+<div class="switch-legend" aria-label="Состояния портов"><span title="Нет линка"><i class="switch-swatch down"></i>Нет</span><span title="10 или 100 Мбит/с"><i class="switch-swatch slow"></i>10/100 Мб</span><span title="1 Гбит/с и выше"><i class="switch-swatch fast"></i>≥1 Гб</span><span title="Скорость неизвестна"><i class="switch-swatch unknown"></i>Скор. ?</span></div>
 <div id="switch-ports" class="switch-ports"></div>
 </section>
 {% endif %}

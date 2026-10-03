@@ -15,4 +15,4 @@
 .switch-port.fast{background:#27854d;border-color:#1e6c3e}
 .switch-port.unknown{background:#facc15;border-color:#b18a00;color:#302500}
 .switch-port strong{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.1}
-@media(max-width:720px){.switch-panel{padding:10px}.switch-ports{grid-template-columns:repeat(auto-fill,minmax(26px,1fr));gap:3px}}
+@media(max-width:720px){.switch-panel{padding:10px}.switch-legend{flex-wrap:nowrap;justify-content:space-between;gap:4px;font-size:11px}.switch-legend span{gap:3px;white-space:nowrap}.switch-swatch{width:9px;height:9px;flex:none}.switch-ports{grid-template-columns:repeat(auto-fill,minmax(26px,1fr));gap:3px}}
