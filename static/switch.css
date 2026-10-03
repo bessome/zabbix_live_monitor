@@ -7,12 +7,12 @@
 .switch-swatch.down{background:#8c98a5}
 .switch-swatch.slow{background:#e28b2c}
 .switch-swatch.fast{background:#27854d}
-.switch-swatch.unknown{background:#657c94}
+.switch-swatch.unknown{background:#facc15}
 .switch-ports{display:grid;grid-template-columns:repeat(auto-fill,minmax(29px,1fr));gap:3px}
 .switch-port{display:flex;align-items:center;justify-content:center;min-width:0;aspect-ratio:1;border:1px solid transparent;border-radius:3px;padding:2px;color:#fff;text-align:center;font-variant-numeric:tabular-nums}
 .switch-port.down{background:#788592;border-color:#637282}
 .switch-port.slow{background:#db8120;border-color:#b76b17}
 .switch-port.fast{background:#27854d;border-color:#1e6c3e}
-.switch-port.unknown{background:#657c94;border-color:#4f657c}
+.switch-port.unknown{background:#facc15;border-color:#b18a00;color:#302500}
 .switch-port strong{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.1}
 @media(max-width:720px){.switch-panel{padding:10px}.switch-ports{grid-template-columns:repeat(auto-fill,minmax(26px,1fr));gap:3px}}
