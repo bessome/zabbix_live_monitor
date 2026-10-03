@@ -12,10 +12,14 @@
 .device-table td,.users-table td,dd{overflow-wrap:anywhere}
 .site-nav{display:flex;align-items:center;gap:5px}
 .device-nav{display:flex;flex:1;min-width:0;flex-wrap:wrap;gap:5px}
+.site-header{position:relative;z-index:30}
+.site-header .logout-button{display:inline-flex;align-items:center;justify-content:center;width:44px;min-height:44px;padding:8px}
+.site-header .logout-button svg{display:block;width:22px;height:22px}
+.site-header .logout-button:focus-visible{outline:2px solid #8dc9ff;outline-offset:2px}
 .settings-menu{position:relative;flex:none}
-.settings-menu summary{display:flex;align-items:center;gap:7px;min-height:40px;padding:8px 12px;border-radius:5px;color:#dce8f5;cursor:pointer;list-style:none;white-space:nowrap}
+.settings-menu summary{display:flex;align-items:center;justify-content:center;width:44px;min-height:44px;padding:8px;border-radius:5px;color:#dce8f5;cursor:pointer;list-style:none}
+.settings-menu summary svg{display:block;width:22px;height:22px}
 .settings-menu summary::-webkit-details-marker{display:none}
-.settings-menu summary::after{content:"▾";font-size:12px}
 .settings-menu summary:hover,.settings-menu summary.active,.settings-menu[open] summary{background:#365879;color:#fff}
 .settings-menu summary:focus-visible,.settings-submenu a:focus-visible{outline:2px solid #8dc9ff;outline-offset:2px}
 .settings-submenu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:205px;padding:5px;border:1px solid #cbd7e3;border-radius:8px;background:#fff;box-shadow:0 10px 30px #10192344}
@@ -30,7 +34,7 @@
   .site-nav{flex-wrap:nowrap;gap:4px;padding:5px 10px;position:sticky;top:0;z-index:20}
   .device-nav{flex-wrap:nowrap;gap:4px;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity;scrollbar-width:thin}
   .site-nav a{flex:none;display:inline-flex;align-items:center;min-height:44px;padding:8px 12px;white-space:nowrap;scroll-snap-align:start}
-  .settings-menu summary{min-height:44px;scroll-snap-align:start}
+  .settings-menu summary{min-height:44px}
   .settings-submenu{max-width:calc(100vw - 16px)}
   .settings-submenu a{display:block;min-height:44px}
   main{margin:16px auto;padding:0 12px 64px}

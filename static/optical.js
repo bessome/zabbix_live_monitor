@@ -44,12 +44,22 @@
       const units = row.querySelector(".modem-units");
       const changed = previousValues.has(item.id)
         && previousValues.get(item.id) !== item.value && item.value != null;
-      number.textContent = item.value == null ? "—" : item.value;
+      number.textContent = item.value == null ? "n/a" : item.value;
       units.textContent = item.value == null || !item.units ? "" : " " + item.units;
       number.classList.toggle("modem-value-changed", changed);
       previousValues.set(item.id, item.value);
       row.querySelector("strong").classList.toggle("optical-value-alert",
         item.value != null && Number(item.value) < -3.3);
+    }
+  }
+
+  function markUnavailable() {
+    for (const row of list.querySelectorAll(".optical-row")) {
+      row.querySelector(".modem-number").textContent = "n/a";
+      row.querySelector(".modem-number").classList.remove("modem-value-changed");
+      row.querySelector(".modem-units").textContent = "";
+      row.querySelector("strong").classList.remove("optical-value-alert");
+      previousValues.set(row.dataset.itemId, null);
     }
   }
 
@@ -63,11 +73,15 @@
         return;
       }
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "SNMP недоступен");
+      if (!response.ok) {
+        if (data.items?.length) render(data.items);
+        throw new Error(data.error || "SNMP недоступен");
+      }
       render(data.items);
       state.textContent = data.items.length
         ? "" : "Показатель Optical input power для этого устройства не найден.";
     } catch (error) {
+      markUnavailable();
       state.textContent = error.message;
     } finally {
       inFlight = false;

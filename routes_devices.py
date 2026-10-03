@@ -161,13 +161,17 @@ async def modem_channels(request: Request, category: str, host_id: str):
     device = next((row for row in rows if row["id"] == host_id), None)
     if device is None:
         raise HTTPException(404)
+    definitions = []
     try:
         definitions = await asyncio.to_thread(modem_channel_definitions, host_id)
         community = snmp_community_for(category)
         result = await snmp_snapshot_for(host_id, device["snmp_address"],
                                          device["snmp_port"], community, definitions)
     except (RuntimeError, ValueError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=503)
+        return JSONResponse({"error": str(exc), "items": [
+            {"id": item["id"], "label": item["label"], "value": None,
+             "units": item["units"]} for item in definitions
+        ]}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
@@ -176,6 +180,7 @@ async def optical_power(request: Request, category: str, host_id: str):
     require_user(request, api=True)
     if category != "TV_Amplifires":
         raise HTTPException(404)
+    definitions = []
     try:
         rows = await asyncio.to_thread(host_rows, category)
         device = next((row for row in rows if row["id"] == host_id), None)
@@ -186,7 +191,10 @@ async def optical_power(request: Request, category: str, host_id: str):
         result = await snmp_snapshot_for(host_id, device["snmp_address"],
                                          device["snmp_port"], community, definitions)
     except (RuntimeError, ValueError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=503)
+        return JSONResponse({"error": str(exc), "items": [
+            {"id": item["id"], "label": item["label"], "value": None,
+             "units": item["units"]} for item in definitions
+        ]}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 

@@ -56,7 +56,7 @@
       const units = value.querySelector(".modem-units");
       const changed = previousValues.has(item.id)
         && previousValues.get(item.id) !== item.value && item.value != null;
-      number.textContent = item.value == null ? "—" : item.value;
+      number.textContent = item.value == null ? "n/a" : item.value;
       units.textContent = item.value == null || !item.units ? "" : " " + item.units;
       number.classList.toggle("modem-value-changed", changed);
       previousValues.set(item.id, item.value);
@@ -66,6 +66,18 @@
       value.classList.toggle("modem-value-alert-blink", lowSnr);
       value.classList.toggle("modem-value-alert", highUs);
       value.title = lowSnr ? "SNR ниже 30" : highUs ? "US Level выше 52" : "";
+    }
+  }
+
+  function markUnavailable() {
+    for (const row of list.querySelectorAll(".modem-row")) {
+      row.querySelector(".modem-number").textContent = "n/a";
+      row.querySelector(".modem-number").classList.remove("modem-value-changed");
+      row.querySelector(".modem-units").textContent = "";
+      const value = row.querySelector("strong");
+      value.classList.remove("modem-value-alert-blink", "modem-value-alert");
+      value.title = "";
+      previousValues.set(row.dataset.itemId, null);
     }
   }
 
@@ -79,12 +91,16 @@
         return;
       }
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "SNMP недоступен");
+      if (!response.ok) {
+        if (data.items?.length) render(data.items);
+        throw new Error(data.error || "SNMP недоступен");
+      }
       render(data.items);
       state.textContent = data.items.length
         ? ""
         : "Показатели каналов для этого модема не найдены.";
     } catch (error) {
+      markUnavailable();
       state.textContent = error.message;
     } finally {
       inFlight = false;

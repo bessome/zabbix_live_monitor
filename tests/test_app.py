@@ -61,7 +61,12 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.url.path, "/")
         self.assertIn("Добро пожаловать в Zabbix Live Monitoring!", response.text)
         self.assertIn('<a class="brand" href="/">Zabbix Live Monitoring</a>', response.text)
+        header = response.text.split('<header class="site-header">', 1)[1].split("</header>", 1)[0]
+        self.assertLess(header.index('action="/logout"'), header.index('class="settings-menu"'))
+        self.assertIn('class="logout-button" aria-label="Выйти"', header)
+        self.assertIn('aria-label="Настройки" title="Настройки"><svg', header)
         nav = response.text.split('<div class="device-nav">', 1)[1].split("</div>", 1)[0]
+        self.assertNotIn("settings-menu", nav)
         self.assertNotIn(">Главная</a>", nav)
         links = re.findall(r'href="/devices/([^"]+)"', nav)
         self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "VOIP", "Routers"])
@@ -407,6 +412,7 @@ class AppTests(unittest.TestCase):
     def test_snmp_community_is_encrypted_and_can_reset_to_public(self):
         self.login()
         self.assertEqual(self.storage.snmp_community_for("Modems"), "public")
+
         data = {"csrf_token": self.token("/settings"), "zabbix_url": ""}
         for category in self.config.CATEGORIES:
             data["mode:" + category] = "group"
@@ -423,6 +429,27 @@ class AppTests(unittest.TestCase):
         data["clear_snmp:Modems"] = "1"
         self.client.post("/settings", data=data)
         self.assertEqual(self.storage.snmp_community_for("Modems"), "public")
+
+    def test_snmp_timeout_returns_unavailable_values(self):
+        self.login()
+        device = {"id": "42", "snmp_address": "192.0.2.42", "snmp_port": 161}
+        definition = {"id": "55", "label": "US1 Level", "units": "dBmV"}
+        for category, endpoint, lookup in (
+            ("Modems", "modem-channels", "modem_channel_definitions"),
+            ("TV_Amplifires", "optical-power", "optical_power_definitions"),
+        ):
+            with (
+                self.subTest(category=category),
+                patch.object(self.devices, "host_rows", return_value=[device]),
+                patch.object(self.devices, lookup, return_value=[definition]),
+                patch.object(self.devices, "snmp_snapshot_for", new_callable=AsyncMock,
+                             side_effect=RuntimeError("SNMP timeout")),
+            ):
+                response = self.client.get(f"/api/devices/{category}/42/{endpoint}")
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.json()["items"], [
+                    {"id": "55", "label": "US1 Level", "value": None, "units": "dBmV"}
+                ])
 
     def test_csrf_rejects_mutation(self):
         self.login()
