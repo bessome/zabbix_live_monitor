@@ -14,7 +14,7 @@ router = APIRouter()
 @router.get("/")
 def index(request: Request):
     require_user(request)
-    return RedirectResponse("/devices/VOIP", status_code=303)
+    return render(request, "index.html")
 
 
 @router.get("/healthz")

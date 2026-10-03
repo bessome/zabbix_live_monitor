@@ -1,4 +1,4 @@
-"""FastAPI entry point for Zabbix Live Monitor."""
+"""FastAPI entry point for Zabbix Live Monitoring."""
 import os
 
 from fastapi import FastAPI
@@ -11,7 +11,7 @@ from routes_account import router as account_router
 from routes_devices import router as devices_router
 from routes_settings import router as settings_router
 
-app = FastAPI(title="Zabbix Live Monitor", docs_url=None, redoc_url=None)
+app = FastAPI(title="Zabbix Live Monitoring", docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=SECRET, same_site="lax",
                    https_only=os.environ.get("APP_HTTPS") == "1")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")

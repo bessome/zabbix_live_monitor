@@ -8,7 +8,7 @@ instance/
 .idea/*
 !.idea/runConfigurations/
 .idea/runConfigurations/*
-!.idea/runConfigurations/Zabbix_Monitor_Local.xml
+!.idea/runConfigurations/Zabbix_Live_Monitoring_Local.xml
 *.db
 *.sqlite*
 caddy-root.crt

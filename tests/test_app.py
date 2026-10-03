@@ -52,6 +52,17 @@ class AppTests(unittest.TestCase):
         return self.client.post("/login", data={"csrf_token": csrf,
                                "username": name, "password": password})
 
+    def test_home_page_after_login(self):
+        response = self.client.get("/", follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/login")
+        response = self.login()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.url.path, "/")
+        self.assertIn("Добро пожаловать в Zabbix Live Monitoring!", response.text)
+        self.assertIn('href="/" class="active"', response.text)
+        self.assertIn('href="/devices/VOIP"', response.text)
+
     def test_admin_configuration_and_device_search(self):
         self.assertEqual(self.login().status_code, 200)
         csrf = self.token("/settings")

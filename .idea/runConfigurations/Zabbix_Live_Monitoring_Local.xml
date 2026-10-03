@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Zabbix Monitor (local)" type="PythonConfigurationType" factoryName="Python">
+  <configuration default="false" name="Zabbix Live Monitoring (local)" type="PythonConfigurationType" factoryName="Python">
     <module name="zabbix_tools" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
