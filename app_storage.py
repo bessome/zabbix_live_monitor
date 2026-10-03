@@ -5,6 +5,7 @@ import hmac
 import os
 import secrets
 import sqlite3
+import time
 from contextlib import closing
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -52,6 +53,16 @@ def init_db():
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                occurred_at INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                event TEXT NOT NULL CHECK (event IN ('login', 'view', 'logout')),
+                section TEXT NOT NULL,
+                path TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS activity_log_recent ON activity_log(id DESC);
         """)
         columns = {row["name"] for row in con.execute("PRAGMA table_info(users)")}
         if "theme" not in columns:
@@ -63,6 +74,17 @@ def init_db():
                 raise RuntimeError("Set ADMIN_PASSWORD (at least 12 characters) for first start")
             con.execute("INSERT INTO users(username,password_hash,role) VALUES (?,?,'admin')",
                         ("Admin", hash_password(password)))
+        con.commit()
+
+
+def record_activity(user, event, section, path):
+    """Persist a successful sign-in or a user-visible page visit."""
+    with closing(connect()) as con:
+        con.execute(
+            "INSERT INTO activity_log(occurred_at,user_id,username,event,section,path) "
+            "VALUES (?,?,?,?,?,?)",
+            (int(time.time()), user["id"], user["username"], event, section, path),
+        )
         con.commit()
 
 

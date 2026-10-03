@@ -1,19 +1,25 @@
 """Session authorization and shared template rendering."""
 import hmac
 import secrets
+import time
 from contextlib import closing
 
 from fastapi import HTTPException
 from fastapi.templating import Jinja2Templates
 
 from app_config import CATEGORIES, ROOT
-from app_storage import connect
+from app_storage import connect, record_activity
 
 templates = Jinja2Templates(directory=ROOT / "templates")
+SESSION_SECONDS = 7 * 24 * 60 * 60
 
 def user_for(request):
     user_id = request.session.get("user_id")
     if not user_id:
+        return None
+    login_at = request.session.get("login_at")
+    if not isinstance(login_at, (int, float)) or time.time() - login_at >= SESSION_SECONDS:
+        request.session.clear()
         return None
     with closing(connect()) as con:
         user = con.execute("SELECT id,username,role,theme FROM users WHERE id=? AND active=1",
@@ -46,6 +52,19 @@ def add_message(request, text, kind="success"):
 def render(request, name, **context):
     token = request.session.setdefault("csrf_token", secrets.token_urlsafe(32))
     current_user = user_for(request)
+    if current_user is not None and request.method == "GET":
+        path = request.url.path
+        section = {
+            "/": "Главная", "/profile": "Мои настройки",
+            "/settings": "Настройки приложения",
+            "/settings/users": "Пользователи",
+            "/settings/activity": "Журнал посещений",
+        }.get(path)
+        if section is None and path.startswith("/devices/"):
+            category = path.split("/")[2]
+            device = context.get("device")
+            section = category if device is None else f"{category} / {device['name']}"
+        record_activity(current_user, "view", (section or path)[:160], path[:300])
     return templates.TemplateResponse(
         request=request, name=name,
         context={"categories": CATEGORIES, "current_user": current_user,

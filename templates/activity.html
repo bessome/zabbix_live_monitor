@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Журнал посещений · Zabbix Live Monitoring{% endblock %}
+{% block content %}<h1>Журнал посещений</h1>
+<p>Успешные входы, выходы и открытия страниц. Время указано в UTC. Всего записей: {{ total }}.</p>
+<form method="get" action="/settings/activity" class="activity-filter">
+<label>Пользователь <input type="search" name="username" value="{{ username_filter }}" maxlength="80" placeholder="Имя пользователя"></label>
+<button type="submit">Найти</button>{% if username_filter %}<a href="/settings/activity">Сбросить</a>{% endif %}
+</form>
+<section class="panel"><div class="table-wrap"><table class="activity-table">
+<thead><tr><th>Время (UTC)</th><th>Пользователь</th><th>Событие</th><th>Раздел</th></tr></thead><tbody>
+{% for entry in events %}<tr>
+<td data-label="Время (UTC)">{{ entry.occurred_utc }}</td>
+<td data-label="Пользователь">{{ entry.username }}</td>
+<td data-label="Событие">{{ {"login": "Вход", "view": "Просмотр", "logout": "Выход"}[entry.event] }}</td>
+<td data-label="Раздел">{{ entry.section }}</td>
+</tr>{% else %}<tr><td colspan="4">Записей пока нет.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if pages > 1 %}<nav class="activity-pagination" aria-label="Страницы журнала">
+{% if page > 1 %}<a href="?page={{ page - 1 }}{% if username_filter %}&amp;username={{ username_filter|urlencode }}{% endif %}">← Назад</a>{% endif %}
+<span>Страница {{ page }} из {{ pages }}</span>
+{% if page < pages %}<a href="?page={{ page + 1 }}{% if username_filter %}&amp;username={{ username_filter|urlencode }}{% endif %}">Далее →</a>{% endif %}
+</nav>{% endif %}</section>{% endblock %}

@@ -9,7 +9,12 @@
 .catalog-option{min-height:44px;align-items:center}
 .catalog-option input{width:20px;height:20px;margin:0}
 .selected-chip{min-height:38px}
-.device-table td,.users-table td,dd{overflow-wrap:anywhere}
+.device-table td,.users-table td,.activity-table td,dd{overflow-wrap:anywhere}
+.activity-pagination{display:flex;align-items:center;justify-content:center;gap:12px;background:transparent;padding:14px 0 0}
+.activity-pagination a{display:inline-flex;align-items:center;min-height:44px;color:#1662a0}
+.activity-filter{display:flex;align-items:end;gap:10px;flex-wrap:wrap}
+.activity-filter label{min-width:200px;max-width:320px;flex:1;margin:0}
+.activity-filter a{display:inline-flex;align-items:center;min-height:44px}
 .site-nav{display:flex;align-items:center;gap:5px}
 .device-nav{display:flex;flex:1;min-width:0;flex-wrap:wrap;gap:5px}
 .site-header{position:relative;z-index:30}
@@ -40,6 +45,7 @@
   main{margin:16px auto;padding:0 12px 64px}
   h1{font-size:24px;overflow-wrap:anywhere}
   .panel{padding:14px;margin:12px 0}
+  .activity-filter label{min-width:100%;max-width:none}
   .narrow{margin:24px auto}
   input,select{min-height:44px;font-size:16px}
   button{min-height:44px}
@@ -51,14 +57,15 @@
   .device-toolbar label:last-child{width:100%}
   .table-wrap{overflow:visible}
   .device-table,.device-table tbody,.device-table tr,.device-table td,
-  .users-table,.users-table tbody,.users-table tr,.users-table td{display:block;width:100%}
-  .device-table thead,.users-table thead{display:none}
-  .device-table tr,.users-table tr{border:1px solid #dbe4ed;border-radius:8px;background:#fff;margin:0 0 12px;padding:5px 10px;box-shadow:0 1px 4px #152c4610}
-  .device-table td,.users-table td{border:0;padding:7px 2px}
+  .users-table,.users-table tbody,.users-table tr,.users-table td,
+  .activity-table,.activity-table tbody,.activity-table tr,.activity-table td{display:block;width:100%}
+  .device-table thead,.users-table thead,.activity-table thead{display:none}
+  .device-table tr,.users-table tr,.activity-table tr{border:1px solid #dbe4ed;border-radius:8px;background:#fff;margin:0 0 12px;padding:5px 10px;box-shadow:0 1px 4px #152c4610}
+  .device-table td,.users-table td,.activity-table td{border:0;padding:7px 2px}
   .device-table td:first-child,.users-table td:first-child{font-weight:700;font-size:17px;border-bottom:1px solid #e6edf2}
   .device-table td:first-child a{display:flex;align-items:center;min-height:44px}
-  .device-table td:not(:first-child),.users-table td:not(:first-child){display:grid;grid-template-columns:minmax(86px,34%) minmax(0,1fr);gap:8px}
-  .device-table td:not(:first-child)::before,.users-table td:not(:first-child)::before{content:attr(data-label);color:#627184;font-weight:500}
+  .device-table td:not(:first-child),.users-table td:not(:first-child),.activity-table td{display:grid;grid-template-columns:minmax(86px,34%) minmax(0,1fr);gap:8px}
+  .device-table td:not(:first-child)::before,.users-table td:not(:first-child)::before,.activity-table td::before{content:attr(data-label);color:#627184;font-weight:500}
   .users-table td:last-child{display:block}
   .users-table td:last-child::before{display:block;margin-bottom:8px}
   .users-table .inline-form{display:grid;grid-template-columns:1fr;gap:9px}

@@ -71,6 +71,59 @@ class AppTests(unittest.TestCase):
         links = re.findall(r'href="/devices/([^"]+)"', nav)
         self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "VOIP", "Routers"])
 
+    def test_session_expires_after_seven_days_from_login(self):
+        self.login()
+        import app_web
+        with patch.object(app_web, "SESSION_SECONDS", 0):
+            response = self.client.get("/", follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/login")
+        self.assertEqual(self.client.get("/login").status_code, 200)
+
+    def test_activity_log_is_admin_only_filterable_and_paginated(self):
+        self.login()
+        self.client.get("/profile")
+        with closing(self.storage.connect()) as con:
+            rows = con.execute(
+                "SELECT event,section FROM activity_log WHERE username='Admin' "
+                "ORDER BY id DESC LIMIT 3").fetchall()
+        self.assertIn(("view", "Мои настройки"), [(r["event"], r["section"]) for r in rows])
+        self.assertIn(("login", "Вход"), [(r["event"], r["section"]) for r in rows])
+        with closing(self.storage.connect()) as con:
+            before_api = con.execute("SELECT COUNT(*) FROM activity_log").fetchone()[0]
+        with patch.object(self.devices, "host_rows", return_value=[]):
+            self.client.get("/api/devices/VOIP")
+        with closing(self.storage.connect()) as con:
+            after_api = con.execute("SELECT COUNT(*) FROM activity_log").fetchone()[0]
+        self.assertEqual(before_api, after_api)
+        response = self.client.get("/settings/activity")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Журнал посещений", response.text)
+        self.assertIn('href="/settings/activity"', response.text)
+        with closing(self.storage.connect()) as con:
+            con.executemany(
+                "INSERT INTO activity_log(occurred_at,user_id,username,event,section,path) "
+                "VALUES (?,?,?,?,?,?)",
+                [(1, 999, "PaginationOnly", "view", f"Раздел {i}", "/")
+                 for i in range(201)],
+            )
+            con.commit()
+        first = self.client.get("/settings/activity?username=PaginationOnly")
+        second = self.client.get("/settings/activity?username=PaginationOnly&page=2")
+        self.assertIn("Всего записей: 201", first.text)
+        self.assertIn("Страница 1 из 2", first.text)
+        self.assertIn("Страница 2 из 2", second.text)
+        self.assertEqual(first.text.count('data-label="Пользователь">PaginationOnly'), 200)
+        self.assertEqual(second.text.count('data-label="Пользователь">PaginationOnly'), 1)
+        self.client.post("/logout", data={"csrf_token": self.token("/profile")})
+        with closing(self.storage.connect()) as con:
+            con.execute("INSERT INTO users(username,password_hash,role) VALUES (?,?,?)",
+                        ("AuditReader", self.storage.hash_password("audit-password-123"), "read"))
+            con.commit()
+        self.login("AuditReader", "audit-password-123")
+        self.assertEqual(self.client.get("/settings/activity").status_code, 403)
+        self.assertNotIn('href="/settings/activity"', self.client.get("/").text)
+
     def test_admin_configuration_and_device_search(self):
         self.assertEqual(self.login().status_code, 200)
         csrf = self.token("/settings")

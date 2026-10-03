@@ -110,6 +110,27 @@ def users_page(request: Request):
     return render(request, "users.html", users=users)
 
 
+@router.get("/settings/activity")
+def activity_page(request: Request, page: int = 1, username: str = ""):
+    require_admin(request)
+    page = max(1, page)
+    username = username.strip()[:80]
+    where = "WHERE instr(lower(username), lower(?)) > 0" if username else ""
+    params = (username,) if username else ()
+    with closing(connect()) as con:
+        total = con.execute("SELECT COUNT(*) FROM activity_log " + where, params).fetchone()[0]
+        pages = max(1, (total + 199) // 200)
+        page = min(page, pages)
+        events = con.execute(
+            "SELECT datetime(occurred_at, 'unixepoch') AS occurred_utc, "
+            "username,event,section,path FROM activity_log "
+            + where + " ORDER BY id DESC LIMIT 200 OFFSET ?",
+            (*params, (page - 1) * 200)
+        ).fetchall()
+    return render(request, "activity.html", events=events, page=page,
+                  pages=pages, total=total, username_filter=username)
+
+
 @router.post("/settings/users")
 async def create_user(request: Request):
     require_admin(request)

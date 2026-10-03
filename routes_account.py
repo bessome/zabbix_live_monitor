@@ -1,12 +1,13 @@
 """Login, profile and health-check routes."""
 import secrets
 import sqlite3
+import time
 from contextlib import closing
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from app_storage import check_password, connect
+from app_storage import check_password, connect, record_activity
 from app_web import add_message, checked_form, render, require_user, user_for
 
 router = APIRouter()
@@ -43,7 +44,9 @@ async def login(request: Request):
     if user and check_password(str(form.get("password", "")), user["password_hash"]):
         request.session.clear()
         request.session["user_id"] = user["id"]
+        request.session["login_at"] = int(time.time())
         request.session["csrf_token"] = secrets.token_urlsafe(32)
+        record_activity(user, "login", "Вход", "/login")
         return RedirectResponse("/", status_code=303)
     add_message(request, "Неверное имя пользователя или пароль.", "error")
     return RedirectResponse("/login", status_code=303)
@@ -51,8 +54,9 @@ async def login(request: Request):
 
 @router.post("/logout")
 async def logout(request: Request):
-    require_user(request)
+    user = require_user(request)
     await checked_form(request)
+    record_activity(user, "logout", "Выход", "/logout")
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 

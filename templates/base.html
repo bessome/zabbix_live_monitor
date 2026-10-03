@@ -17,6 +17,7 @@
 {% if current_user.role == 'admin' %}
 <a href="/settings" class="{% if request.url.path == '/settings' %}active{% endif %}" aria-current="{{ 'page' if request.url.path == '/settings' else 'false' }}">Приложение</a>
 <a href="/settings/users" class="{% if request.url.path == '/settings/users' %}active{% endif %}" aria-current="{{ 'page' if request.url.path == '/settings/users' else 'false' }}">Пользователи</a>
+<a href="/settings/activity" class="{% if request.url.path == '/settings/activity' %}active{% endif %}" aria-current="{{ 'page' if request.url.path == '/settings/activity' else 'false' }}">Журнал посещений</a>
 {% endif %}
 <a href="/profile" class="{% if request.url.path == '/profile' %}active{% endif %}" aria-current="{{ 'page' if request.url.path == '/profile' else 'false' }}">Мои настройки</a>
 </div>
