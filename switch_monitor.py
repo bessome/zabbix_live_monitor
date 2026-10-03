@@ -130,7 +130,7 @@ async def poll_ports(address, port, community, excluded_names=()):
         ip = None
     transport_class = Udp6TransportTarget if ip and ip.version == 6 else UdpTransportTarget
     try:
-        target = await transport_class.create((address, int(port)), timeout=1.5, retries=0)
+        target = await transport_class.create((address, int(port)), timeout=3.0, retries=0)
         with SnmpEngine() as engine:
             async def walk(base):
                 values = {}
