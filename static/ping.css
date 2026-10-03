@@ -28,7 +28,7 @@
 .modem-panel>p{color:#5d6976;margin:0 0 12px}
 .modem-state{font-size:13px}
 .modem-state:empty{display:none}
-.modem-channels{max-height:510px;overflow-y:auto;overscroll-behavior:contain}
+.modem-channels{max-height:510px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
 .modem-group{margin:12px 0 4px;color:#536171;font-size:13px;text-transform:uppercase;letter-spacing:.04em}
 .modem-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-bottom:1px solid #e6edf2;padding:7px 0}
 .modem-channels .modem-row{width:100%;border-radius:0;background:transparent;color:inherit;text-align:left;font:inherit}
@@ -36,15 +36,15 @@
 .modem-channels .modem-row:focus-visible{outline:2px solid #176cad;outline-offset:-2px}
 .modem-row span{overflow-wrap:anywhere}
 .modem-row strong{white-space:nowrap;font-size:15px}
-.modem-number{display:inline-block;transform-origin:left center;border-radius:3px}
+.modem-number{display:inline-block;border-radius:3px}
 .modem-number.modem-value-changed{animation:modem-value-pulse .8s ease-in-out infinite alternate}
-@keyframes modem-value-pulse{from{transform:scale(1);background:transparent;box-shadow:0 0 0 0 #e3a23300}to{transform:scale(1.07);background:#e3a23344;box-shadow:0 0 0 4px #e3a23333}}
+@keyframes modem-value-pulse{from{background:transparent}to{background:#e3a23388}}
 .modem-row .modem-label-us{color:#bf3030;font-weight:700}
 .modem-row .modem-label-ds-level{color:#176cad;font-weight:700}
 .modem-row .modem-label-ds-snr{color:#167344;font-weight:700}
 .modem-row .modem-value-alert,.modem-row .modem-value-alert-blink{color:#a32923;background:#ffe5e2;border-radius:5px;padding:2px 6px}
 .modem-row .modem-value-alert-blink{animation:modem-alert-blink 1s ease-in-out infinite alternate}
-@keyframes modem-alert-blink{from{background:#ffe5e2;box-shadow:0 0 0 0 #d5483f66}to{background:#ffb8b0;box-shadow:0 0 0 3px #d5483f77}}
+@keyframes modem-alert-blink{from{background:#ffe5e2}to{background:#ffb8b0}}
 .optical-channels{display:grid;gap:6px}
 .optical-channels .optical-row{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;min-height:50px;padding:8px 10px;border:1px solid #dce6ef;border-radius:6px;background:#f8fbfd;color:inherit;text-align:left;font:inherit}
 .optical-channels .optical-row:hover{background:#eaf3fa;border-color:#a9cee8}

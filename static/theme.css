@@ -96,7 +96,7 @@ html[data-theme="dark"] .modem-history-periods button[aria-pressed="true"]{backg
 html[data-theme="dark"] .modem-row .modem-value-alert,
 html[data-theme="dark"] .modem-row .modem-value-alert-blink{color:#ffd4d0;background:#60313a}
 html[data-theme="dark"] .modem-row .modem-value-alert-blink{animation-name:modem-alert-blink-dark}
-@keyframes modem-alert-blink-dark{from{background:#60313a;box-shadow:0 0 0 0 #ff777066}to{background:#933b45;box-shadow:0 0 0 3px #ff777077}}
+@keyframes modem-alert-blink-dark{from{background:#60313a}to{background:#933b45}}
 html[data-theme="dark"] .theme-option{border-color:#435a70}
 html[data-theme="dark"] .theme-option:has(input:checked){border-color:#69b8f1;background:#213b52}
 html[data-theme="dark"] .theme-option small{color:#adbdcc}
