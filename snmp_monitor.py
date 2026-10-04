@@ -16,6 +16,7 @@ from pysnmp.proto.rfc1905 import EndOfMibView, NoSuchInstance, NoSuchObject
 from ping_monitor import validate_target
 
 POLL_SECONDS = 5
+ERROR_RATE_SECONDS = 10
 CACHE_SECONDS = 4.5
 MAX_ENTRIES = 80
 _oid_pattern = re.compile(r"^\.?\d+(?:\.\d+)+$")
@@ -208,12 +209,13 @@ class _Entry:
         self.lock = asyncio.Lock()
         self.last_seen = time.monotonic()
         self.updated = 0.0
+        self.error_updated = 0.0
         self.data = None
         self.previous_rate = {}
 
 
 async def snapshot_for(host_id, address, port, community, definitions):
-    """Share one result across viewers and refresh it about every five seconds."""
+    """Share polling: ordinary metrics every 5 s, ErrorRate every 10 s."""
     signature = tuple((item["id"], item["oid"], item["multiplier"], item.get("rate"))
                       for item in definitions)
     credential_id = hashlib.sha256(community.encode()).digest()
@@ -231,12 +233,19 @@ async def snapshot_for(host_id, address, port, community, definitions):
             _entries[key] = entry
         entry.last_seen = now
     async with entry.lock:
-        if entry.data is not None and time.monotonic() - entry.updated < CACHE_SECONDS:
+        now = time.monotonic()
+        if entry.data is not None and now - entry.updated < CACHE_SECONDS:
             return entry.data
-        values = await poll_values(address, port, community, definitions)
+        error_due = entry.data is None or now - entry.error_updated >= ERROR_RATE_SECONDS
+        selected = [item for item in definitions
+                    if item.get("metric") != "error_rate" or error_due]
+        if not selected:
+            return entry.data
+        values = await poll_values(address, port, community, selected)
         measured_at = time.monotonic()
+        definitions_by_id = {item["id"]: item for item in selected}
         for item in values:
-            definition = next((entry for entry in definitions if entry["id"] == item["id"]), None)
+            definition = definitions_by_id.get(item["id"])
             if definition is None or not definition.get("rate"):
                 continue
             raw = item["value"]
@@ -254,6 +263,12 @@ async def snapshot_for(host_id, address, port, community, definitions):
             rate = (current - previous[0]) / seconds if seconds > 0 else Decimal(0)
             formatted = format(rate.quantize(Decimal("0.01")), "f")
             item["value"] = formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
-        entry.data = {"items": values, "updated_at": int(time.time())}
-        entry.updated = time.monotonic()
+        previous = {item["id"]: item for item in entry.data["items"]} if entry.data else {}
+        previous.update((item["id"], item) for item in values)
+        entry.data = {"items": [previous[item["id"]] for item in definitions
+                                if item["id"] in previous],
+                      "updated_at": int(time.time())}
+        entry.updated = measured_at
+        if error_due and any(item.get("metric") == "error_rate" for item in selected):
+            entry.error_updated = measured_at
         return entry.data

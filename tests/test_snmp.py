@@ -85,31 +85,42 @@ class SnmpTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in displayed], ["1", "3"])
         self.assertEqual([item["error_rate"] for item in displayed], ["2", "3"])
 
-    def test_error_rate_change_per_second_uses_two_snmp_samples(self):
+    def test_error_rate_polls_every_ten_seconds_while_snr_polls_every_five(self):
         base = {"itemid": "90", "name": "Downstream channel 52 ErrorRate",
                 "type": "20", "status": "0", "snmp_oid": "get[1.2.3]",
                 "units": "", "value_type": "0",
                 "preprocessing": [{"type": "10", "params": ""}]}
-        definition = channel_definition(base)
-        self.assertTrue(definition["rate"])
-        with (patch("snmp_monitor.poll_values", new_callable=AsyncMock,
-                    side_effect=[[{"id": "90", "label": definition["label"],
-                                  "value": "100", "units": ""}],
-                                 [{"id": "90", "label": definition["label"],
-                                   "value": "118", "units": ""}]]) as poll,
+        error = channel_definition(base)
+        snr = channel_definition({**base, "itemid": "91",
+                                  "name": "Downstream channel 52 459MHz SNR",
+                                  "preprocessing": []})
+        self.assertTrue(error["rate"])
+        calls = []
+        async def fake_poll(address, port, community, selected):
+            calls.append([item["id"] for item in selected])
+            result = [{"id": "91", "label": snr["label"], "value": "34",
+                       "units": ""}]
+            if error in selected:
+                result.append({"id": "90", "label": error["label"],
+                               "value": "100" if len(calls) == 1 else "120", "units": ""})
+            return result
+        with (patch("snmp_monitor.poll_values", side_effect=fake_poll),
               patch("snmp_monitor.time") as clock):
-            clock.monotonic.side_effect = [0, 0, 1, 2, 8, 9, 10, 11]
+            clock.monotonic.side_effect = [0, 0, 0, 0, 5, 5, 5, 10, 10, 10]
             clock.time.return_value = 100
             async def sample():
                 first = await snapshot_for("rate-host", "192.0.2.5", 161,
-                                           "public", [definition])
+                                           "public", [snr, error])
                 second = await snapshot_for("rate-host", "192.0.2.5", 161,
-                                            "public", [definition])
-                return first, second
-            first, second = asyncio.run(sample())
-        self.assertIsNone(first["items"][0]["value"])
-        self.assertEqual(second["items"][0]["value"], "2")
-        self.assertEqual(poll.await_count, 2)
+                                            "public", [snr, error])
+                third = await snapshot_for("rate-host", "192.0.2.5", 161,
+                                           "public", [snr, error])
+                return first, second, third
+            first, second, third = asyncio.run(sample())
+        self.assertEqual(calls, [["91", "90"], ["91"], ["91", "90"]])
+        self.assertIsNone(first["items"][1]["value"])
+        self.assertIsNone(second["items"][1]["value"])
+        self.assertEqual(third["items"][1]["value"], "2")
 
     def test_direct_snmp_get_applies_multiplier(self):
         definition = {"id": "55", "label": "US2 Level", "oid": "1.3.6.1.4.1.100.2",
