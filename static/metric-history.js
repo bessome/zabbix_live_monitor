@@ -44,10 +44,11 @@
     ctx.scale(ratio, ratio);
     const dark = document.documentElement.dataset.theme === "dark";
     const colors = dark
-      ? {grid: "#40566a", text: "#adbdcc", line: "#69b8f1"}
-      : {grid: "#dce6ef", text: "#607185", line: "#176cad"};
+      ? {grid: "#40566a", text: "#adbdcc", line: "#69b8f1", error: "#ffc04d"}
+      : {grid: "#dce6ef", text: "#607185", line: "#176cad", error: "#a86400"};
     const left = width < 420 ? 46 : 58;
-    const right = 12;
+    const secondary = data.secondary?.points || [];
+    const right = data.secondary ? 46 : 12;
     const top = 15;
     const bottom = 28;
     const plotWidth = Math.max(1, width - left - right);
@@ -58,10 +59,21 @@
     const padding = Math.max((high - low) * .12, Math.abs(high) * .02, .1);
     const minY = data.units === "%" ? Math.max(0, low - padding) : low - padding;
     const maxY = data.units === "%" ? Math.min(100, high + padding) : high + padding;
+    const errorHigh = secondary.length ? Math.max(...secondary.map(point => point.value)) : 0;
+    const errorMax = Math.max(1, errorHigh * 1.1);
     const x = time => left + (time - data.from) / (data.to - data.from) * plotWidth;
     const y = value => top + (maxY - value) / (maxY - minY) * plotHeight;
+    const errorY = value => top + (errorMax - value) / errorMax * plotHeight;
     ctx.font = "11px system-ui, sans-serif";
     ctx.lineWidth = 1;
+    if (data.secondary) {
+      ctx.fillStyle = colors.line;
+      ctx.textAlign = "left";
+      ctx.fillText(data.units || "SNR", left, 11);
+      ctx.fillStyle = colors.error;
+      ctx.textAlign = "right";
+      ctx.fillText("Ош/с", width - 3, 11);
+    }
     for (let i = 0; i <= 4; i++) {
       const yy = top + i / 4 * plotHeight;
       ctx.strokeStyle = colors.grid;
@@ -72,6 +84,13 @@
       ctx.fillStyle = colors.text;
       ctx.textAlign = "right";
       ctx.fillText((maxY - i / 4 * (maxY - minY)).toFixed(1), left - 5, yy + 4);
+      if (data.secondary) {
+        ctx.fillStyle = colors.error;
+        ctx.textAlign = "left";
+        const tick = errorMax * (1 - i / 4);
+        ctx.fillText(tick >= 1000 ? (tick / 1000).toFixed(1) + "k" :
+          tick >= 10 ? tick.toFixed(0) : tick.toFixed(1), left + plotWidth + 5, yy + 4);
+      }
     }
     const tickCount = data.period === "1h" || width >= 500 ? 4 : 2;
     const labelFormat = data.period === "1h" ? timeFormat : dateTimeFormat;
@@ -82,31 +101,37 @@
       ctx.fillText(labelFormat.format(new Date((data.from + i / tickCount * (data.to - data.from)) * 1000)),
         xx, height - 8);
     }
-    if (!data.points.length) return;
-    ctx.strokeStyle = colors.line;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    const gap = Math.max(300, 3 * (data.to - data.from) / data.points.length);
-    data.points.forEach((point, index) => {
-      if (index === 0 || point.time - data.points[index - 1].time > gap) {
-        ctx.moveTo(x(point.time), y(point.value));
-      } else {
-        ctx.lineTo(x(point.time), y(point.value));
-      }
-    });
-    ctx.stroke();
-    const last = data.points[data.points.length - 1];
-    ctx.fillStyle = colors.line;
-    ctx.beginPath();
-    ctx.arc(x(last.time), y(last.value), 3.5, 0, 2 * Math.PI);
-    ctx.fill();
+    function drawSeries(points, scale, color) {
+      if (!points.length) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const gap = Math.max(300, 3 * (data.to - data.from) / points.length);
+      points.forEach((point, index) => {
+        if (index === 0 || point.time - points[index - 1].time > gap) {
+          ctx.moveTo(x(point.time), scale(point.value));
+        } else {
+          ctx.lineTo(x(point.time), scale(point.value));
+        }
+      });
+      ctx.stroke();
+      const last = points[points.length - 1];
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x(last.time), scale(last.value), 3.5, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    drawSeries(data.points, y, colors.line);
+    drawSeries(secondary, errorY, colors.error);
   }
 
   function show(data) {
     latest = data;
     title.textContent = data.label;
-    status.textContent = data.points.length ? "" : "За период " + data.period + " данных в Zabbix нет.";
-    canvas.setAttribute("aria-label", "График " + data.label + " за " + data.period);
+    status.textContent = data.points.length || data.secondary?.points.length
+      ? "" : "За период " + data.period + " данных в Zabbix нет.";
+    canvas.setAttribute("aria-label", "График " + data.label
+      + (data.secondary ? " и ошибок в секунду" : "") + " за " + data.period);
     stats.replaceChildren();
     if (data.points.length) {
       const values = data.points.map(point => point.value);
@@ -119,6 +144,13 @@
         element.textContent = label + ": " + Number(value.toFixed(2)) + unit;
         stats.appendChild(element);
       }
+    }
+    if (data.secondary) {
+      const element = document.createElement("span");
+      element.className = "history-error-stat";
+      const last = data.secondary.points.at(-1);
+      element.textContent = "Ошибки/с: " + (last ? Number(last.value.toFixed(2)) : "—");
+      stats.appendChild(element);
     }
     draw(data);
   }

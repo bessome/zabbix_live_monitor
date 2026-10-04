@@ -8,9 +8,11 @@
   let signature = "";
   let inFlight = false;
   const previousValues = new Map();
+  const previousErrors = new Map();
 
   function render(items) {
-    const nextSignature = items.map(item => item.id + ":" + item.label).join("|");
+    const nextSignature = items.map(item => item.id + ":" + item.label
+      + ("error_rate" in item ? ":errors" : "")).join("|");
     if (nextSignature !== signature) {
       list.replaceChildren();
       let currentGroup = "";
@@ -26,6 +28,7 @@
         const row = document.createElement("button");
         row.type = "button";
         row.className = "modem-row";
+        if ("error_rate" in item) row.classList.add("modem-row-with-errors");
         row.dataset.itemId = item.id;
         row.title = "Открыть график Zabbix за последний час";
         const label = document.createElement("span");
@@ -38,6 +41,12 @@
         const units = document.createElement("span");
         units.className = "modem-units";
         value.append(number, units);
+        if ("error_rate" in item) {
+          const errors = document.createElement("span");
+          errors.className = "modem-error-rate";
+          errors.title = "Ошибок в секунду";
+          value.append(errors);
+        }
         row.append(label, value);
         list.appendChild(row);
       }
@@ -46,6 +55,9 @@
     const activeIds = new Set(items.map(item => item.id));
     for (const id of previousValues.keys()) {
       if (!activeIds.has(id)) previousValues.delete(id);
+    }
+    for (const id of previousErrors.keys()) {
+      if (!activeIds.has(id)) previousErrors.delete(id);
     }
     for (const item of items) {
       const row = [...list.querySelectorAll(".modem-row")]
@@ -60,6 +72,14 @@
       units.textContent = item.value == null || !item.units ? "" : " " + item.units;
       number.classList.toggle("modem-value-changed", changed);
       previousValues.set(item.id, item.value);
+      const errors = value.querySelector(".modem-error-rate");
+      if (errors) {
+        const errorChanged = previousErrors.has(item.id)
+          && previousErrors.get(item.id) !== item.error_rate && item.error_rate != null;
+        errors.textContent = " (" + (item.error_rate == null ? "n/a" : item.error_rate + "/с") + ")";
+        errors.classList.toggle("modem-value-changed", errorChanged);
+        previousErrors.set(item.id, item.error_rate);
+      }
       const numericValue = item.value == null ? NaN : Number(item.value);
       const lowSnr = item.label.endsWith(" SNR") && numericValue < 30;
       const highUs = item.label.startsWith("US") && numericValue > 52;
@@ -74,6 +94,12 @@
       row.querySelector(".modem-number").textContent = "n/a";
       row.querySelector(".modem-number").classList.remove("modem-value-changed");
       row.querySelector(".modem-units").textContent = "";
+      const errors = row.querySelector(".modem-error-rate");
+      if (errors) {
+        errors.textContent = " (n/a)";
+        errors.classList.remove("modem-value-changed");
+        previousErrors.set(row.dataset.itemId, null);
+      }
       const value = row.querySelector("strong");
       value.classList.remove("modem-value-alert-blink", "modem-value-alert");
       value.title = "";

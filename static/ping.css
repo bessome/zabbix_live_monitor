@@ -36,6 +36,8 @@
 .modem-channels .modem-row:focus-visible{outline:2px solid #176cad;outline-offset:-2px}
 .modem-row span{overflow-wrap:anywhere}
 .modem-row strong{white-space:nowrap;font-size:15px}
+.modem-row-with-errors strong{white-space:normal}
+.modem-error-rate{font-size:.85em;font-weight:600;white-space:nowrap}
 .modem-number{display:inline-block;border-radius:3px}
 .modem-number.modem-value-changed{animation:modem-value-pulse .8s ease-in-out infinite alternate}
 @keyframes modem-value-pulse{from{background:transparent}to{background:#e3a23388}}
@@ -69,6 +71,7 @@
 .modem-history-chart canvas{display:block;width:100%;height:260px}
 .modem-history-stats{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:9px;font-size:12px;font-variant-numeric:tabular-nums}
 .modem-history-stats span{white-space:nowrap}
+.history-error-stat{color:#a86400;font-weight:700}
 @media(max-width:1050px){.device-monitor-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:720px){
   .device-monitor-grid{gap:0}

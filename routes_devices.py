@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from app_storage import setting, snmp_community_for
 from app_web import render, require_user
 from ping_monitor import snapshot_for
-from snmp_monitor import snapshot_for as snmp_snapshot_for
+from snmp_monitor import display_modem_values, snapshot_for as snmp_snapshot_for
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
                             snapshot_for as switch_snapshot_for)
 from zabbix_service import (category_filter, device_descriptions, host_rows,
@@ -38,11 +38,11 @@ def plot_points(points, max_points=1200):
     return reduced
 
 
-async def numeric_history(item, period):
+async def numeric_history(item, period, now=None):
     value_type = int(item.get("value_type", 0))
     if value_type not in (0, 3):
         raise HTTPException(422, "Для этого item нет числовой истории.")
-    now = int(time.time())
+    now = int(time.time()) if now is None else now
     from_time = now - HISTORY_PERIODS[period]
     history = []
     cursor = now
@@ -170,11 +170,10 @@ async def modem_channels(request: Request, category: str, host_id: str):
         result = await snmp_snapshot_for(host_id, device["snmp_address"],
                                          device["snmp_port"], community, definitions)
     except (RuntimeError, ValueError) as exc:
-        return JSONResponse({"error": str(exc), "items": [
-            {"id": item["id"], "label": item["label"], "value": None,
-             "units": item["units"]} for item in definitions
-        ]}, status_code=503)
-    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": str(exc), "items": display_modem_values(definitions, [])},
+                            status_code=503)
+    return JSONResponse({**result, "items": display_modem_values(definitions, result["items"])},
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/devices/{category}/{host_id}/switch-ports")
@@ -237,7 +236,16 @@ async def modem_channel_history(request: Request, category: str, host_id: str,
         item = next((entry for entry in definitions if entry["id"] == item_id), None)
         if item is None:
             raise HTTPException(404)
-        result = await numeric_history(item, period)
+        error_item = next((entry for entry in definitions
+                           if entry["id"] == item.get("error_rate_id")), None)
+        if error_item is None:
+            result = await numeric_history(item, period)
+        else:
+            now = int(time.time())
+            result, error_history = await asyncio.gather(
+                numeric_history(item, period, now), numeric_history(error_item, period, now))
+            result["secondary"] = {"label": "Ошибки/с", "units": "ош/с",
+                                   "points": error_history["points"]}
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})

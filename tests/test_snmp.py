@@ -5,7 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from pysnmp.proto.rfc1902 import Integer
 
-from snmp_monitor import channel_definition, optical_definition, poll_values, snapshot_for
+from snmp_monitor import (channel_definition, display_modem_values,
+                          link_error_rates, optical_definition, poll_values,
+                          snapshot_for)
 
 
 class SnmpTests(unittest.TestCase):
@@ -57,8 +59,57 @@ class SnmpTests(unittest.TestCase):
         self.assertIsNone(channel_definition({**base, "name": "Downstream channel 52 459MHz SNR",
                                               "snmp_oid": "get[not-an-oid]"}))
         self.assertIsNone(channel_definition({**base, "name": "Downstream channel 52 459MHz SNR",
-                                              "snmp_oid": "get[1.2.3]",
-                                              "preprocessing": [{"type": "5", "params": "x"}]}))
+                                               "snmp_oid": "get[1.2.3]",
+                                               "preprocessing": [{"type": "5", "params": "x"}]}))
+
+    def test_error_rate_pairs_with_matching_snr_channel(self):
+        base = {"type": "20", "status": "0", "snmp_oid": "get[1.2.3]",
+                "units": "", "value_type": "0", "preprocessing": []}
+        names = [
+            ("1", "Downstream channel 52 459MHz SNR"),
+            ("2", "Downstream channel 52 459MHz ErrorRate"),
+            ("3", "Downstream channel 53 471MHz SNR"),
+            ("4", "Downstream channel 53 ErrorRate"),
+            ("5", "Downstream channel 54 ErrorRate"),
+        ]
+        definitions = [channel_definition({**base, "itemid": item_id, "name": name})
+                       for item_id, name in names]
+        link_error_rates(definitions)
+        self.assertEqual(definitions[0]["error_rate_id"], "2")
+        self.assertEqual(definitions[2]["error_rate_id"], "4")
+        values = [{"id": item_id, "label": definition["label"], "value": value,
+                   "units": definition["units"]}
+                  for (item_id, _), definition, value in zip(
+                      names, definitions, ("33.9", "2", "34.1", "3", "7"))]
+        displayed = display_modem_values(definitions, values)
+        self.assertEqual([item["id"] for item in displayed], ["1", "3"])
+        self.assertEqual([item["error_rate"] for item in displayed], ["2", "3"])
+
+    def test_error_rate_change_per_second_uses_two_snmp_samples(self):
+        base = {"itemid": "90", "name": "Downstream channel 52 ErrorRate",
+                "type": "20", "status": "0", "snmp_oid": "get[1.2.3]",
+                "units": "", "value_type": "0",
+                "preprocessing": [{"type": "10", "params": ""}]}
+        definition = channel_definition(base)
+        self.assertTrue(definition["rate"])
+        with (patch("snmp_monitor.poll_values", new_callable=AsyncMock,
+                    side_effect=[[{"id": "90", "label": definition["label"],
+                                  "value": "100", "units": ""}],
+                                 [{"id": "90", "label": definition["label"],
+                                   "value": "118", "units": ""}]]) as poll,
+              patch("snmp_monitor.time") as clock):
+            clock.monotonic.side_effect = [0, 0, 1, 2, 8, 9, 10, 11]
+            clock.time.return_value = 100
+            async def sample():
+                first = await snapshot_for("rate-host", "192.0.2.5", 161,
+                                           "public", [definition])
+                second = await snapshot_for("rate-host", "192.0.2.5", 161,
+                                            "public", [definition])
+                return first, second
+            first, second = asyncio.run(sample())
+        self.assertIsNone(first["items"][0]["value"])
+        self.assertEqual(second["items"][0]["value"], "2")
+        self.assertEqual(poll.await_count, 2)
 
     def test_direct_snmp_get_applies_multiplier(self):
         definition = {"id": "55", "label": "US2 Level", "oid": "1.3.6.1.4.1.100.2",
@@ -71,7 +122,7 @@ class SnmpTests(unittest.TestCase):
             get.return_value = (None, 0, 0, [(None, Integer(327))])
             result = asyncio.run(poll_values("192.0.2.5", 161, "public", [definition]))
         self.assertEqual(result[0]["value"], "32.7")
-        self.assertEqual(target.call_args.kwargs, {"timeout": 1.5, "retries": 0})
+        self.assertEqual(target.call_args.kwargs, {"timeout": 3.0, "retries": 0})
         self.assertEqual(get.await_count, 1)
 
     def test_shared_snapshot_uses_five_second_cache(self):

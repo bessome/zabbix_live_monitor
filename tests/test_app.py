@@ -465,6 +465,53 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.client.get(path.replace("/7/", "/8/")).status_code, 404)
             self.assertEqual(self.client.get(path.replace("/Modems/", "/VOIP/")).status_code, 404)
 
+    def test_snr_history_includes_matching_error_rate_from_zabbix(self):
+        self.login()
+        definitions = [
+            {"id": "7", "label": "DS52 459MHz SNR", "units": "dB",
+             "value_type": "0", "error_rate_id": "8"},
+            {"id": "8", "label": "DS52 459MHz ErrorRate", "units": "",
+             "value_type": "0", "metric": "error_rate"},
+        ]
+        def history(method, params):
+            self.assertEqual(method, "history.get")
+            return ([{"clock": "1799999990", "value": "33.9"}]
+                    if params["itemids"] == ["7"] else
+                    [{"clock": "1799999985", "value": "2.4"}])
+        with (patch("routes_devices.host_rows", return_value=[{"id": "42"}]),
+              patch("routes_devices.modem_channel_definitions", return_value=definitions),
+              patch("routes_devices.zabbix_call", side_effect=history) as api):
+            response = self.client.get(
+                "/api/devices/Modems/42/modem-channels/7/history?period=12h")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["points"][0]["value"], 33.9)
+            self.assertEqual(response.json()["secondary"]["points"][0]["value"], 2.4)
+            self.assertEqual(response.json()["secondary"]["units"], "ош/с")
+            self.assertEqual({call.args[1]["itemids"][0] for call in api.call_args_list},
+                             {"7", "8"})
+
+    def test_live_snr_contains_error_rate_without_separate_row(self):
+        self.login()
+        definitions = [
+            {"id": "7", "label": "DS52 459MHz SNR", "units": "dB",
+             "error_rate_id": "8"},
+            {"id": "8", "label": "DS52 459MHz ErrorRate", "units": "",
+             "metric": "error_rate"},
+        ]
+        with (patch("routes_devices.host_rows", return_value=[{
+                  "id": "42", "snmp_address": "192.0.2.42", "snmp_port": "161"}]),
+              patch("routes_devices.modem_channel_definitions", return_value=definitions),
+              patch("routes_devices.snmp_snapshot_for", new_callable=AsyncMock,
+                    return_value={"items": [
+                        {"id": "7", "label": "DS52 459MHz SNR", "value": "33.9", "units": "dB"},
+                        {"id": "8", "label": "DS52 459MHz ErrorRate", "value": "2.4", "units": ""},
+                    ], "updated_at": 1})):
+            response = self.client.get("/api/devices/Modems/42/modem-channels")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"], [
+            {"id": "7", "label": "DS52 459MHz SNR", "value": "33.9",
+             "units": "dB", "error_rate": "2.4"}])
+
     def test_long_history_keeps_extreme_values_when_reduced(self):
         points = [{"time": index, "value": 0} for index in range(3000)]
         points[700]["value"] = -20

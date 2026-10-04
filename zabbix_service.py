@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 from app_config import CATEGORIES
 from app_storage import setting
-from snmp_monitor import channel_definition, optical_definition
+from snmp_monitor import channel_definition, link_error_rates, optical_definition
 
 _cache = {}
 _catalog_cache = {}
@@ -126,6 +126,7 @@ def modem_channel_definitions(host_id):
     definitions = [definition for item in items
                    if (definition := channel_definition(item)) is not None]
     definitions.sort(key=lambda item: item["order"])
+    link_error_rates(definitions)
     with _cache_lock:
         _modem_items_cache[host_id] = (time.monotonic(), definitions)
     return definitions

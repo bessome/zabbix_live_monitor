@@ -24,6 +24,9 @@ _ds_pattern = re.compile(
     r"^Downstream channel\s+(\d+)\s+(\S+MHz)\s+(Level|SNR)$", re.I,
 )
 _ds_generic_pattern = re.compile(r"^Downstream channel\s+(Level|SNR)$", re.I)
+_error_pattern = re.compile(
+    r"^Downstream channel\s+(\d+)(?:\s+(\S+MHz))?\s+ErrorRate$", re.I,
+)
 _entries = {}
 _entries_lock = threading.Lock()
 
@@ -34,11 +37,14 @@ def channel_definition(item):
     upstream = _us_pattern.fullmatch(name)
     downstream = _ds_pattern.fullmatch(name)
     downstream_generic = _ds_generic_pattern.fullmatch(name)
+    error = _error_pattern.fullmatch(name)
     if upstream:
         channel_text = upstream.group(1)[2:]
         channel = int(channel_text) if channel_text else 0
         label = f"US{channel_text} Level"
         order = (0, channel, 0, 0)
+        metric = "level"
+        frequency = ""
     elif downstream:
         channel = int(downstream.group(1))
         frequency = downstream.group(2)
@@ -46,15 +52,28 @@ def channel_definition(item):
         display_metric = "Level" if metric == "LEVEL" else "SNR"
         label = f"DS{channel} {frequency} {display_metric}"
         order = (1, channel, 0 if metric == "LEVEL" else 1, frequency)
+        metric = metric.casefold()
     elif downstream_generic:
         metric = downstream_generic.group(1).upper()
         label = "DS Level" if metric == "LEVEL" else "DS SNR"
         order = (1, 0, 0 if metric == "LEVEL" else 1, "")
+        metric = metric.casefold()
+        channel = None
+        frequency = ""
+    elif error:
+        channel = int(error.group(1))
+        frequency = error.group(2) or ""
+        label = f"DS{channel}" + (f" {frequency}" if frequency else "") + " ErrorRate"
+        order = (1, channel, 2, frequency)
+        metric = "error_rate"
     else:
         return None
-    definition = snmp_item_definition(item, label)
+    definition = snmp_item_definition(item, label, allow_rate=metric == "error_rate")
     if definition is not None:
         definition["order"] = order
+        definition["metric"] = metric
+        definition["channel"] = channel
+        definition["frequency"] = frequency.casefold()
     return definition
 
 
@@ -65,7 +84,7 @@ def optical_definition(item):
     return snmp_item_definition(item, "Optical input power")
 
 
-def snmp_item_definition(item, label):
+def snmp_item_definition(item, label, allow_rate=False):
     if str(item.get("type")) != "20" or str(item.get("status", "0")) != "0":
         return None
     oid = str(item.get("snmp_oid", "")).strip()
@@ -74,9 +93,14 @@ def snmp_item_definition(item, label):
     if not _oid_pattern.fullmatch(oid):
         return None
     multiplier = Decimal(1)
+    rate = False
     try:
         for step in item.get("preprocessing", []):
-            if str(step.get("type")) != "1":
+            step_type = str(step.get("type"))
+            if step_type == "10" and allow_rate and not rate:
+                rate = True
+                continue
+            if step_type != "1":
                 return None
             multiplier *= Decimal(str(step["params"]).strip())
     except (InvalidOperation, KeyError):
@@ -88,7 +112,43 @@ def snmp_item_definition(item, label):
         "units": str(item.get("units", "")),
         "value_type": str(item.get("value_type", "0")),
         "multiplier": str(multiplier),
+        "rate": rate,
     }
+
+
+def link_error_rates(definitions):
+    """Attach an ErrorRate item to the SNR item of the same channel."""
+    snr = [item for item in definitions if item.get("metric") == "snr"]
+    errors = [item for item in definitions if item.get("metric") == "error_rate"]
+    for item in snr:
+        candidates = [error for error in errors if error["channel"] == item["channel"]]
+        exact = [error for error in candidates
+                 if error["frequency"] and error["frequency"] == item["frequency"]]
+        if len(exact) == 1:
+            item["error_rate_id"] = exact[0]["id"]
+        elif not exact and sum(other["channel"] == item["channel"] for other in snr) == 1:
+            generic = [error for error in candidates if not error["frequency"]]
+            if len(generic) == 1:
+                item["error_rate_id"] = generic[0]["id"]
+
+
+def display_modem_values(definitions, values):
+    """Fold hidden ErrorRate polling results into the matching SNR row."""
+    by_id = {item["id"]: item for item in values}
+    rows = []
+    for definition in definitions:
+        if definition.get("metric") == "error_rate":
+            continue
+        value = by_id.get(definition["id"])
+        if value is None:
+            value = {"id": definition["id"], "label": definition["label"],
+                     "value": None, "units": definition["units"]}
+        row = dict(value)
+        error_id = definition.get("error_rate_id")
+        if error_id:
+            row["error_rate"] = by_id.get(error_id, {}).get("value")
+        rows.append(row)
+    return rows
 
 
 def _format_value(value, multiplier):
@@ -149,11 +209,13 @@ class _Entry:
         self.last_seen = time.monotonic()
         self.updated = 0.0
         self.data = None
+        self.previous_rate = {}
 
 
 async def snapshot_for(host_id, address, port, community, definitions):
     """Share one result across viewers and refresh it about every five seconds."""
-    signature = tuple((item["id"], item["oid"], item["multiplier"]) for item in definitions)
+    signature = tuple((item["id"], item["oid"], item["multiplier"], item.get("rate"))
+                      for item in definitions)
     credential_id = hashlib.sha256(community.encode()).digest()
     key = (str(host_id), address, int(port), credential_id, signature)
     with _entries_lock:
@@ -172,6 +234,26 @@ async def snapshot_for(host_id, address, port, community, definitions):
         if entry.data is not None and time.monotonic() - entry.updated < CACHE_SECONDS:
             return entry.data
         values = await poll_values(address, port, community, definitions)
+        measured_at = time.monotonic()
+        for item in values:
+            definition = next((entry for entry in definitions if entry["id"] == item["id"]), None)
+            if definition is None or not definition.get("rate"):
+                continue
+            raw = item["value"]
+            previous = entry.previous_rate.get(item["id"])
+            try:
+                current = Decimal(raw)
+            except (InvalidOperation, TypeError):
+                item["value"] = None
+                continue
+            entry.previous_rate[item["id"]] = (current, measured_at)
+            if previous is None or current < previous[0]:
+                item["value"] = None
+                continue
+            seconds = Decimal(str(measured_at - previous[1]))
+            rate = (current - previous[0]) / seconds if seconds > 0 else Decimal(0)
+            formatted = format(rate.quantize(Decimal("0.01")), "f")
+            item["value"] = formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
         entry.data = {"items": values, "updated_at": int(time.time())}
         entry.updated = time.monotonic()
         return entry.data
