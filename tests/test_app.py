@@ -622,6 +622,39 @@ class AppTests(unittest.TestCase):
         self.client.post("/settings", data=data)
         self.assertEqual(self.storage.snmp_community_for("Modems"), "public")
 
+    def test_snmp_write_community_is_encrypted_and_defaults_to_private(self):
+        self.login()
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"), "private")
+        data = {"csrf_token": self.token("/settings"), "zabbix_url": ""}
+        for category in self.config.CATEGORIES:
+            data["mode:" + category] = "group"
+            data["ids:" + category] = ""
+        data["snmp_write_community:Modems"] = "write-secret-test"
+        self.client.post("/settings", data=data)
+        with closing(self.storage.connect()) as con:
+            stored = con.execute(
+                "SELECT value FROM settings WHERE key='snmp_write_community:Modems'"
+            ).fetchone()[0]
+        self.assertNotIn("write-secret-test", stored)
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"),
+                         "write-secret-test")
+        self.assertNotIn("write-secret-test", self.client.get("/settings").text)
+        data["csrf_token"] = self.token("/settings")
+        data["snmp_write_community:Modems"] = ""
+        self.client.post("/settings", data=data)
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"),
+                         "write-secret-test")
+        data["csrf_token"] = self.token("/settings")
+        data["snmp_write_community:Modems"] = "invalid\ncommunity"
+        self.client.post("/settings", data=data)
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"),
+                         "write-secret-test")
+        data["csrf_token"] = self.token("/settings")
+        data["snmp_write_community:Modems"] = ""
+        data["clear_snmp_write:Modems"] = "1"
+        self.client.post("/settings", data=data)
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"), "private")
+
     def test_snmp_timeout_returns_unavailable_values(self):
         self.login()
         device = {"id": "42", "snmp_address": "192.0.2.42", "snmp_port": 161}

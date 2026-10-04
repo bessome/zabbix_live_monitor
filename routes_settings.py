@@ -28,7 +28,9 @@ def settings_page(request: Request):
                    activity_retention_days=int(setting(
                        "activity_retention_days", str(DEFAULT_ACTIVITY_RETENTION_DAYS))),
                    snmp_configured={category: bool(setting("snmp_community:" + category))
-                                    for category in CATEGORIES},
+                                     for category in CATEGORIES},
+                   snmp_write_configured={category: bool(setting(
+                       "snmp_write_community:" + category)) for category in CATEGORIES},
                    token_configured=bool(os.environ.get("ZABBIX_API_TOKEN")))
 
 
@@ -110,9 +112,17 @@ async def save_settings(request: Request):
             add_message(request, "Неверная SNMP community для " + category + ".", "error")
             return RedirectResponse("/settings", status_code=303)
         if form.get("clear_snmp:" + category) == "1":
-            communities[category] = None
+            communities["snmp_community:" + category] = None
         elif community:
-            communities[category] = encrypt_community(community)
+            communities["snmp_community:" + category] = encrypt_community(community)
+        write_community = str(form.get("snmp_write_community:" + category, ""))
+        if len(write_community) > 128 or any(ord(char) < 32 for char in write_community):
+            add_message(request, "Неверная SNMP write community для " + category + ".", "error")
+            return RedirectResponse("/settings", status_code=303)
+        if form.get("clear_snmp_write:" + category) == "1":
+            communities["snmp_write_community:" + category] = None
+        elif write_community:
+            communities["snmp_write_community:" + category] = encrypt_community(write_community)
     with closing(connect()) as con:
         con.execute("INSERT INTO settings(key,value) VALUES ('zabbix_url',?) "
                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (url,))
@@ -122,8 +132,7 @@ async def save_settings(request: Request):
                 con.execute("INSERT INTO settings(key,value) VALUES (?,?) "
                             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                              (key, value))
-        for category, encrypted in communities.items():
-            key = "snmp_community:" + category
+        for key, encrypted in communities.items():
             if encrypted is None:
                 con.execute("DELETE FROM settings WHERE key=?", (key,))
             else:

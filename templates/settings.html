@@ -40,10 +40,14 @@
 <div class="catalog-selected" aria-live="polite"></div>
 <p class="catalog-status" aria-live="polite">Загрузка списка…</p>
 <div class="catalog-list" role="group" aria-label="Доступные группы или шаблоны"></div>
-<label>SNMP community для {{ item }}
+<label>SNMP read community для {{ item }}
 <input type="password" name="snmp_community:{{ item }}" autocomplete="new-password" placeholder="{{ 'Задана — оставьте пустым, чтобы сохранить' if snmp_configured[item] else 'Не задана — используется public' }}">
 </label>
-<label class="snmp-clear"><input type="checkbox" name="clear_snmp:{{ item }}" value="1"> Сбросить community на public</label>
+<label class="snmp-clear"><input type="checkbox" name="clear_snmp:{{ item }}" value="1"> Сбросить read community на public</label>
+<label>SNMP write community для {{ item }}
+<input type="password" name="snmp_write_community:{{ item }}" autocomplete="new-password" placeholder="{{ 'Задана — оставьте пустым, чтобы сохранить' if snmp_write_configured[item] else 'Не задана — используется private' }}">
+</label>
+<label class="snmp-clear"><input type="checkbox" name="clear_snmp_write:{{ item }}" value="1"> Сбросить write community на private</label>
 </details>
 {% endfor %}</div>
 <button type="submit">Сохранить настройки</button></form>

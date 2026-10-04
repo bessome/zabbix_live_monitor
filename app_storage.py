@@ -109,11 +109,19 @@ def setting(key, default=""):
 
 
 def snmp_community_for(category):
+    return _snmp_community_for(category, "snmp_community:", "public")
+
+
+def snmp_write_community_for(category):
+    return _snmp_community_for(category, "snmp_write_community:", "private")
+
+
+def _snmp_community_for(category, prefix, default):
     if category not in CATEGORIES:
         raise HTTPException(404)
-    encrypted = setting("snmp_community:" + category)
+    encrypted = setting(prefix + category)
     if not encrypted:
-        return "public"
+        return default
     try:
         return _community_cipher.decrypt(encrypted.encode()).decode()
     except (InvalidToken, UnicodeDecodeError) as exc:
