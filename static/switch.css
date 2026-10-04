@@ -9,10 +9,21 @@
 .switch-swatch.fast{background:#27854d}
 .switch-swatch.unknown{background:#facc15}
 .switch-ports{display:grid;grid-template-columns:repeat(auto-fill,minmax(29px,1fr));gap:3px}
-.switch-port{display:flex;align-items:center;justify-content:center;min-width:0;aspect-ratio:1;border:1px solid transparent;border-radius:3px;padding:2px;color:#fff;text-align:center;font-variant-numeric:tabular-nums}
+.switch-port{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:0;aspect-ratio:1;border:1px solid transparent;border-radius:3px;padding:2px;color:#fff;text-align:center;font-variant-numeric:tabular-nums}
 .switch-port.down{background:#788592;border-color:#637282}
 .switch-port.slow{background:#db8120;border-color:#b76b17}
 .switch-port.fast{background:#27854d;border-color:#1e6c3e}
 .switch-port.unknown{background:#facc15;border-color:#b18a00;color:#302500}
 .switch-port strong{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.1}
+.switch-port:focus-visible{outline:2px solid #176cad;outline-offset:2px}
+.switch-cable-dialog{width:min(560px,calc(100% - 20px));max-height:calc(100dvh - 20px);padding:16px;border:1px solid #cbd7e3;border-radius:10px;background:#fff;color:#172333}
+.switch-cable-dialog::backdrop{background:#101923aa}
+.switch-cable-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.switch-cable-heading h2{margin:0}
+.switch-cable-heading button{width:36px;min-height:36px;padding:0;font-size:25px;line-height:1}
+.switch-cable-warning{padding:8px 10px;border-radius:6px;background:#fff2d9;color:#69420a;font-size:13px}
+#switch-cable-port{font-weight:700}
+#switch-cable-status{min-height:20px;font-size:13px}
+#switch-cable-results th,#switch-cable-results td{padding:7px 5px;font-size:13px}
+#switch-cable-results[hidden]{display:none}
 @media(max-width:720px){.switch-panel{padding:10px}.switch-legend{flex-wrap:nowrap;justify-content:space-between;gap:4px;font-size:11px}.switch-legend span{gap:3px;white-space:nowrap}.switch-swatch{width:9px;height:9px;flex:none}.switch-ports{grid-template-columns:repeat(auto-fill,minmax(26px,1fr));gap:3px}}

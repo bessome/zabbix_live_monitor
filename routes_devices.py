@@ -6,8 +6,9 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app_storage import setting, snmp_community_for
-from app_web import render, require_user
+from app_storage import setting, snmp_community_for, snmp_write_community_for
+from app_web import checked_form, render, require_user
+from cable_test import CableTestBusy, run_cable_test
 from ping_monitor import snapshot_for
 from snmp_monitor import display_modem_values, snapshot_for as snmp_snapshot_for
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
@@ -193,6 +194,43 @@ async def switch_ports(request: Request, category: str, host_id: str):
                                            device["snmp_port"], community,
                                            excluded_names)
     except (RuntimeError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/devices/{category}/{host_id}/switch-ports/{if_index}/cable-test")
+async def switch_cable_test(request: Request, category: str, host_id: str, if_index: int):
+    user = require_user(request, api=True)
+    if category != "Switches":
+        raise HTTPException(404)
+    if user["role"] not in ("execute", "admin"):
+        raise HTTPException(403)
+    await checked_form(request)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        device = next((row for row in rows if row["id"] == host_id), None)
+        if device is None:
+            raise HTTPException(404)
+        read_community = snmp_community_for(category)
+        write_community = snmp_write_community_for(category)
+        excluded_names = parse_excluded_names(
+            setting("switch_port_exclude", DEFAULT_EXCLUDED_NAMES))
+        snapshot = await switch_snapshot_for(host_id, device["snmp_address"],
+                                             device["snmp_port"], read_community,
+                                             excluded_names)
+        selected = next((port for port in snapshot["ports"]
+                         if port["index"] == if_index), None)
+        if selected is None:
+            raise HTTPException(404)
+        result = await run_cable_test(host_id, device["snmp_address"],
+                                      device["snmp_port"], read_community,
+                                      write_community, selected["name"])
+    except CableTestBusy:
+        return JSONResponse({"error": "На этом коммутаторе уже идёт тест кабеля."},
+                            status_code=409)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    except (RuntimeError, OSError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 

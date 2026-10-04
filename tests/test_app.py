@@ -386,6 +386,36 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.client.get(
                 "/api/devices/Modems/42/switch-ports").status_code, 404)
 
+    def test_switch_cable_test_requires_execute_role_and_uses_selected_port(self):
+        path = "/api/devices/Switches/42/switch-ports/8/cable-test"
+        self.assertEqual(self.client.post(path).status_code, 401)
+        self.login()
+        token = self.token("/settings")
+        device = {"id": "42", "snmp_address": "192.0.2.42", "snmp_port": "161"}
+        snapshot = {"ports": [{"index": 8, "name": "Gi1/0/8", "label": "8",
+                               "state": "fast", "speed_mbps": 1000}]}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.switch_snapshot_for", new_callable=AsyncMock,
+                    return_value=snapshot),
+              patch("routes_devices.run_cable_test", new_callable=AsyncMock,
+                    return_value={"port": "1/0/8", "pairs": [
+                        {"pair": "Pair-A", "status": "Normal",
+                         "length": "66 m", "error": "—"}]}) as test):
+            self.assertEqual(self.client.post(path).status_code, 400)
+            with patch("routes_devices.require_user", return_value={"role": "read"}):
+                self.assertEqual(self.client.post(
+                    path, data={"csrf_token": token}).status_code, 403)
+            self.assertEqual(self.client.post(
+                path.replace("/8/", "/9/"),
+                data={"csrf_token": token}).status_code, 404)
+            with patch("routes_devices.require_user", return_value={"role": "execute"}):
+                response = self.client.post(path, data={"csrf_token": token})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["pairs"][0]["length"], "66 m")
+            self.assertEqual(test.await_args.args,
+                             ("42", "192.0.2.42", "161", "public", "private",
+                              "Gi1/0/8"))
+
     def test_switch_port_filter_is_admin_setting(self):
         self.login()
         self.assertIn('value="Vlan|AUX|Loop"', self.client.get("/settings").text)
