@@ -242,6 +242,9 @@ class AppTests(unittest.TestCase):
             detail = self.client.get("/devices/VOIP/42")
             self.assertEqual(detail.status_code, 200)
             self.assertIn("SIP gateway, floor 2", detail.text)
+            self.assertIn('class="device-web-link" href="http://192.0.2.42" '
+                          'target="_blank" rel="noopener noreferrer"', detail.text)
+            self.assertIn('>192.0.2.42</a>', detail.text)
             self.assertRegex(detail.text, r"/static/ping\.js\?v=\d+")
             self.assertIn('class="ping-overlay"', detail.text)
             self.assertIn('id="ping-avg"', detail.text)
@@ -251,6 +254,16 @@ class AppTests(unittest.TestCase):
             self.assertNotIn('class="ping-stats"', detail.text)
             self.assertEqual(api.call_count, 3)
         self.assertEqual(self.client.get("/api/devices/VOIP?q=missing").json()["devices"], [])
+
+    def test_device_web_link_uses_literal_ip_only(self):
+        import routes_devices
+        self.assertEqual(routes_devices.device_http_url({
+            "interface_ip": "10.253.7.254", "address": "example.test"}),
+            "http://10.253.7.254")
+        self.assertEqual(routes_devices.device_http_url({
+            "address": "2001:db8::10"}), "http://[2001:db8::10]")
+        self.assertIsNone(routes_devices.device_http_url({
+            "address": "javascript:alert(1)", "snmp_address": "example.test"}))
 
     def test_read_user_cannot_change_settings(self):
         self.login()

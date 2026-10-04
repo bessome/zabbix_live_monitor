@@ -1,6 +1,8 @@
 .device-name-row,.device-title-row{display:flex;align-items:center;gap:8px;min-width:0}
 .device-name-row a,.device-title-row h1{min-width:0;flex:1}
 .device-title-row{margin:0 0 12px}.device-title-row h1{margin:0}
+.device-title-row h1 .device-web-link{color:inherit;text-decoration:none}
+.device-title-row h1 .device-web-link:hover{text-decoration:underline}
 .favorite-toggle{flex:none;display:inline-flex;align-items:center;justify-content:center;width:30px;min-height:30px;padding:0;border:1px solid #d6bd77;background:#fff9e8;color:#9c6600;font-size:18px;line-height:1}
 .favorite-toggle:hover{background:#ffefbd}
 .favorite-toggle[data-favorite="true"]{color:#b07500}

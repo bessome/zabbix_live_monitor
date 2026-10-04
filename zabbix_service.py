@@ -87,9 +87,10 @@ def host_rows(category):
                         else "unavailable" if any(i.get("available") == "2" for i in interfaces)
                         else "unknown")
         rows.append({"id": host["hostid"], "name": host["name"],
-                     "technical_name": host["host"],
-                      "address": address,
-                      "snmp_address": snmp_address, "snmp_port": snmp_port,
+                      "technical_name": host["host"],
+                       "address": address,
+                       "interface_ip": primary.get("ip") or "",
+                       "snmp_address": snmp_address, "snmp_port": snmp_port,
                       "enabled": host["status"] == "0", "availability": availability})
     with _cache_lock:
         _cache[category] = (time.monotonic(), rows)

@@ -1,5 +1,6 @@
 """Device lists, live monitors and modem history routes."""
 import asyncio
+import ipaddress
 import math
 import time
 
@@ -24,6 +25,18 @@ from zabbix_service import (category_filter, device_descriptions, host_rows,
 router = APIRouter()
 HISTORY_PERIODS = {"1h": 3600, "12h": 43200, "24h": 86400, "2d": 172800}
 HISTORY_PAGE_SIZE = 50000
+
+
+def device_http_url(device):
+    """Use only a literal interface IP when linking to a device's web UI."""
+    for value in (device.get("interface_ip"), device.get("address"),
+                  device.get("snmp_address")):
+        try:
+            ip = ipaddress.ip_address(value)
+        except ValueError:
+            continue
+        return f"http://[{ip.compressed}]" if ip.version == 6 else f"http://{ip.compressed}"
+    return None
 
 
 def plot_points(points, max_points=1200):
@@ -168,7 +181,8 @@ async def device_detail(request: Request, category: str, host_id: str):
     device = {**device, "device_description": descriptions.get(host_id)}
     record_recent_device(user["id"], device, category)
     return render(request, "device.html", category=category, device=device,
-                  favorite=host_id in favorite_ids_for(user["id"]))
+                  favorite=host_id in favorite_ids_for(user["id"]),
+                  device_http_url=device_http_url(device))
 
 
 @router.get("/api/devices/{category}/{host_id}/ping")
