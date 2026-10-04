@@ -52,9 +52,11 @@
   .heading{display:block}
   .heading p{margin:5px 0;color:#5d6976}
   #updated{display:block;font-size:12px;color:#5d6976;margin-bottom:8px}
-  .device-toolbar{gap:2px}
-  .device-toolbar label{width:100%;min-width:0!important}
-  .device-toolbar label:last-child{width:100%}
+  .device-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 88px;gap:8px;align-items:end}
+  .device-toolbar label,.device-toolbar label:first-child,.device-toolbar label:last-child{width:auto;min-width:0;max-width:none;margin:0}
+  .device-toolbar input,.device-toolbar select{width:100%;min-width:0}
+  .toolbar-label-full{display:none}
+  .toolbar-label-short{display:inline}
   .table-wrap{overflow:visible}
   .device-table,.device-table tbody,.device-table tr,.device-table td,
   .users-table,.users-table tbody,.users-table tr,.users-table td,

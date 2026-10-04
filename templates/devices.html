@@ -4,8 +4,8 @@
 {% if not configured %}<p class="message">Для этого меню пока не задан фильтр. Администратор может выбрать группы или шаблоны в настройках.</p>{% endif %}
 <section class="panel" id="device-list" data-category="{{ category }}">
 <div class="device-toolbar">
-<label>Поиск устройства <input id="search" type="search" placeholder="Имя, техническое имя или адрес" autocomplete="off"></label>
-<label>Строк на странице <select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="250">250</option></select></label>
+<label><span class="toolbar-label-full">Поиск устройства</span><span class="toolbar-label-short">Поиск</span><input id="search" type="search" placeholder="Имя, техническое имя или адрес" autocomplete="off"></label>
+<label><span class="toolbar-label-full">Строк на странице</span><span class="toolbar-label-short">Строк</span><select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="250">250</option></select></label>
 </div>
 <p id="status" aria-live="polite"></p>
 <div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th><th>Доступность</th></tr></thead>
