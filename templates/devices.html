@@ -91,7 +91,7 @@ async function refresh() {
       : "Страница " + data.page + " из " + data.pages;
     first.disabled = previous.disabled = data.page <= 1;
     next.disabled = last.disabled = data.page >= data.pages;
-    document.getElementById("updated").textContent = "Обновлено: " + new Date(data.updated_at * 1000).toLocaleTimeString();
+    document.getElementById("updated").textContent = "Обновлено: " + new Date(data.updated_at * 1000).toLocaleTimeString("en-GB", {hour12: false});
   } catch (error) {
     if (sequence === requestSequence) status.textContent = error.message;
   }

@@ -105,7 +105,7 @@
       if (!response.ok) throw new Error(data.error || "SNMP недоступен");
       render(data.ports);
       state.textContent = data.ports.length
-        ? "Обновлено " + new Date(data.updated_at * 1000).toLocaleTimeString()
+        ? "Обновлено " + new Date(data.updated_at * 1000).toLocaleTimeString("en-GB", {hour12: false})
         : "Физические Ethernet-порты не найдены";
     } catch (error) {
       list.replaceChildren();
