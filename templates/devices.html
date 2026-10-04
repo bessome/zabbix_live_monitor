@@ -8,7 +8,7 @@
 <label>Строк на странице <select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="250">250</option></select></label>
 </div>
 <p id="status" aria-live="polite"></p>
-<div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th><th>Хост</th><th>Доступность</th></tr></thead>
+<div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th><th>Доступность</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div class="pagination" aria-label="Навигация по страницам">
 <button id="first-page" type="button" aria-label="Первая страница">«</button>
@@ -76,7 +76,6 @@ async function refresh() {
       nameCell.appendChild(description);
       tr.appendChild(nameCell);
       cell(tr, "Адрес", device.address);
-      cell(tr, "Хост", device.enabled ? "Включён" : "Отключён");
       const state = document.createElement("td");
       state.dataset.label = "Доступность";
       state.textContent = device.availability === "available" ? "Доступен" : device.availability === "unavailable" ? "Недоступен" : "Нет данных";
