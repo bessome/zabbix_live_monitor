@@ -122,6 +122,13 @@ def link_error_rates(definitions):
     snr = [item for item in definitions if item.get("metric") == "snr"]
     errors = [item for item in definitions if item.get("metric") == "error_rate"]
     for item in snr:
+        item.pop("error_rate_id", None)
+        if item["channel"] is None:
+            # Single-channel modems may call the metric simply "Downstream channel SNR".
+            # Pair it only when there is exactly one possible ErrorRate item.
+            if len(snr) == 1 and len(errors) == 1:
+                item["error_rate_id"] = errors[0]["id"]
+            continue
         candidates = [error for error in errors if error["channel"] == item["channel"]]
         exact = [error for error in candidates
                  if error["frequency"] and error["frequency"] == item["frequency"]]

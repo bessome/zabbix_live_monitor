@@ -85,6 +85,26 @@ class SnmpTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in displayed], ["1", "3"])
         self.assertEqual([item["error_rate"] for item in displayed], ["2", "3"])
 
+    def test_single_generic_snr_pairs_with_single_indexed_error_rate(self):
+        base = {"type": "20", "status": "0", "snmp_oid": "get[1.2.3]",
+                "units": "", "value_type": "0", "preprocessing": []}
+        snr = channel_definition({**base, "itemid": "1",
+                                  "name": "Downstream channel SNR"})
+        error = channel_definition({**base, "itemid": "2",
+                                    "name": "Downstream channel 8 ErrorRate"})
+        link_error_rates([snr, error])
+        self.assertEqual(snr["error_rate_id"], "2")
+        displayed = display_modem_values([snr, error], [
+            {"id": "1", "label": "DS SNR", "value": "34.1", "units": "dB"},
+            {"id": "2", "label": error["label"], "value": "3", "units": ""},
+        ])
+        self.assertEqual(displayed[0]["error_rate"], "3")
+
+        other_error = channel_definition({**base, "itemid": "3",
+                                          "name": "Downstream channel 9 ErrorRate"})
+        link_error_rates([snr, error, other_error])
+        self.assertNotIn("error_rate_id", snr)
+
     def test_error_rate_polls_every_ten_seconds_while_snr_polls_every_five(self):
         base = {"itemid": "90", "name": "Downstream channel 52 ErrorRate",
                 "type": "20", "status": "0", "snmp_oid": "get[1.2.3]",
