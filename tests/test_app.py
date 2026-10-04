@@ -72,6 +72,59 @@ class AppTests(unittest.TestCase):
         links = re.findall(r'href="/devices/([^"]+)"', nav)
         self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "VOIP", "Routers"])
 
+    def test_favorites_are_personal_and_recent_history_keeps_last_fifteen(self):
+        path = "/api/favorites/VOIP/favorite-test-host"
+        self.assertEqual(self.client.post(path).status_code, 401)
+        self.assertEqual(self.client.get("/favorites", follow_redirects=False).status_code, 303)
+        self.login()
+        token = self.token("/favorites")
+        device = {"id": "favorite-test-host", "name": "Favorite phone",
+                  "technical_name": "favorite-phone", "address": "192.0.2.77"}
+        self.assertEqual(self.client.post(path, data={"action": "add"}).status_code, 400)
+        self.assertEqual(self.client.post(path, data={
+            "csrf_token": token, "action": "invalid"}).status_code, 400)
+        with patch.object(self.devices, "host_rows", return_value=[]):
+            self.assertEqual(self.client.post(path, data={
+                "csrf_token": token, "action": "add"}).status_code, 404)
+        with (patch.object(self.devices, "host_rows", return_value=[device]),
+              patch.object(self.devices, "device_descriptions", return_value={})):
+            self.assertTrue(self.client.post(path, data={
+                "csrf_token": token, "action": "add"}).json()["favorite"])
+            self.assertTrue(self.client.get("/api/devices/VOIP").json()["devices"][0]["favorite"])
+            detail = self.client.get("/devices/VOIP/favorite-test-host")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('data-favorite="true"', detail.text)
+        page = self.client.get("/favorites")
+        self.assertIn("Favorite phone", page.text)
+        self.assertIn("Недавно открытые", page.text)
+
+        with closing(self.storage.connect()) as con:
+            admin_id = con.execute("SELECT id FROM users WHERE username='Admin'").fetchone()[0]
+            con.execute("INSERT INTO users(username,password_hash,role) VALUES (?,?,?)",
+                        ("FavoriteReader", self.storage.hash_password("reader-password-123"), "read"))
+            con.commit()
+        for number in range(16):
+            self.storage.record_recent_device(admin_id, {
+                "id": f"recent-{number}", "name": f"Recent {number}",
+                "address": f"192.0.2.{number}"}, "Modems")
+        recent = self.storage.recent_devices_for(admin_id)
+        self.assertEqual(len(recent), 15)
+        self.assertEqual(recent[0]["host_id"], "recent-15")
+        self.assertNotIn("recent-0", [row["host_id"] for row in recent])
+        self.assertFalse(self.client.post(path, data={
+            "csrf_token": token, "action": "remove"}).json()["favorite"])
+        self.assertNotIn("Favorite phone", self.client.get("/favorites").text)
+        self.client.post("/logout", data={"csrf_token": token})
+        self.login("FavoriteReader", "reader-password-123")
+        with closing(self.storage.connect()) as con:
+            reader_id = con.execute(
+                "SELECT id FROM users WHERE username='FavoriteReader'").fetchone()[0]
+        self.assertEqual(self.storage.favorite_devices_for(reader_id), [])
+        with patch.object(self.devices, "host_rows", return_value=[device]):
+            self.assertTrue(self.client.post(path, data={
+                "csrf_token": self.token("/favorites"), "action": "add"}).json()["favorite"])
+        self.assertEqual(self.storage.favorite_devices_for(admin_id), [])
+
     def test_session_expires_after_seven_days_from_login(self):
         self.login()
         import app_web

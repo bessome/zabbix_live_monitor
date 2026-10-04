@@ -55,7 +55,8 @@ def render(request, name, **context):
     if current_user is not None and request.method == "GET":
         path = request.url.path
         section = {
-            "/": "Главная", "/profile": "Мои настройки",
+            "/": "Главная", "/favorites": "Избранное и история",
+            "/profile": "Мои настройки",
             "/settings": "Настройки приложения",
             "/settings/users": "Пользователи",
             "/settings/activity": "Журнал посещений",

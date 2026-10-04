@@ -6,7 +6,10 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app_storage import setting, snmp_community_for, snmp_write_community_for
+from app_storage import (favorite_devices_for, favorite_ids_for,
+                         recent_devices_for, record_recent_device, remove_favorite,
+                         save_favorite, setting, snmp_community_for,
+                         snmp_write_community_for)
 from app_web import checked_form, render, require_user
 from cable_test import CableTestBusy, run_cable_test
 from ping_monitor import snapshot_for
@@ -75,13 +78,45 @@ def devices(request: Request, category: str):
     require_user(request)
     mode, ids = category_filter(category)
     return render(request, "devices.html", category=category,
-                  mode=mode, configured=bool(ids))
+                   mode=mode, configured=bool(ids))
+
+
+@router.get("/favorites")
+def favorites_page(request: Request):
+    user = require_user(request)
+    favorites = favorite_devices_for(user["id"])
+    recent = recent_devices_for(user["id"])
+    favorite_ids = {device["host_id"] for device in favorites}
+    return render(request, "favorites.html", favorites=favorites, recent=recent,
+                  favorite_ids=favorite_ids)
+
+
+@router.post("/api/favorites/{category}/{host_id}")
+async def set_favorite(request: Request, category: str, host_id: str):
+    user = require_user(request, api=True)
+    category_filter(category)
+    form = await checked_form(request)
+    action = str(form.get("action", ""))
+    if action == "remove":
+        remove_favorite(user["id"], host_id)
+        return JSONResponse({"favorite": False}, headers={"Cache-Control": "no-store"})
+    if action != "add":
+        raise HTTPException(400, "Invalid favorite action")
+    try:
+        devices = await asyncio.to_thread(host_rows, category)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    device = next((row for row in devices if row["id"] == host_id), None)
+    if device is None:
+        raise HTTPException(404)
+    save_favorite(user["id"], device, category)
+    return JSONResponse({"favorite": True}, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/devices/{category}")
 async def devices_api(request: Request, category: str, q: str = "",
-                      page: int = 1, per_page: int = 50):
-    require_user(request, api=True)
+                       page: int = 1, per_page: int = 50):
+    user = require_user(request, api=True)
     category_filter(category)
     if page < 1 or per_page not in (25, 50, 100, 250):
         raise HTTPException(422, "Invalid pagination parameters")
@@ -104,8 +139,10 @@ async def devices_api(request: Request, category: str, q: str = "",
             device_descriptions, [row["id"] for row in visible])
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
+    favorite_ids = favorite_ids_for(user["id"])
     devices_with_description = [
-        {**row, "device_description": descriptions.get(row["id"])}
+        {**row, "device_description": descriptions.get(row["id"]),
+         "favorite": row["id"] in favorite_ids}
         for row in visible
     ]
     return {"devices": devices_with_description, "total": total,
@@ -115,7 +152,7 @@ async def devices_api(request: Request, category: str, q: str = "",
 
 @router.get("/devices/{category}/{host_id}")
 async def device_detail(request: Request, category: str, host_id: str):
-    require_user(request)
+    user = require_user(request)
     category_filter(category)
     try:
         rows = await asyncio.to_thread(host_rows, category)
@@ -129,7 +166,9 @@ async def device_detail(request: Request, category: str, host_id: str):
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
     device = {**device, "device_description": descriptions.get(host_id)}
-    return render(request, "device.html", category=category, device=device)
+    record_recent_device(user["id"], device, category)
+    return render(request, "device.html", category=category, device=device,
+                  favorite=host_id in favorite_ids_for(user["id"]))
 
 
 @router.get("/api/devices/{category}/{host_id}/ping")

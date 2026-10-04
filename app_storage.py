@@ -20,6 +20,7 @@ def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH, timeout=10)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys=ON")
     return connection
 
 
@@ -65,6 +66,28 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS activity_log_recent ON activity_log(id DESC);
             CREATE INDEX IF NOT EXISTS activity_log_expiry ON activity_log(occurred_at);
+            CREATE TABLE IF NOT EXISTS favorites (
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                host_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                name TEXT NOT NULL,
+                address TEXT NOT NULL,
+                added_at INTEGER NOT NULL,
+                PRIMARY KEY (user_id, host_id)
+            );
+            CREATE INDEX IF NOT EXISTS favorites_user_recent
+                ON favorites(user_id, added_at DESC);
+            CREATE TABLE IF NOT EXISTS recent_devices (
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                host_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                name TEXT NOT NULL,
+                address TEXT NOT NULL,
+                viewed_at INTEGER NOT NULL,
+                PRIMARY KEY (user_id, host_id)
+            );
+            CREATE INDEX IF NOT EXISTS recent_devices_user_recent
+                ON recent_devices(user_id, viewed_at DESC);
         """)
         columns = {row["name"] for row in con.execute("PRAGMA table_info(users)")}
         if "theme" not in columns:
@@ -98,6 +121,65 @@ def record_activity(user, event, section, path):
             "INSERT INTO activity_log(occurred_at,user_id,username,event,section,path) "
             "VALUES (?,?,?,?,?,?)",
             (int(time.time()), user["id"], user["username"], event, section, path),
+        )
+        con.commit()
+
+
+def favorite_ids_for(user_id):
+    with closing(connect()) as con:
+        rows = con.execute("SELECT host_id FROM favorites WHERE user_id=?", (user_id,))
+        return {row["host_id"] for row in rows}
+
+
+def favorite_devices_for(user_id):
+    with closing(connect()) as con:
+        rows = con.execute(
+            "SELECT host_id,category,name,address FROM favorites WHERE user_id=? "
+            "ORDER BY added_at DESC, host_id", (user_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+
+def recent_devices_for(user_id):
+    with closing(connect()) as con:
+        rows = con.execute(
+            "SELECT host_id,category,name,address FROM recent_devices WHERE user_id=? "
+            "ORDER BY viewed_at DESC LIMIT 15", (user_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+
+def save_favorite(user_id, device, category):
+    with closing(connect()) as con:
+        con.execute(
+            "INSERT INTO favorites(user_id,host_id,category,name,address,added_at) "
+            "VALUES (?,?,?,?,?,?) ON CONFLICT(user_id,host_id) DO UPDATE SET "
+            "category=excluded.category,name=excluded.name,address=excluded.address",
+            (user_id, device["id"], category, device["name"], device["address"],
+             time.time_ns()),
+        )
+        con.commit()
+
+
+def remove_favorite(user_id, host_id):
+    with closing(connect()) as con:
+        con.execute("DELETE FROM favorites WHERE user_id=? AND host_id=?",
+                    (user_id, host_id))
+        con.commit()
+
+
+def record_recent_device(user_id, device, category):
+    with closing(connect()) as con:
+        con.execute(
+            "INSERT INTO recent_devices(user_id,host_id,category,name,address,viewed_at) "
+            "VALUES (?,?,?,?,?,?) ON CONFLICT(user_id,host_id) DO UPDATE SET "
+            "category=excluded.category,name=excluded.name,address=excluded.address,"
+            "viewed_at=excluded.viewed_at",
+            (user_id, device["id"], category, device["name"], device["address"],
+             time.time_ns()),
+        )
+        con.execute(
+            "DELETE FROM recent_devices WHERE user_id=? AND host_id NOT IN "
+            "(SELECT host_id FROM recent_devices WHERE user_id=? "
+            "ORDER BY viewed_at DESC LIMIT 15)", (user_id, user_id),
         )
         con.commit()
 

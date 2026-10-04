@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block title %}{{ device.name }} · Zabbix Live Monitoring{% endblock %}
 {% block content %}
 <p><a href="/devices/{{ category }}">← {{ category }}</a></p>
-<h1>{{ device.name }}</h1>
+<div class="device-title-row"><h1>{{ device.name }}</h1><button type="button" class="favorite-toggle" data-category="{{ category }}" data-host-id="{{ device.id }}" data-favorite="{{ 'true' if favorite else 'false' }}" aria-pressed="{{ 'true' if favorite else 'false' }}" aria-label="{{ 'Убрать из избранного' if favorite else 'Добавить в избранное' }}" title="{{ 'Убрать из избранного' if favorite else 'Добавить в избранное' }}">{{ '★' if favorite else '☆' }}</button></div>
 {% if category == 'Switches' %}
 <section class="panel switch-panel" id="switch-monitor" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <div class="switch-heading"><h2>Порты</h2><span id="switch-state" role="status">Загрузка…</span></div>

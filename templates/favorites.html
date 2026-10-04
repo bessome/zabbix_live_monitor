@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}Избранное · Zabbix Live Monitoring{% endblock %}
+{% block content %}
+<h1>Мои устройства</h1>
+<div id="my-devices" class="my-devices">
+<section class="panel"><h2>Избранное</h2>
+{% if favorites %}<ul class="saved-device-list">{% for device in favorites %}
+<li><a href="/devices/{{ device.category }}/{{ device.host_id }}"><strong>{{ device.name }}</strong><small>{{ device.category }} · {{ device.address }}</small></a><button type="button" class="favorite-toggle" data-category="{{ device.category }}" data-host-id="{{ device.host_id }}" data-favorite="true" aria-pressed="true" aria-label="Убрать из избранного" title="Убрать из избранного">★</button></li>
+{% endfor %}</ul>{% else %}<p>Пока пусто. Нажмите ☆ рядом с устройством, чтобы сохранить его здесь.</p>{% endif %}
+</section>
+<section class="panel"><h2>Недавно открытые</h2>
+{% if recent %}<ul class="saved-device-list">{% for device in recent %}
+<li><a href="/devices/{{ device.category }}/{{ device.host_id }}"><strong>{{ device.name }}</strong><small>{{ device.category }} · {{ device.address }}</small></a><button type="button" class="favorite-toggle" data-category="{{ device.category }}" data-host-id="{{ device.host_id }}" data-favorite="{{ 'true' if device.host_id in favorite_ids else 'false' }}" aria-pressed="{{ 'true' if device.host_id in favorite_ids else 'false' }}" aria-label="{{ 'Убрать из избранного' if device.host_id in favorite_ids else 'Добавить в избранное' }}" title="{{ 'Убрать из избранного' if device.host_id in favorite_ids else 'Добавить в избранное' }}">{{ '★' if device.host_id in favorite_ids else '☆' }}</button></li>
+{% endfor %}</ul>{% else %}<p>Здесь появятся последние 15 открытых устройств.</p>{% endif %}
+</section>
+</div>
+{% endblock %}
