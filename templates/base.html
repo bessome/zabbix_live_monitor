@@ -27,7 +27,7 @@
 {% endif %}
 </header>
 {% if current_user %}<nav class="site-nav" aria-label="Разделы приложения">
-<div class="device-nav"><a href="/favorites" class="favorite-nav-link {% if request.url.path == '/favorites' %}active{% endif %}">★ Избранное</a>{% for item in categories %}<a href="/devices/{{ item }}" class="{% if category is defined and category == item %}active{% endif %}">{{ item }}</a>{% endfor %}</div>
+<div class="device-nav"><a href="/favorites" class="{% if request.url.path == '/favorites' %}active{% endif %}">★ Избранное</a>{% for item in categories %}<a href="/devices/{{ item }}" class="{% if category is defined and category == item %}active{% endif %}">{{ item }}</a>{% endfor %}</div>
 </nav>{% endif %}
 <main>
 {% for message in messages %}<p class="message {{ message.kind }}">{{ message.text }}</p>{% endfor %}
