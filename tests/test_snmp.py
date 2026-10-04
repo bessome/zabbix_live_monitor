@@ -105,6 +105,22 @@ class SnmpTests(unittest.TestCase):
         link_error_rates([snr, error, other_error])
         self.assertNotIn("error_rate_id", snr)
 
+    def test_literal_discovery_macro_error_rate_pairs_with_generic_snr(self):
+        base = {"type": "20", "status": "0", "value_type": "0"}
+        snr = channel_definition({**base, "itemid": "278342",
+                                  "name": "Downstream channel SNR",
+                                  "snmp_oid": ".1.3.6.1.2.1.10.127.1.1.4.1.5.3",
+                                  "preprocessing": [{"type": "1", "params": "0.1"}]})
+        error = channel_definition({**base, "itemid": "278338",
+                                    "name": "Downstream channel {#SNMPINDEX} ErrorRate",
+                                    "snmp_oid": ".1.3.6.1.2.1.2.2.1.14.3",
+                                    "preprocessing": [{"type": "10", "params": ""}]})
+        self.assertIsNotNone(error)
+        self.assertIsNone(error["channel"])
+        self.assertTrue(error["rate"])
+        link_error_rates([snr, error])
+        self.assertEqual(snr["error_rate_id"], "278338")
+
     def test_error_rate_polls_every_ten_seconds_while_snr_polls_every_five(self):
         base = {"itemid": "90", "name": "Downstream channel 52 ErrorRate",
                 "type": "20", "status": "0", "snmp_oid": "get[1.2.3]",

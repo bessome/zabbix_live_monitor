@@ -26,7 +26,7 @@ _ds_pattern = re.compile(
 )
 _ds_generic_pattern = re.compile(r"^Downstream channel\s+(Level|SNR)$", re.I)
 _error_pattern = re.compile(
-    r"^Downstream channel\s+(\d+)(?:\s+(\S+MHz))?\s+ErrorRate$", re.I,
+    r"^Downstream channel\s+(\d+|\{#SNMPINDEX\})(?:\s+(\S+MHz))?\s+ErrorRate$", re.I,
 )
 _entries = {}
 _entries_lock = threading.Lock()
@@ -62,10 +62,10 @@ def channel_definition(item):
         channel = None
         frequency = ""
     elif error:
-        channel = int(error.group(1))
+        channel = int(error.group(1)) if error.group(1).isdecimal() else None
         frequency = error.group(2) or ""
-        label = f"DS{channel}" + (f" {frequency}" if frequency else "") + " ErrorRate"
-        order = (1, channel, 2, frequency)
+        label = (f"DS{channel}" if channel is not None else "DS") + (f" {frequency}" if frequency else "") + " ErrorRate"
+        order = (1, channel or 0, 2, frequency)
         metric = "error_rate"
     else:
         return None
