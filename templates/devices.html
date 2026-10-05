@@ -28,6 +28,10 @@ const previous = document.getElementById("prev-page");
 const next = document.getElementById("next-page");
 const last = document.getElementById("last-page");
 const pageInfo = document.getElementById("page-info");
+const displayTime = new Intl.DateTimeFormat("en-GB", {
+  timeZone: document.documentElement.dataset.timezone,
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+});
 let currentPage = 1;
 let lastPage = 1;
 let requestSequence = 0;
@@ -91,7 +95,7 @@ async function refresh() {
       : "Страница " + data.page + " из " + data.pages;
     first.disabled = previous.disabled = data.page <= 1;
     next.disabled = last.disabled = data.page >= data.pages;
-    document.getElementById("updated").textContent = "Обновлено: " + new Date(data.updated_at * 1000).toLocaleTimeString("en-GB", {hour12: false});
+    document.getElementById("updated").textContent = "Обновлено: " + displayTime.format(new Date(data.updated_at * 1000));
   } catch (error) {
     if (sequence === requestSequence) status.textContent = error.message;
   }

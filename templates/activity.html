@@ -1,14 +1,14 @@
 {% extends "base.html" %}{% block title %}Журнал посещений · Zabbix Live Monitoring{% endblock %}
 {% block content %}<h1>Журнал посещений</h1>
-<p>Успешные входы, выходы и открытия страниц. Время указано в UTC. Всего записей: {{ total }}.</p>
+<p>Успешные входы, выходы и открытия страниц. Время: {{ display_timezone }}. Всего записей: {{ total }}.</p>
 <form method="get" action="/settings/activity" class="activity-filter">
 <label>Пользователь <input type="search" name="username" value="{{ username_filter }}" maxlength="80" placeholder="Имя пользователя"></label>
 <button type="submit">Найти</button>{% if username_filter %}<a href="/settings/activity">Сбросить</a>{% endif %}
 </form>
 <section class="panel"><div class="table-wrap"><table class="activity-table">
-<thead><tr><th>Время (UTC)</th><th>Пользователь</th><th>Событие</th><th>Раздел</th></tr></thead><tbody>
+<thead><tr><th>Время ({{ display_timezone }})</th><th>Пользователь</th><th>Событие</th><th>Раздел</th></tr></thead><tbody>
 {% for entry in events %}<tr>
-<td data-label="Время (UTC)">{{ entry.occurred_utc }}</td>
+<td data-label="Время">{{ entry.occurred_local }}</td>
 <td data-label="Пользователь">{{ entry.username }}</td>
 <td data-label="Событие">{{ {"login": "Вход", "view": "Просмотр", "logout": "Выход"}[entry.event] }}</td>
 <td data-label="Раздел">{{ entry.section }}</td>

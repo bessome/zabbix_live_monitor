@@ -1,6 +1,8 @@
 """Application paths and environment configuration."""
 import os
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
@@ -11,3 +13,13 @@ CATEGORIES = ("TV_Amplifires", "Switches", "Modems", "VOIP", "Routers")
 SECRET = os.environ.get("APP_SECRET_KEY")
 if not SECRET or len(SECRET) < 32:
     raise RuntimeError("Set APP_SECRET_KEY to a random value of at least 32 characters")
+
+DISPLAY_TIMEZONE = os.environ.get("APP_TIMEZONE", "Europe/Tallinn").strip() or "Europe/Tallinn"
+try:
+    DISPLAY_ZONE = ZoneInfo(DISPLAY_TIMEZONE)
+except ZoneInfoNotFoundError as exc:
+    raise RuntimeError(f"Unknown APP_TIMEZONE: {DISPLAY_TIMEZONE}") from exc
+
+
+def format_display_timestamp(timestamp):
+    return datetime.fromtimestamp(timestamp, tz=DISPLAY_ZONE).strftime("%Y-%m-%d %H:%M:%S %Z")

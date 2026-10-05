@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from app_config import CATEGORIES
+from app_config import CATEGORIES, format_display_timestamp
 from app_storage import (DEFAULT_ACTIVITY_RETENTION_DAYS, check_password,
                          connect, encrypt_community, hash_password,
                          purge_expired_activity, setting)
@@ -197,12 +197,13 @@ def activity_page(request: Request, page: int = 1, username: str = ""):
         total = con.execute("SELECT COUNT(*) FROM activity_log " + where, params).fetchone()[0]
         pages = max(1, (total + 199) // 200)
         page = min(page, pages)
-        events = con.execute(
-            "SELECT datetime(occurred_at, 'unixepoch') AS occurred_utc, "
-            "username,event,section,path FROM activity_log "
+        rows = con.execute(
+            "SELECT occurred_at,username,event,section,path FROM activity_log "
             + where + " ORDER BY id DESC LIMIT 200 OFFSET ?",
             (*params, (page - 1) * 200)
         ).fetchall()
+    events = [{**dict(row), "occurred_local": format_display_timestamp(row["occurred_at"])}
+              for row in rows]
     return render(request, "activity.html", events=events, page=page,
                   pages=pages, total=total, username_filter=username)
 

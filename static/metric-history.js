@@ -13,9 +13,13 @@
   const periodButtons = [...document.querySelectorAll("#modem-history-periods button")];
   const baseUrl = "/api/devices/" + encodeURIComponent(root.dataset.category)
     + "/" + encodeURIComponent(root.dataset.hostId);
-  const timeFormat = new Intl.DateTimeFormat("ru-RU", {hour: "2-digit", minute: "2-digit"});
+  const displayTimezone = document.documentElement.dataset.timezone;
+  const timeFormat = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: displayTimezone, hour: "2-digit", minute: "2-digit"
+  });
   const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
+    timeZone: displayTimezone, day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit"
   });
   let historyUrl = null;
   let period = "1h";

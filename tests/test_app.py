@@ -6,6 +6,7 @@ import tempfile
 import time
 import unittest
 from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -20,6 +21,7 @@ class AppTests(unittest.TestCase):
         os.environ["APP_SECRET_KEY"] = "test-only-secret-" + "x" * 32
         os.environ["ADMIN_PASSWORD"] = "test-admin-password"
         os.environ["ZABBIX_API_TOKEN"] = "test-token"
+        os.environ["APP_TIMEZONE"] = "Europe/Tallinn"
         import main
         import app_config
         import app_storage
@@ -184,6 +186,18 @@ class AppTests(unittest.TestCase):
         self.login("AuditReader", "audit-password-123")
         self.assertEqual(self.client.get("/settings/activity").status_code, 403)
         self.assertNotIn('href="/settings/activity"', self.client.get("/").text)
+
+    def test_activity_times_use_tallinn_winter_and_summer_offsets(self):
+        winter = datetime(2026, 1, 15, 12, tzinfo=timezone.utc).timestamp()
+        summer = datetime(2026, 7, 15, 12, tzinfo=timezone.utc).timestamp()
+        self.assertEqual(self.config.format_display_timestamp(winter),
+                         "2026-01-15 14:00:00 EET")
+        self.assertEqual(self.config.format_display_timestamp(summer),
+                         "2026-07-15 15:00:00 EEST")
+        self.login()
+        page = self.client.get("/settings/activity")
+        self.assertIn("Europe/Tallinn", page.text)
+        self.assertIn('data-timezone="Europe/Tallinn"', page.text)
 
     def test_activity_retention_setting_removes_old_entries(self):
         self.login()

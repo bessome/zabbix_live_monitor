@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru" data-theme="{{ current_user.theme if current_user else 'light' }}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="ru" data-theme="{{ current_user.theme if current_user else 'light' }}" data-timezone="{{ display_timezone }}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Zabbix Live Monitoring{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', path='/style.css').path }}?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ url_for('static', path='/catalog.css').path }}?v={{ asset_version }}">

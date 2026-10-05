@@ -7,7 +7,7 @@ from contextlib import closing
 from fastapi import HTTPException
 from fastapi.templating import Jinja2Templates
 
-from app_config import CATEGORIES, ROOT
+from app_config import CATEGORIES, DISPLAY_TIMEZONE, ROOT
 from app_storage import connect, record_activity
 
 templates = Jinja2Templates(directory=ROOT / "templates")
@@ -69,6 +69,7 @@ def render(request, name, **context):
     return templates.TemplateResponse(
         request=request, name=name,
         context={"categories": CATEGORIES, "current_user": current_user,
+                 "display_timezone": DISPLAY_TIMEZONE,
                  "asset_version": max(file.stat().st_mtime_ns
                                       for file in (ROOT / "static").iterdir() if file.is_file()),
                  "csrf_token": token, "messages": request.session.pop("messages", []),

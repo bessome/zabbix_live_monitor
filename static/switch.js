@@ -13,6 +13,10 @@
   const csrf = document.getElementById("switch-cable-csrf");
   const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
     + "/" + encodeURIComponent(root.dataset.hostId) + "/switch-ports";
+  const displayTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: document.documentElement.dataset.timezone,
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+  });
   let inFlight = false;
   let selectedPort = null;
   let testInFlight = false;
@@ -105,7 +109,7 @@
       if (!response.ok) throw new Error(data.error || "SNMP недоступен");
       render(data.ports);
       state.textContent = data.ports.length
-        ? "Обновлено " + new Date(data.updated_at * 1000).toLocaleTimeString("en-GB", {hour12: false})
+        ? "Обновлено " + displayTime.format(new Date(data.updated_at * 1000))
         : "Физические Ethernet-порты не найдены";
     } catch (error) {
       list.replaceChildren();
