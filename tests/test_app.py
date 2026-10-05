@@ -72,6 +72,13 @@ class AppTests(unittest.TestCase):
         links = re.findall(r'href="/devices/([^"]+)"', nav)
         self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "VOIP", "Routers"])
 
+    def test_static_assets_use_origin_relative_urls(self):
+        page = self.client.get("/login")
+        self.assertEqual(page.status_code, 200)
+        self.assertRegex(page.text, r'href="/static/style\.css\?v=\d+"')
+        self.assertNotIn('href="http://', page.text)
+        self.assertEqual(self.client.get("/static/style.css").status_code, 200)
+
     def test_favorites_are_personal_and_recent_history_keeps_last_fifteen(self):
         path = "/api/favorites/VOIP/favorite-test-host"
         self.assertEqual(self.client.post(path).status_code, 401)

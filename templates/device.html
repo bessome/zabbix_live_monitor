@@ -65,9 +65,9 @@
 <dt>Device description</dt><dd class="device-detail-description">{{ device.device_description or "—" }}</dd>
 <dt>Адрес</dt><dd>{% if device_http_url %}<a href="{{ device_http_url }}" target="_blank" rel="noopener noreferrer" title="Открыть веб-интерфейс устройства">{{ device.address }}</a>{% else %}{{ device.address }}{% endif %}</dd>
 </dl></section>
-<script src="{{ url_for('static', path='/ping.js') }}?v={{ asset_version }}" defer></script>
-{% if category == 'Modems' %}<script src="{{ url_for('static', path='/modem.js') }}?v={{ asset_version }}" defer></script>{% endif %}
-{% if category == 'TV_Amplifires' %}<script src="{{ url_for('static', path='/optical.js') }}?v={{ asset_version }}" defer></script>{% endif %}
-{% if category == 'Switches' %}<script src="{{ url_for('static', path='/switch.js') }}?v={{ asset_version }}" defer></script>{% endif %}
-<script src="{{ url_for('static', path='/metric-history.js') }}?v={{ asset_version }}" defer></script>
+<script src="{{ url_for('static', path='/ping.js').path }}?v={{ asset_version }}" defer></script>
+{% if category == 'Modems' %}<script src="{{ url_for('static', path='/modem.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
+{% if category == 'TV_Amplifires' %}<script src="{{ url_for('static', path='/optical.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
+{% if category == 'Switches' %}<script src="{{ url_for('static', path='/switch.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
+<script src="{{ url_for('static', path='/metric-history.js').path }}?v={{ asset_version }}" defer></script>
 {% endblock %}
