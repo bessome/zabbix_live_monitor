@@ -587,6 +587,103 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.client.get(path.replace("/7/", "/8/")).status_code, 404)
             self.assertEqual(self.client.get(path.replace("/Modems/", "/VOIP/")).status_code, 404)
 
+    def test_modem_restarts_use_latest_zabbix_item_and_guard_history(self):
+        path = "/api/devices/Modems/42/modem-restarts"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.login()
+        self.zabbix.clear_caches()
+        items = [
+            {"itemid": "90", "name": "restarts count per hour", "status": "1",
+             "value_type": "3", "lastclock": "200", "lastvalue": "99"},
+            {"itemid": "91", "name": "restarts count per hour", "status": "0",
+             "value_type": "3", "lastclock": "100", "lastvalue": "2", "units": ""},
+            {"itemid": "92", "name": "restarts count per hour", "status": "0",
+             "value_type": "3", "lastclock": "200", "lastvalue": "3", "units": ""},
+        ]
+        with (patch("routes_devices.host_rows", return_value=[{"id": "42"}]),
+              patch("zabbix_service.zabbix_call", return_value=items) as api):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["item"]["value"], 3)
+            self.assertEqual(response.json()["item"]["id"], "92")
+            self.assertEqual(self.client.get(path).json()["item"]["value"], 3)
+            self.assertEqual(api.call_count, 1)
+            self.assertEqual(api.call_args.args[0], "item.get")
+            self.assertEqual(self.client.get(path.replace("/42/", "/99/")).status_code, 404)
+            self.assertEqual(self.client.get(path.replace("/Modems/", "/VOIP/")).status_code, 404)
+        history = path + "/92/history"
+        with (patch("routes_devices.host_rows", return_value=[{"id": "42"}]),
+              patch("routes_devices.zabbix_call", return_value=[
+                  {"clock": "1799999990", "value": "3"}]) as api):
+            response = self.client.get(history)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["points"][0]["value"], 3)
+            self.assertEqual(api.call_args.args[1]["itemids"], ["92"])
+            self.assertEqual(self.client.get(history.replace("/92/", "/91/")).status_code, 404)
+            self.assertEqual(self.client.get(history, params={"period": "7d"}).status_code, 422)
+
+    def test_fourteen_day_history_uses_zabbix_hourly_trends_on_all_graphs(self):
+        self.login()
+        modem = {"id": "7", "label": "DS SNR", "units": "dB", "value_type": "0"}
+        error = {"id": "8", "label": "Errors", "units": "", "value_type": "3"}
+        modem_with_error = {**modem, "error_rate_id": "8"}
+        restarts = {"id": "9", "label": "Рестарты/ч", "units": "", "value_type": "3", "value": 2}
+        loss = {"id": "10", "label": "Потери", "units": "%", "value_type": "0"}
+        optical = {"id": "11", "label": "Optical input power", "units": "dBm", "value_type": "0"}
+        cases = [
+            ("/api/devices/Modems/42/modem-channels/7/history", "7"),
+            ("/api/devices/Modems/42/modem-restarts/9/history", "9"),
+            ("/api/devices/Modems/42/ping-loss/history", "10"),
+            ("/api/devices/TV_Amplifires/42/optical-power/11/history", "11"),
+        ]
+        def trend_api(method, params):
+            self.assertEqual(method, "trend.get")
+            return [{"clock": "1799990000", "value_avg": "2.5"}]
+        device = {"id": "42", "name": "Modem 42", "address": "192.0.2.42"}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.modem_channel_definitions", return_value=[modem]),
+              patch("routes_devices.modem_restarts_item", return_value=restarts),
+              patch("routes_devices.ping_loss_definition", return_value=loss),
+              patch("routes_devices.optical_power_definitions", return_value=[optical]),
+              patch("routes_devices.zabbix_call", side_effect=trend_api) as api):
+            for path, item_id in cases:
+                with self.subTest(path=path):
+                    response = self.client.get(path, params={"period": "14d"})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json()["points"], [
+                        {"time": 1799990000, "value": 2.5}])
+                    self.assertEqual(response.json()["aggregation"], "hourly_average")
+                    self.assertEqual(response.json()["to"] - response.json()["from"], 1209600)
+                    self.assertEqual(api.call_args.args[1]["itemids"], [item_id])
+            with patch("routes_devices.device_descriptions", return_value={}):
+                detail = self.client.get("/devices/Modems/42")
+            self.assertEqual(detail.status_code, 200)
+            self.assertIn('data-period="14d"', detail.text)
+            self.assertIn('id="modem-restarts"', detail.text)
+            self.assertIn('/static/metric-history.js', detail.text)
+        with (patch("routes_devices.host_rows", return_value=[{"id": "42"}]),
+              patch("routes_devices.modem_channel_definitions",
+                    return_value=[modem_with_error, error]),
+              patch("routes_devices.zabbix_call", side_effect=trend_api) as api):
+            response = self.client.get(cases[0][0], params={"period": "14d"})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["secondary"]["points"][0]["value"], 2.5)
+            self.assertEqual(api.call_count, 2)
+
+        def no_trends(method, params):
+            if method == "trend.get":
+                return []
+            self.assertEqual(method, "history.get")
+            return [{"clock": "1799990000", "value": "4"}]
+        with (patch("routes_devices.host_rows", return_value=[{"id": "42"}]),
+              patch("routes_devices.modem_restarts_item", return_value=restarts),
+              patch("routes_devices.zabbix_call", side_effect=no_trends) as api):
+            response = self.client.get(cases[1][0], params={"period": "14d"})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["points"][0]["value"], 4)
+            self.assertEqual([call.args[0] for call in api.call_args_list],
+                             ["trend.get", "history.get"])
+
     def test_snr_history_includes_matching_error_rate_from_zabbix(self):
         self.login()
         definitions = [

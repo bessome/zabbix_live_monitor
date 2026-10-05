@@ -3,6 +3,7 @@
   if (!root) return;
   const list = document.getElementById("modem-channels");
   const opticalList = document.getElementById("optical-channels");
+  const restartButton = document.getElementById("modem-restarts");
   const pingLoss = document.getElementById("ping-loss-history");
   const dialog = document.getElementById("modem-history-dialog");
   const canvas = document.getElementById("modem-history-canvas");
@@ -26,7 +27,8 @@
   let latest = null;
   let timer = null;
   let controller = null;
-  const refreshIntervals = {"1h": 30000, "12h": 60000, "24h": 120000, "2d": 120000};
+  const refreshIntervals = {"1h": 30000, "12h": 60000, "24h": 120000,
+    "2d": 120000, "14d": 300000};
 
   function clearChart() {
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -133,7 +135,8 @@
     latest = data;
     title.textContent = data.label;
     status.textContent = data.points.length || data.secondary?.points.length
-      ? "" : "За период " + data.period + " данных в Zabbix нет.";
+      ? (data.aggregation === "hourly_average" ? "Почасовое среднее Zabbix" : "")
+      : "За период " + data.period + " данных в Zabbix нет.";
     canvas.setAttribute("aria-label", "График " + data.label
       + (data.secondary ? " и ошибок в секунду" : "") + " за " + data.period);
     stats.replaceChildren();
@@ -228,6 +231,11 @@
     if (!row || !opticalList.contains(row)) return;
     openHistory(row.querySelector("span").textContent,
       baseUrl + "/optical-power/" + encodeURIComponent(row.dataset.itemId) + "/history");
+  });
+  if (restartButton) restartButton.addEventListener("click", () => {
+    if (!restartButton.dataset.itemId) return;
+    openHistory("Рестарты/ч", baseUrl + "/modem-restarts/"
+      + encodeURIComponent(restartButton.dataset.itemId) + "/history");
   });
   pingLoss.addEventListener("click", () => {
     openHistory("Потери пакетов Zabbix", baseUrl + "/ping-loss/history");

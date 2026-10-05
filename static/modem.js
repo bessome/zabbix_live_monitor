@@ -3,10 +3,15 @@
   if (!root) return;
   const list = document.getElementById("modem-channels");
   const state = document.getElementById("modem-state");
+  const restartButton = document.getElementById("modem-restarts");
+  const restartValue = document.getElementById("modem-restarts-value");
   const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
     + "/" + encodeURIComponent(root.dataset.hostId) + "/modem-channels";
+  const restartUrl = url.replace(/\/modem-channels$/, "/modem-restarts");
   let signature = "";
   let inFlight = false;
+  let restartInFlight = false;
+  let previousRestartValue;
   const previousValues = new Map();
   const previousErrors = new Map();
 
@@ -133,6 +138,39 @@
     }
   }
 
+  async function refreshRestarts() {
+    if (restartInFlight) return;
+    restartInFlight = true;
+    try {
+      const response = await fetch(restartUrl, {credentials: "same-origin", cache: "no-store"});
+      if (response.status === 401) {
+        location.href = "/login";
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Zabbix недоступен");
+      restartButton.hidden = !data.item;
+      if (!data.item) return;
+      restartButton.dataset.itemId = data.item.id;
+      const changed = previousRestartValue !== undefined && data.item.value != null
+        && previousRestartValue !== data.item.value;
+      restartValue.textContent = data.item.value == null ? "n/a" : String(data.item.value);
+      restartValue.classList.toggle("modem-value-changed", changed);
+      previousRestartValue = data.item.value;
+      restartButton.title = "Открыть историю рестартов Zabbix";
+    } catch (error) {
+      if (!restartButton.hidden) {
+        restartValue.textContent = "n/a";
+        restartValue.classList.remove("modem-value-changed");
+        restartButton.title = error.message;
+      }
+    } finally {
+      restartInFlight = false;
+    }
+  }
+
   refresh();
   setInterval(refresh, 5000);
+  refreshRestarts();
+  setInterval(refreshRestarts, 15000);
 })();

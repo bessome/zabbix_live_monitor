@@ -1,5 +1,6 @@
 """Zabbix API access, device mapping and short-lived caches."""
 import json
+import math
 import os
 import re
 import threading
@@ -15,6 +16,7 @@ from snmp_monitor import channel_definition, link_error_rates, optical_definitio
 _cache = {}
 _catalog_cache = {}
 _modem_items_cache = {}
+_modem_restarts_cache = {}
 _optical_items_cache = {}
 _ping_loss_items_cache = {}
 _cache_lock = threading.Lock()
@@ -133,6 +135,42 @@ def modem_channel_definitions(host_id):
     return definitions
 
 
+def modem_restarts_item(host_id):
+    """Find the modem restarts item and read its latest Zabbix value."""
+    with _cache_lock:
+        cached = _modem_restarts_cache.get(host_id)
+        if cached and time.monotonic() - cached[0] < 15:
+            return cached[1]
+    items = zabbix_call("item.get", {
+        "output": ["itemid", "name", "status", "value_type", "units",
+                   "lastvalue", "lastclock"],
+        "hostids": [host_id],
+        "search": {"name": "restarts count per hour"},
+    })
+    matches = [item for item in items
+               if item.get("name", "").strip().casefold() == "restarts count per hour"
+               and str(item.get("status")) == "0"
+               and str(item.get("value_type")) in ("0", "3")]
+    result = None
+    if matches:
+        selected = max(matches, key=lambda item: (int(item.get("lastclock") or 0),
+                                                   int(item["itemid"])))
+        value = None
+        if int(selected.get("lastclock") or 0) > 0:
+            try:
+                parsed = float(selected["lastvalue"])
+                if math.isfinite(parsed):
+                    value = int(parsed) if parsed.is_integer() else round(parsed, 2)
+            except (KeyError, TypeError, ValueError):
+                pass
+        result = {"id": str(selected["itemid"]), "label": "Рестарты/ч",
+                  "units": selected.get("units") or "",
+                  "value_type": selected["value_type"], "value": value}
+    with _cache_lock:
+        _modem_restarts_cache[host_id] = (time.monotonic(), result)
+    return result
+
+
 def optical_power_definitions(host_id):
     with _cache_lock:
         cached = _optical_items_cache.get(host_id)
@@ -204,5 +242,6 @@ def clear_caches():
         _cache.clear()
         _catalog_cache.clear()
         _modem_items_cache.clear()
+        _modem_restarts_cache.clear()
         _optical_items_cache.clear()
         _ping_loss_items_cache.clear()

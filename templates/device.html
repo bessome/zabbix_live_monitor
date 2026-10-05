@@ -44,6 +44,7 @@
 <section class="panel modem-panel" id="modem-monitor" aria-label="Показатели каналов модема" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <p id="modem-state" class="modem-state" aria-live="polite">Загрузка каналов…</p>
 <div id="modem-channels" class="modem-channels"></div>
+<button type="button" id="modem-restarts" class="modem-restarts" hidden title="Открыть историю рестартов Zabbix"><span>Рестарты/ч</span><strong id="modem-restarts-value" class="modem-number">—</strong></button>
 </section>
 {% endif %}
 <dialog id="modem-history-dialog" class="modem-history-dialog" aria-labelledby="modem-history-title">
@@ -53,6 +54,7 @@
 <button type="button" data-period="12h" aria-pressed="false">12h</button>
 <button type="button" data-period="24h" aria-pressed="false">24h</button>
 <button type="button" data-period="2d" aria-pressed="false">2d</button>
+<button type="button" data-period="14d" aria-pressed="false">14d</button>
 </div>
 <p id="modem-history-status" role="status">Загрузка…</p>
 <div class="modem-history-chart"><canvas id="modem-history-canvas" role="img" aria-label="График значений канала за 1h"></canvas></div>

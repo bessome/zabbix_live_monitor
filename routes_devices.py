@@ -18,12 +18,13 @@ from snmp_monitor import display_modem_values, snapshot_for as snmp_snapshot_for
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
                             snapshot_for as switch_snapshot_for)
 from zabbix_service import (category_filter, device_descriptions, host_rows,
-                            modem_channel_definitions, normalize_device_search,
-                            optical_power_definitions, ping_loss_definition,
-                            zabbix_call)
+                            modem_channel_definitions, modem_restarts_item,
+                            normalize_device_search, optical_power_definitions,
+                            ping_loss_definition, zabbix_call)
 
 router = APIRouter()
-HISTORY_PERIODS = {"1h": 3600, "12h": 43200, "24h": 86400, "2d": 172800}
+HISTORY_PERIODS = {"1h": 3600, "12h": 43200, "24h": 86400,
+                   "2d": 172800, "14d": 1209600}
 HISTORY_PAGE_SIZE = 50000
 
 
@@ -61,6 +62,25 @@ async def numeric_history(item, period, now=None):
         raise HTTPException(422, "Для этого item нет числовой истории.")
     now = int(time.time()) if now is None else now
     from_time = now - HISTORY_PERIODS[period]
+    if period == "14d":
+        trends = await asyncio.to_thread(zabbix_call, "trend.get", {
+            "output": ["clock", "value_avg"], "itemids": [item["id"]],
+            "time_from": from_time, "time_till": now, "limit": 500,
+        })
+        trend_points = []
+        for row in trends:
+            try:
+                timestamp = int(row["clock"])
+                value = float(row["value_avg"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                trend_points.append({"time": timestamp, "value": value})
+        if trend_points:
+            return {"label": item["label"], "units": item["units"],
+                    "period": period, "from": from_time, "to": now,
+                    "aggregation": "hourly_average",
+                    "points": sorted(trend_points, key=lambda point: point["time"])}
     history = []
     cursor = now
     while cursor >= from_time:
@@ -230,6 +250,21 @@ async def modem_channels(request: Request, category: str, host_id: str):
                         headers={"Cache-Control": "no-store"})
 
 
+@router.get("/api/devices/{category}/{host_id}/modem-restarts")
+async def modem_restarts(request: Request, category: str, host_id: str):
+    require_user(request, api=True)
+    if category != "Modems":
+        raise HTTPException(404)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        if not any(row["id"] == host_id for row in rows):
+            raise HTTPException(404)
+        item = await asyncio.to_thread(modem_restarts_item, host_id)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse({"item": item}, headers={"Cache-Control": "no-store"})
+
+
 @router.get("/api/devices/{category}/{host_id}/switch-ports")
 async def switch_ports(request: Request, category: str, host_id: str):
     require_user(request, api=True)
@@ -337,6 +372,27 @@ async def modem_channel_history(request: Request, category: str, host_id: str,
                 numeric_history(item, period, now), numeric_history(error_item, period, now))
             result["secondary"] = {"label": "Ошибки/с", "units": "ош/с",
                                    "points": error_history["points"]}
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/modem-restarts/{item_id}/history")
+async def modem_restarts_history(request: Request, category: str, host_id: str,
+                                 item_id: str, period: str = "1h"):
+    require_user(request, api=True)
+    if category != "Modems":
+        raise HTTPException(404)
+    if period not in HISTORY_PERIODS:
+        raise HTTPException(422, "Неверный период графика.")
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        if not any(row["id"] == host_id for row in rows):
+            raise HTTPException(404)
+        item = await asyncio.to_thread(modem_restarts_item, host_id)
+        if item is None or item["id"] != item_id:
+            raise HTTPException(404)
+        result = await numeric_history(item, period)
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})

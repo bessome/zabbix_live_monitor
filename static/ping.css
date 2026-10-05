@@ -37,6 +37,11 @@
 .modem-row span{overflow-wrap:anywhere}
 .modem-row strong{white-space:nowrap;font-size:15px}
 .modem-row-with-errors strong{white-space:normal}
+.modem-restarts{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin-top:8px;padding:7px 9px;border:1px solid #dce6ef;border-radius:6px;background:#f8fbfd;color:inherit;text-align:left;font:inherit}
+.modem-restarts[hidden]{display:none}
+.modem-restarts:hover{background:#eaf3fa}
+.modem-restarts:focus-visible{outline:2px solid #176cad;outline-offset:2px}
+.modem-restarts strong{font-variant-numeric:tabular-nums}
 .modem-error-rate{font-size:.85em;font-weight:600;white-space:nowrap}
 .modem-number{display:inline-block;border-radius:3px}
 .modem-number.modem-value-changed{animation:modem-value-pulse .8s ease-in-out infinite alternate}
@@ -89,7 +94,7 @@
   .modem-row>span{display:block;font-size:12px;line-height:1.25}
   .modem-row strong{display:block;font-size:14px;line-height:1.3}
   .modem-history-dialog{padding:12px}
-  .modem-history-periods{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+  .modem-history-periods{display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
   .modem-history-periods button{min-width:0}
   .modem-history-chart canvas{height:220px}
 }
