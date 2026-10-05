@@ -38,9 +38,12 @@ def login_page(request: Request):
 @router.post("/login")
 async def login(request: Request):
     form = await checked_form(request)
+    identifier = str(form.get("username", "")).strip()
     with closing(connect()) as con:
-        user = con.execute("SELECT * FROM users WHERE username=? AND active=1",
-                           (str(form.get("username", "")).strip(),)).fetchone()
+        user = con.execute(
+            "SELECT * FROM users WHERE active=1 AND "
+            "(username=? OR email COLLATE NOCASE=?)",
+            (identifier, identifier)).fetchone()
     if user and check_password(str(form.get("password", "")), user["password_hash"]):
         request.session.clear()
         request.session["user_id"] = user["id"]

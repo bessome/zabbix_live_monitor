@@ -272,6 +272,7 @@ class AppTests(unittest.TestCase):
         self.assertIn('href="/settings/users"', admin_page)
         csrf = self.token("/settings/users")
         self.client.post("/settings/users", data={"csrf_token": csrf, "username": "Reader",
+                         "email": "reader@example.test",
                          "password": "reader-password-123", "role": "read"})
         self.client.post("/logout", data={"csrf_token": self.token("/settings/users")})
         self.login("Reader", "reader-password-123")
@@ -282,6 +283,9 @@ class AppTests(unittest.TestCase):
         self.assertNotIn('href="/settings"', reader_page)
         self.assertEqual(self.client.get("/settings").status_code, 403)
         self.assertEqual(self.client.get("/settings/users").status_code, 403)
+        self.assertEqual(self.client.post("/settings/admin-email", data={
+            "csrf_token": self.token("/profile"), "email": "reader.admin@example.test"
+        }).status_code, 403)
         self.assertEqual(self.client.get("/api/zabbix/catalog/group").status_code, 403)
         self.assertEqual(self.client.get("/devices/VOIP").status_code, 200)
 
@@ -672,7 +676,9 @@ class AppTests(unittest.TestCase):
                 self.storage.init_db()
                 with closing(self.storage.connect()) as con:
                     self.assertEqual(con.execute("SELECT theme FROM users WHERE username='Admin'")
-                                     .fetchone()[0], "light")
+                                      .fetchone()[0], "light")
+                    self.assertIsNone(con.execute(
+                        "SELECT email FROM users WHERE username='Admin'").fetchone()[0])
 
     def test_profile_theme_is_available_to_reader_and_saved_per_user(self):
         self.assertEqual(self.client.get("/profile", follow_redirects=False).status_code, 303)
@@ -680,7 +686,8 @@ class AppTests(unittest.TestCase):
         self.assertIn('data-theme="light"', self.client.get("/profile").text)
         csrf = self.token("/settings/users")
         self.client.post("/settings/users", data={"csrf_token": csrf,
-                         "username": "ThemeReader", "password": "theme-reader-password-123",
+                         "username": "ThemeReader", "email": "theme@example.test",
+                         "password": "theme-reader-password-123",
                          "role": "read"})
         self.client.post("/logout", data={"csrf_token": self.token("/profile")})
         self.login("ThemeReader", "theme-reader-password-123")
@@ -776,17 +783,58 @@ class AppTests(unittest.TestCase):
         self.login()
         self.assertEqual(self.client.post("/settings/users", data={"username": "x"}).status_code, 400)
 
+    def test_email_login_and_nine_character_password(self):
+        self.login()
+        token = self.token("/settings/users")
+        response = self.client.post("/settings/admin-email", data={
+            "csrf_token": token, "email": "Admin.Login@Example.test"})
+        self.assertIn("Email Admin сохранён", response.text)
+        self.assertIn('value="admin.login@example.test"', response.text)
+        base = {"csrf_token": token, "username": "EmailReader",
+                "email": "Reader.Login@Example.test", "role": "read"}
+        response = self.client.post("/settings/users", data={
+            **base, "password": "12345678"})
+        self.assertIn("от 9 символов", response.text)
+        response = self.client.post("/settings/users", data={
+            **base, "password": "123456789"})
+        self.assertIn("Пользователь создан", response.text)
+        with closing(self.storage.connect()) as con:
+            user = con.execute("SELECT id,email FROM users WHERE username='EmailReader'").fetchone()
+        self.assertEqual(user["email"], "reader.login@example.test")
+        response = self.client.post("/settings/users", data={
+            **base, "username": "AnotherReader", "email": "READER.LOGIN@example.test",
+            "password": "123456789"})
+        self.assertIn("Имя или email уже используется", response.text)
+        response = self.client.post("/settings/users", data={
+            **base, "username": "admin.login@example.test",
+            "email": "another@example.test", "password": "123456789"})
+        self.assertIn("Имя или email уже используется", response.text)
+        response = self.client.post(f"/settings/users/{user['id']}", data={
+            "csrf_token": token, "email": "new.reader@example.test",
+            "role": "read", "active": "1", "password": "shortpass"})
+        self.assertIn("Пользователь обновлён", response.text)
+        self.client.post("/logout", data={"csrf_token": token})
+        response = self.login("NEW.READER@EXAMPLE.TEST", "shortpass")
+        self.assertEqual(response.url.path, "/")
+        self.client.post("/logout", data={"csrf_token": self.token("/profile")})
+        response = self.login("ADMIN.LOGIN@EXAMPLE.TEST", "test-admin-password")
+        self.assertEqual(response.url.path, "/")
+
     def test_z_admin_can_change_password(self):
         self.login()
         csrf = self.token("/settings/users")
         response = self.client.post("/settings/admin-password", data={
             "csrf_token": csrf, "current_password": "test-admin-password",
-            "new_password": "different-password-123"})
+            "new_password": "12345678"})
+        self.assertIn("не менее 9 символов", response.text)
+        response = self.client.post("/settings/admin-password", data={
+            "csrf_token": csrf, "current_password": "test-admin-password",
+            "new_password": "shortpass"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("Пароль Admin изменён", response.text)
         csrf = self.token("/settings/users")
         self.client.post("/settings/admin-password", data={
-            "csrf_token": csrf, "current_password": "different-password-123",
+            "csrf_token": csrf, "current_password": "shortpass",
             "new_password": "test-admin-password"})
 
 

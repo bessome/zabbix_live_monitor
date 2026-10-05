@@ -1,21 +1,28 @@
 {% extends "base.html" %}{% block title %}Пользователи · Zabbix Live Monitoring{% endblock %}
 {% block content %}<h1>Пользователи</h1>
+{% if missing_email_count %}<p class="message">У {{ missing_email_count }} существующих пользователей email ещё не задан. Укажите его ниже, чтобы они могли входить по адресу.</p>{% endif %}
+<section class="panel"><h2>Email Admin</h2><form method="post" action="/settings/admin-email">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Email <input type="email" name="email" value="{{ admin_user.email or '' }}" required maxlength="254" autocomplete="email"></label>
+<button type="submit">Сохранить email</button></form></section>
 <section class="panel"><h2>Пароль Admin</h2><form method="post" action="/settings/admin-password">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Текущий пароль <input type="password" name="current_password" required autocomplete="current-password"></label>
-<label>Новый пароль <input type="password" name="new_password" required minlength="12" autocomplete="new-password"></label>
+<label>Новый пароль <input type="password" name="new_password" required minlength="9" autocomplete="new-password"></label>
 <button type="submit">Изменить пароль</button></form></section>
 <section class="panel"><h2>Добавить пользователя</h2><form method="post" action="/settings/users">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Имя <input name="username" required maxlength="80"></label>
-<label>Пароль <input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+<label>Email <input name="email" type="email" required maxlength="254" autocomplete="off"></label>
+<label>Пароль <input name="password" type="password" required minlength="9" autocomplete="new-password"></label>
 <label>Права <select name="role"><option value="read">Read</option><option value="execute">Read + execute</option></select></label>
 <button type="submit">Создать</button></form></section>
 <section class="panel"><h2>Учётные записи</h2><div class="table-wrap"><table class="users-table">
-<thead><tr><th>Имя</th><th>Роль</th><th>Состояние</th><th>Изменить</th></tr></thead><tbody>
-{% for user in users %}<tr><td data-label="Пользователь">{{ user.username }}</td><td data-label="Роль">{{ user.role }}</td><td data-label="Состояние">{{ "Активен" if user.active else "Отключён" }}</td><td data-label="Изменить">
+<thead><tr><th>Имя</th><th>Email</th><th>Роль</th><th>Состояние</th><th>Изменить</th></tr></thead><tbody>
+{% for user in users %}<tr><td data-label="Пользователь">{{ user.username }}</td><td data-label="Email">{{ user.email or "Не задан" }}</td><td data-label="Роль">{{ user.role }}</td><td data-label="Состояние">{{ "Активен" if user.active else "Отключён" }}</td><td data-label="Изменить">
 {% if user.role != "admin" %}<form method="post" action="/settings/users/{{ user.id }}" class="inline-form">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="email" name="email" value="{{ user.email or '' }}" required maxlength="254" aria-label="Email пользователя {{ user.username }}" placeholder="Email">
 <select name="role" aria-label="Роль пользователя {{ user.username }}">
 {% if user.role == "read" %}<option value="read" selected>Read</option><option value="execute">Read + execute</option>
 {% else %}<option value="read">Read</option><option value="execute" selected>Read + execute</option>{% endif %}
@@ -24,6 +31,6 @@
 {% if user.active %}<option value="1" selected>Активен</option><option value="0">Отключён</option>
 {% else %}<option value="1">Активен</option><option value="0" selected>Отключён</option>{% endif %}
 </select>
-<input type="password" name="password" minlength="12" autocomplete="new-password" aria-label="Новый пароль пользователя {{ user.username }}" placeholder="Новый пароль (необязательно)">
+<input type="password" name="password" minlength="9" autocomplete="new-password" aria-label="Новый пароль пользователя {{ user.username }}" placeholder="Новый пароль (необязательно)">
 <button type="submit">Сохранить</button></form>{% else %}Главный администратор{% endif %}</td></tr>{% endfor %}
 </tbody></table></div></section>{% endblock %}

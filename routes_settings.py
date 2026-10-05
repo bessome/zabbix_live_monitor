@@ -1,6 +1,7 @@
 """Administrative settings, Zabbix catalog and user management."""
 import asyncio
 import os
+import re
 import sqlite3
 from contextlib import closing
 from urllib.parse import urlparse
@@ -15,6 +16,21 @@ from app_storage import (DEFAULT_ACTIVITY_RETENTION_DAYS, check_password,
 from app_web import add_message, checked_form, render, require_admin
 from switch_monitor import DEFAULT_EXCLUDED_NAMES, parse_excluded_names
 from zabbix_service import category_filter, clear_caches, zabbix_call, zabbix_catalog
+
+EMAIL_PATTERN = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+\Z")
+
+
+def normalized_email(value):
+    email = str(value).strip().casefold()
+    return email if len(email) <= 254 and EMAIL_PATTERN.fullmatch(email) else None
+
+
+def identifier_in_use(con, username, email, excluding_id=-1):
+    return con.execute(
+        "SELECT 1 FROM users WHERE id<>? AND "
+        "(username COLLATE NOCASE IN (?,?) OR email COLLATE NOCASE IN (?,?)) "
+        "LIMIT 1", (excluding_id, username, email, username, email),
+    ).fetchone() is not None
 
 router = APIRouter()
 
@@ -161,8 +177,11 @@ async def check_connection(request: Request):
 def users_page(request: Request):
     require_admin(request)
     with closing(connect()) as con:
-        users = con.execute("SELECT id,username,role,active FROM users ORDER BY username").fetchall()
-    return render(request, "users.html", users=users)
+        users = con.execute(
+            "SELECT id,username,email,role,active FROM users ORDER BY username").fetchall()
+    admin_user = next((user for user in users if user["role"] == "admin"), None)
+    return render(request, "users.html", users=users, admin_user=admin_user,
+                  missing_email_count=sum(not user["email"] for user in users))
 
 
 @router.get("/settings/activity")
@@ -193,19 +212,25 @@ async def create_user(request: Request):
     require_admin(request)
     form = await checked_form(request)
     username = str(form.get("username", "")).strip()
+    email = normalized_email(form.get("email", ""))
     password = str(form.get("password", ""))
     role = str(form.get("role", ""))
-    if not username or len(username) > 80 or len(password) < 12 or role not in ("read", "execute"):
-        add_message(request, "Укажите имя, роль и пароль длиной от 12 символов.", "error")
+    if (not username or len(username) > 80 or email is None
+            or len(password) < 9 or role not in ("read", "execute")):
+        add_message(request, "Укажите имя, email, роль и пароль длиной от 9 символов.", "error")
     else:
         try:
             with closing(connect()) as con:
-                con.execute("INSERT INTO users(username,password_hash,role) VALUES (?,?,?)",
-                            (username, hash_password(password), role))
+                if identifier_in_use(con, username, email):
+                    add_message(request, "Имя или email уже используется.", "error")
+                    return RedirectResponse("/settings/users", status_code=303)
+                con.execute("INSERT INTO users(username,email,password_hash,role) "
+                            "VALUES (?,?,?,?)",
+                            (username, email, hash_password(password), role))
                 con.commit()
             add_message(request, "Пользователь создан.")
         except sqlite3.IntegrityError:
-            add_message(request, "Такое имя пользователя уже существует.", "error")
+            add_message(request, "Имя или email уже используется.", "error")
     return RedirectResponse("/settings/users", status_code=303)
 
 
@@ -222,17 +247,51 @@ async def update_user(request: Request, user_id: int):
         role = str(form.get("role", ""))
         if role not in ("read", "execute"):
             raise HTTPException(400)
+        email = normalized_email(form.get("email", ""))
+        if email is None:
+            add_message(request, "Укажите корректный email.", "error")
+            return RedirectResponse("/settings/users", status_code=303)
+        if identifier_in_use(con, target["username"], email, user_id):
+            add_message(request, "Имя или email уже используется.", "error")
+            return RedirectResponse("/settings/users", status_code=303)
         password = str(form.get("password", ""))
-        if password and len(password) < 12:
-            add_message(request, "Новый пароль должен содержать не менее 12 символов.", "error")
+        if password and len(password) < 9:
+            add_message(request, "Новый пароль должен содержать не менее 9 символов.", "error")
             return RedirectResponse("/settings/users", status_code=303)
         active = int(form.get("active") == "1")
-        con.execute("UPDATE users SET role=?,active=? WHERE id=?", (role, active, user_id))
-        if password:
-            con.execute("UPDATE users SET password_hash=? WHERE id=?",
-                        (hash_password(password), user_id))
-        con.commit()
+        try:
+            con.execute("UPDATE users SET email=?,role=?,active=? WHERE id=?",
+                        (email, role, active, user_id))
+            if password:
+                con.execute("UPDATE users SET password_hash=? WHERE id=?",
+                            (hash_password(password), user_id))
+            con.commit()
+        except sqlite3.IntegrityError:
+            add_message(request, "Имя или email уже используется.", "error")
+            return RedirectResponse("/settings/users", status_code=303)
     add_message(request, "Пользователь обновлён.")
+    return RedirectResponse("/settings/users", status_code=303)
+
+
+@router.post("/settings/admin-email")
+async def change_admin_email(request: Request):
+    admin = require_admin(request)
+    form = await checked_form(request)
+    email = normalized_email(form.get("email", ""))
+    if email is None:
+        add_message(request, "Укажите корректный email.", "error")
+        return RedirectResponse("/settings/users", status_code=303)
+    with closing(connect()) as con:
+        if identifier_in_use(con, admin["username"], email, admin["id"]):
+            add_message(request, "Имя или email уже используется.", "error")
+            return RedirectResponse("/settings/users", status_code=303)
+        try:
+            con.execute("UPDATE users SET email=? WHERE id=?", (email, admin["id"]))
+            con.commit()
+        except sqlite3.IntegrityError:
+            add_message(request, "Имя или email уже используется.", "error")
+            return RedirectResponse("/settings/users", status_code=303)
+    add_message(request, "Email Admin сохранён.")
     return RedirectResponse("/settings/users", status_code=303)
 
 
@@ -242,8 +301,8 @@ async def change_admin_password(request: Request):
     form = await checked_form(request)
     current = str(form.get("current_password", ""))
     new = str(form.get("new_password", ""))
-    if len(new) < 12:
-        add_message(request, "Новый пароль должен содержать не менее 12 символов.", "error")
+    if len(new) < 9:
+        add_message(request, "Новый пароль должен содержать не менее 9 символов.", "error")
         return RedirectResponse("/settings/users", status_code=303)
     with closing(connect()) as con:
         row = con.execute("SELECT password_hash FROM users WHERE id=?", (admin["id"],)).fetchone()

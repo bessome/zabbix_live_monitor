@@ -46,6 +46,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                email TEXT,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL CHECK (role IN ('read', 'execute', 'admin')),
                 active INTEGER NOT NULL DEFAULT 1,
@@ -93,10 +94,14 @@ def init_db():
         if "theme" not in columns:
             con.execute("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'light' "
                         "CHECK (theme IN ('light', 'dark'))")
+        if "email" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique "
+                    "ON users(email COLLATE NOCASE) WHERE email IS NOT NULL")
         if con.execute("SELECT id FROM users WHERE role='admin' LIMIT 1").fetchone() is None:
             password = os.environ.get("ADMIN_PASSWORD", "")
-            if len(password) < 12:
-                raise RuntimeError("Set ADMIN_PASSWORD (at least 12 characters) for first start")
+            if len(password) < 9:
+                raise RuntimeError("Set ADMIN_PASSWORD (at least 9 characters) for first start")
             con.execute("INSERT INTO users(username,password_hash,role) VALUES (?,?,'admin')",
                         ("Admin", hash_password(password)))
         con.commit()
