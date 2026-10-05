@@ -601,11 +601,13 @@ class AppTests(unittest.TestCase):
              "value_type": "3", "lastclock": "200", "lastvalue": "3", "units": ""},
         ]
         with (patch("routes_devices.host_rows", return_value=[{"id": "42"}]),
+              patch("routes_devices.modem_restarts_count_24h", return_value=5),
               patch("zabbix_service.zabbix_call", return_value=items) as api):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["item"]["value"], 3)
             self.assertEqual(response.json()["item"]["id"], "92")
+            self.assertEqual(response.json()["count_24h"], 5)
             self.assertEqual(self.client.get(path).json()["item"]["value"], 3)
             self.assertEqual(api.call_count, 1)
             self.assertEqual(api.call_args.args[0], "item.get")
@@ -621,6 +623,28 @@ class AppTests(unittest.TestCase):
             self.assertEqual(api.call_args.args[1]["itemids"], ["92"])
             self.assertEqual(self.client.get(history.replace("/92/", "/91/")).status_code, 404)
             self.assertEqual(self.client.get(history, params={"period": "7d"}).status_code, 422)
+
+    def test_modem_restarts_daily_count_uses_one_value_per_rolling_hour(self):
+        self.zabbix.clear_caches()
+        now = 1000000
+        rows = [
+            {"clock": str(now - 300), "value": "2"},
+            {"clock": str(now - 600), "value": "9"},
+            {"clock": str(now - 3900), "value": "3"},
+            {"clock": str(now - 7500), "value": "0"},
+            {"clock": str(now - 86500), "value": "50"},
+        ]
+        item = {"id": "92", "value_type": "3"}
+        with patch("zabbix_service.zabbix_call", return_value=rows) as api:
+            count = self.zabbix.modem_restarts_count_24h("42", item, now=now)
+            self.assertEqual(count, 5)
+            self.assertEqual(self.zabbix.modem_restarts_count_24h("42", item, now=now), 5)
+            self.assertEqual(api.call_count, 1)
+            self.assertEqual(api.call_args.args[0], "history.get")
+            self.assertEqual(api.call_args.args[1]["itemids"], ["92"])
+            self.assertEqual(api.call_args.args[1]["time_from"], now - 86400)
+        with patch("zabbix_service.zabbix_call", return_value=[]):
+            self.assertIsNone(self.zabbix.modem_restarts_count_24h("43", item, now=now))
 
     def test_fourteen_day_history_uses_zabbix_hourly_trends_on_all_graphs(self):
         self.login()
@@ -660,6 +684,7 @@ class AppTests(unittest.TestCase):
             self.assertEqual(detail.status_code, 200)
             self.assertIn('data-period="14d"', detail.text)
             self.assertIn('id="modem-restarts"', detail.text)
+            self.assertIn('id="modem-restarts-daily"', detail.text)
             self.assertIn('/static/metric-history.js', detail.text)
         with (patch("routes_devices.host_rows", return_value=[{"id": "42"}]),
               patch("routes_devices.modem_channel_definitions",

@@ -17,6 +17,7 @@ _cache = {}
 _catalog_cache = {}
 _modem_items_cache = {}
 _modem_restarts_cache = {}
+_modem_restarts_daily_cache = {}
 _optical_items_cache = {}
 _ping_loss_items_cache = {}
 _cache_lock = threading.Lock()
@@ -171,6 +172,41 @@ def modem_restarts_item(host_id):
     return result
 
 
+def modem_restarts_count_24h(host_id, item, now=None):
+    """Sum one latest hourly count per rolling hour over the last 24 hours."""
+    now = int(time.time()) if now is None else now
+    cache_key = (host_id, item["id"])
+    with _cache_lock:
+        cached = _modem_restarts_daily_cache.get(cache_key)
+        if cached and time.monotonic() - cached[0] < 60:
+            return cached[1]
+    from_time = now - 86400
+    cursor = now
+    hourly = {}
+    while cursor > from_time:
+        page = zabbix_call("history.get", {
+            "output": ["clock", "value"], "itemids": [item["id"]],
+            "history": int(item["value_type"]),
+            "time_from": from_time, "time_till": cursor,
+            "sortfield": "clock", "sortorder": "DESC", "limit": 50000,
+        })
+        for row in page:
+            try:
+                timestamp = int(row["clock"])
+                value = float(row["value"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if from_time < timestamp <= now and math.isfinite(value):
+                hourly.setdefault((now - timestamp) // 3600, (timestamp, max(0, value)))
+        if len(page) < 50000:
+            break
+        cursor = int(page[-1]["clock"]) - 1
+    count = round(sum(value for _, value in hourly.values())) if hourly else None
+    with _cache_lock:
+        _modem_restarts_daily_cache[cache_key] = (time.monotonic(), count)
+    return count
+
+
 def optical_power_definitions(host_id):
     with _cache_lock:
         cached = _optical_items_cache.get(host_id)
@@ -243,5 +279,6 @@ def clear_caches():
         _catalog_cache.clear()
         _modem_items_cache.clear()
         _modem_restarts_cache.clear()
+        _modem_restarts_daily_cache.clear()
         _optical_items_cache.clear()
         _ping_loss_items_cache.clear()

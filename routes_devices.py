@@ -18,9 +18,10 @@ from snmp_monitor import display_modem_values, snapshot_for as snmp_snapshot_for
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
                             snapshot_for as switch_snapshot_for)
 from zabbix_service import (category_filter, device_descriptions, host_rows,
-                            modem_channel_definitions, modem_restarts_item,
-                            normalize_device_search, optical_power_definitions,
-                            ping_loss_definition, zabbix_call)
+                            modem_channel_definitions, modem_restarts_count_24h,
+                            modem_restarts_item, normalize_device_search,
+                            optical_power_definitions, ping_loss_definition,
+                            zabbix_call)
 
 router = APIRouter()
 HISTORY_PERIODS = {"1h": 3600, "12h": 43200, "24h": 86400,
@@ -262,7 +263,15 @@ async def modem_restarts(request: Request, category: str, host_id: str):
         item = await asyncio.to_thread(modem_restarts_item, host_id)
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
-    return JSONResponse({"item": item}, headers={"Cache-Control": "no-store"})
+    count_24h = None
+    if item is not None:
+        try:
+            count_24h = await asyncio.to_thread(modem_restarts_count_24h,
+                                                host_id, item)
+        except RuntimeError:
+            pass
+    return JSONResponse({"item": item, "count_24h": count_24h},
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/devices/{category}/{host_id}/switch-ports")

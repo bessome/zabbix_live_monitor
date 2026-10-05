@@ -5,6 +5,7 @@
   const state = document.getElementById("modem-state");
   const restartButton = document.getElementById("modem-restarts");
   const restartValue = document.getElementById("modem-restarts-value");
+  const dailyRestarts = document.getElementById("modem-restarts-daily");
   const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
     + "/" + encodeURIComponent(root.dataset.hostId) + "/modem-channels";
   const restartUrl = url.replace(/\/modem-channels$/, "/modem-restarts");
@@ -150,6 +151,11 @@
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Zabbix недоступен");
       restartButton.hidden = !data.item;
+      dailyRestarts.hidden = data.count_24h == null;
+      if (data.count_24h != null) {
+        dailyRestarts.textContent = "\u00a0(" + data.count_24h + ")";
+        dailyRestarts.setAttribute("aria-label", "Рестартов за последние 24 часа: " + data.count_24h);
+      }
       if (!data.item) return;
       restartButton.dataset.itemId = data.item.id;
       const changed = previousRestartValue !== undefined && data.item.value != null
@@ -159,6 +165,7 @@
       previousRestartValue = data.item.value;
       restartButton.title = "Открыть историю рестартов Zabbix";
     } catch (error) {
+      dailyRestarts.hidden = true;
       if (!restartButton.hidden) {
         restartValue.textContent = "n/a";
         restartValue.classList.remove("modem-value-changed");
