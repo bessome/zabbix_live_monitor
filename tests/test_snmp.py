@@ -105,6 +105,25 @@ class SnmpTests(unittest.TestCase):
         link_error_rates([snr, error, other_error])
         self.assertNotIn("error_rate_id", snr)
 
+    def test_single_generic_snr_pairs_with_generic_error_rate(self):
+        base = {"type": "20", "status": "0", "snmp_oid": "get[1.2.3]",
+                "units": "", "value_type": "0", "preprocessing": []}
+        snr = channel_definition({**base, "itemid": "1",
+                                  "name": "Downstream channel SNR"})
+        error = channel_definition({**base, "itemid": "2",
+                                    "name": "Downstream channel ErrorRate"})
+        self.assertIsNotNone(error)
+        self.assertEqual((error["label"], error["channel"], error["metric"]),
+                         ("DS ErrorRate", None, "error_rate"))
+        link_error_rates([snr, error])
+        self.assertEqual(snr["error_rate_id"], "2")
+        displayed = display_modem_values([snr, error], [
+            {"id": "1", "label": "DS SNR", "value": "34", "units": "dB"},
+            {"id": "2", "label": "DS ErrorRate", "value": "2", "units": ""},
+        ])
+        self.assertEqual(len(displayed), 1)
+        self.assertEqual(displayed[0]["error_rate"], "2")
+
     def test_literal_discovery_macro_error_rate_pairs_with_generic_snr(self):
         base = {"type": "20", "status": "0", "value_type": "0"}
         snr = channel_definition({**base, "itemid": "278342",
