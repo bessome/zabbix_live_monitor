@@ -130,7 +130,7 @@
 
     docker compose -f compose.yaml -f compose.cert.yaml up -d --build
     docker compose -f compose.yaml -f compose.cert.yaml ps
-    curl -I https://monitor.stv.ee/healthz
+    curl -fsS https://monitor.stv.ee/healthz
 
 `star_stv_ee_fullchain.crt` должен содержать сертификат сайта и промежуточные сертификаты; отдельный `star_stv_ee.ca-bundle` тогда не нужен. Ключ `zabbix7_stv_ee.key` относится к другому запросу и не следует использовать вместо `star_stv_ee.key` без проверки соответствия. При обновлении сертификата замените файлы в `certs/` и пересоздайте прокси: `docker compose -f compose.yaml -f compose.cert.yaml up -d --force-recreate proxy`.
 
