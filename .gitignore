@@ -12,6 +12,8 @@ instance/
 *.db
 *.sqlite*
 caddy-root.crt
+certs/
+*.key
 .pytest_cache/
 .ruff_cache/
 dist/

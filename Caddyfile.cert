@@ -1,0 +1,5 @@
+{$APP_DOMAIN} {
+    tls /certs/fullchain.crt /certs/tls.key
+    encode zstd gzip
+    reverse_proxy app:8000
+}

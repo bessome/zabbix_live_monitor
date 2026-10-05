@@ -11,3 +11,5 @@ tests
 README.md
 compose*.yaml
 Caddyfile
+Caddyfile.cert
+certs

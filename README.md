@@ -112,3 +112,29 @@
     docker compose -f compose.yaml -f compose.https.yaml cp proxy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
 
 Проверить HTTPS без отключения проверки сертификата можно командой `curl --cacert ./caddy-root.crt https://<APP_DOMAIN>/healthz`. Хранилище `caddy_data` содержит закрытый ключ центра сертификации: не публикуйте его и не удаляйте при обычном обновлении контейнера. Один процесс Uvicorn нужен для общего кэша и общего пинга устройств; не увеличивайте число workers без вынесения этих состояний в отдельный сервис. Проверка `/healthz` доступна Docker healthcheck. Для диагностики ICMP внутри контейнера: `docker compose exec app ping -c 1 -s 128 <адрес_устройства>`.
+
+### HTTPS с собственным wildcard-сертификатом
+
+`compose.cert.yaml` использует `Caddyfile.cert` и два файла из каталога `certs/` в корне проекта. Каталог `certs/` исключён из Git и Docker build context; сертификат и закрытый ключ монтируются в контейнер Caddy только для чтения. Используйте этот Compose-файл вместо `compose.https.yaml`, если уже есть доверенный сертификат. `APP_DOMAIN` в `.env` должен быть DNS-именем, на которое выдан сертификат (например, `monitor.stv.ee` для `*.stv.ee`), и указывать на сервер с контейнерами. Wildcard `*.stv.ee` не подходит для доступа по IP, `stv.ee` или имени вида `a.b.stv.ee`. Проверьте реальные имена и срок действия сертификата:
+
+    openssl x509 -in /root/star_stv_ee_fullchain.crt -noout -subject -ext subjectAltName -dates
+
+На хосте с контейнерами, в каталоге проекта, создайте закрытый каталог и скопируйте файлы **на этот хост** (если исходные файлы на другом сервере, сначала передайте их по защищённому соединению):
+
+    cd ~/zabbix_live_monitor
+    install -d -m 700 certs
+    install -m 644 /root/star_stv_ee_fullchain.crt certs/star_stv_ee_fullchain.crt
+    install -m 600 /root/star_stv_ee.key certs/star_stv_ee.key
+
+В `.env` задайте `APP_DOMAIN=monitor.stv.ee` (замените на своё имя), затем запустите:
+
+    docker compose -f compose.yaml -f compose.cert.yaml up -d --build
+    docker compose -f compose.yaml -f compose.cert.yaml ps
+    curl -I https://monitor.stv.ee/healthz
+
+`star_stv_ee_fullchain.crt` должен содержать сертификат сайта и промежуточные сертификаты; отдельный `star_stv_ee.ca-bundle` тогда не нужен. Ключ `zabbix7_stv_ee.key` относится к другому запросу и не следует использовать вместо `star_stv_ee.key` без проверки соответствия. При обновлении сертификата замените файлы в `certs/` и пересоздайте прокси: `docker compose -f compose.yaml -f compose.cert.yaml up -d --force-recreate proxy`.
+
+Если Caddy сообщает, что ключ не соответствует сертификату, сравните отпечатки открытых ключей (обе команды должны вывести одинаковый SHA-256):
+
+    openssl x509 -in certs/star_stv_ee_fullchain.crt -pubkey -noout | openssl pkey -pubin -outform DER | sha256sum
+    openssl pkey -in certs/star_stv_ee.key -pubout -outform DER | sha256sum

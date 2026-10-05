@@ -1,0 +1,20 @@
+services:
+  app:
+    environment:
+      APP_HTTPS: "1"
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN to a hostname covered by the certificate}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.cert:/etc/caddy/Caddyfile:ro
+      - ./certs/star_stv_ee_fullchain.crt:/certs/fullchain.crt:ro
+      - ./certs/star_stv_ee.key:/certs/tls.key:ro
+    depends_on:
+      app:
+        condition: service_healthy
