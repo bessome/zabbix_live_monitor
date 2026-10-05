@@ -9,12 +9,14 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Текущий пароль <input type="password" name="current_password" required autocomplete="current-password"></label>
 <label>Новый пароль <input type="password" name="new_password" required minlength="9" autocomplete="new-password"></label>
+<label>Повторите новый пароль <input type="password" name="new_password_confirm" required minlength="9" autocomplete="new-password"></label>
 <button type="submit">Изменить пароль</button></form></section>
 <section class="panel"><h2>Добавить пользователя</h2><form method="post" action="/settings/users">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Имя <input name="username" required maxlength="80"></label>
 <label>Email <input name="email" type="email" required maxlength="254" autocomplete="off"></label>
 <label>Пароль <input name="password" type="password" required minlength="9" autocomplete="new-password"></label>
+<label>Повторите пароль <input name="password_confirm" type="password" required minlength="9" autocomplete="new-password"></label>
 <label>Права <select name="role"><option value="read">Read</option><option value="execute">Read + execute</option></select></label>
 <button type="submit">Создать</button></form></section>
 <section class="panel"><h2>Учётные записи</h2><div class="table-wrap"><table class="users-table">
@@ -32,5 +34,6 @@
 {% else %}<option value="1">Активен</option><option value="0" selected>Отключён</option>{% endif %}
 </select>
 <input type="password" name="password" minlength="9" autocomplete="new-password" aria-label="Новый пароль пользователя {{ user.username }}" placeholder="Новый пароль (необязательно)">
+<input type="password" name="password_confirm" minlength="9" autocomplete="new-password" aria-label="Повторите новый пароль пользователя {{ user.username }}" placeholder="Повторите новый пароль">
 <button type="submit">Сохранить</button></form>{% else %}Главный администратор{% endif %}</td></tr>{% endfor %}
 </tbody></table></div></section>{% endblock %}

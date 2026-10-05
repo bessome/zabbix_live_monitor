@@ -215,10 +215,13 @@ async def create_user(request: Request):
     username = str(form.get("username", "")).strip()
     email = normalized_email(form.get("email", ""))
     password = str(form.get("password", ""))
+    password_confirm = str(form.get("password_confirm", ""))
     role = str(form.get("role", ""))
     if (not username or len(username) > 80 or email is None
             or len(password) < 9 or role not in ("read", "execute")):
         add_message(request, "Укажите имя, email, роль и пароль длиной от 9 символов.", "error")
+    elif password != password_confirm:
+        add_message(request, "Пароли не совпадают.", "error")
     else:
         try:
             with closing(connect()) as con:
@@ -256,8 +259,12 @@ async def update_user(request: Request, user_id: int):
             add_message(request, "Имя или email уже используется.", "error")
             return RedirectResponse("/settings/users", status_code=303)
         password = str(form.get("password", ""))
+        password_confirm = str(form.get("password_confirm", ""))
         if password and len(password) < 9:
             add_message(request, "Новый пароль должен содержать не менее 9 символов.", "error")
+            return RedirectResponse("/settings/users", status_code=303)
+        if password != password_confirm:
+            add_message(request, "Пароли не совпадают.", "error")
             return RedirectResponse("/settings/users", status_code=303)
         active = int(form.get("active") == "1")
         try:
@@ -302,8 +309,12 @@ async def change_admin_password(request: Request):
     form = await checked_form(request)
     current = str(form.get("current_password", ""))
     new = str(form.get("new_password", ""))
+    new_confirm = str(form.get("new_password_confirm", ""))
     if len(new) < 9:
         add_message(request, "Новый пароль должен содержать не менее 9 символов.", "error")
+        return RedirectResponse("/settings/users", status_code=303)
+    if new != new_confirm:
+        add_message(request, "Пароли не совпадают.", "error")
         return RedirectResponse("/settings/users", status_code=303)
     with closing(connect()) as con:
         row = con.execute("SELECT password_hash FROM users WHERE id=?", (admin["id"],)).fetchone()

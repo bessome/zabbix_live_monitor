@@ -11,3 +11,8 @@
 
 - `compose.yaml` runs the app, while `compose.https.yaml` selects Caddy's local certificate and `compose.cert.yaml` selects the supplied certificate. Use only one HTTPS overlay at a time.
 - Never commit `.env`, certificates, private keys, or files under `certs/`. Keep certificate mounts read-only and check ignored paths before committing deployment changes.
+
+## Password forms
+
+- Every new password entered in the web UI needs a confirmation field and a server-side equality check before any database mutation. This includes user creation, Admin changes to another user's password, Admin's own password, and self-service changes in `/profile`.
+- Changing a user's other settings must still work when both optional password fields are empty. Require the current password for self-service password changes and keep the minimum length at 9 characters.

@@ -24,4 +24,12 @@
 </fieldset>
 <button type="submit">Сохранить</button>
 </form>
+<form method="post" action="/profile/password" class="panel profile-panel">
+<h2>Сменить пароль</h2>
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Текущий пароль <input type="password" name="current_password" required autocomplete="current-password"></label>
+<label>Новый пароль <input type="password" name="new_password" required minlength="9" autocomplete="new-password"></label>
+<label>Повторите новый пароль <input type="password" name="new_password_confirm" required minlength="9" autocomplete="new-password"></label>
+<button type="submit">Изменить пароль</button>
+</form>
 {% endblock %}

@@ -293,8 +293,9 @@ class AppTests(unittest.TestCase):
         self.assertIn('href="/settings/users"', admin_page)
         csrf = self.token("/settings/users")
         self.client.post("/settings/users", data={"csrf_token": csrf, "username": "Reader",
-                         "email": "reader@example.test",
-                         "password": "reader-password-123", "role": "read"})
+                          "email": "reader@example.test",
+                          "password": "reader-password-123",
+                          "password_confirm": "reader-password-123", "role": "read"})
         self.client.post("/logout", data={"csrf_token": self.token("/settings/users")})
         self.login("Reader", "reader-password-123")
         reader_page = self.client.get("/profile").text
@@ -709,6 +710,7 @@ class AppTests(unittest.TestCase):
         self.client.post("/settings/users", data={"csrf_token": csrf,
                          "username": "ThemeReader", "email": "theme@example.test",
                          "password": "theme-reader-password-123",
+                         "password_confirm": "theme-reader-password-123",
                          "role": "read"})
         self.client.post("/logout", data={"csrf_token": self.token("/profile")})
         self.login("ThemeReader", "theme-reader-password-123")
@@ -804,6 +806,79 @@ class AppTests(unittest.TestCase):
         self.login()
         self.assertEqual(self.client.post("/settings/users", data={"username": "x"}).status_code, 400)
 
+    def test_password_confirmation_is_required_for_admin_user_management(self):
+        self.login()
+        token = self.token("/settings/users")
+        base = {"csrf_token": token, "username": "ConfirmReader",
+                "email": "confirm@example.test", "role": "read"}
+        response = self.client.post("/settings/users", data={
+            **base, "password": "first-pass-123", "password_confirm": "different-pass-123"})
+        self.assertIn("Пароли не совпадают", response.text)
+        with closing(self.storage.connect()) as con:
+            self.assertIsNone(con.execute(
+                "SELECT id FROM users WHERE username='ConfirmReader'").fetchone())
+        response = self.client.post("/settings/users", data={
+            **base, "password": "first-pass-123", "password_confirm": "first-pass-123"})
+        self.assertIn("Пользователь создан", response.text)
+        with closing(self.storage.connect()) as con:
+            reader = con.execute(
+                "SELECT id,password_hash FROM users WHERE username='ConfirmReader'").fetchone()
+            reader_id, old_hash = reader["id"], reader["password_hash"]
+        response = self.client.post(f"/settings/users/{reader_id}", data={
+            "csrf_token": token, "email": "changed@example.test", "role": "execute",
+            "active": "1", "password": "second-pass-123",
+            "password_confirm": "different-pass-123"})
+        self.assertIn("Пароли не совпадают", response.text)
+        with closing(self.storage.connect()) as con:
+            reader = con.execute(
+                "SELECT email,role,password_hash FROM users WHERE id=?", (reader_id,)).fetchone()
+        self.assertEqual((reader["email"], reader["role"], reader["password_hash"]),
+                         ("confirm@example.test", "read", old_hash))
+        response = self.client.post(f"/settings/users/{reader_id}", data={
+            "csrf_token": token, "email": "changed@example.test", "role": "execute",
+            "active": "1", "password": "", "password_confirm": ""})
+        self.assertIn("Пользователь обновлён", response.text)
+        response = self.client.post("/settings/admin-password", data={
+            "csrf_token": token, "current_password": "test-admin-password",
+            "new_password": "new-admin-pass-123", "new_password_confirm": "different-pass-123"})
+        self.assertIn("Пароли не совпадают", response.text)
+        with closing(self.storage.connect()) as con:
+            admin_hash = con.execute(
+                "SELECT password_hash FROM users WHERE username='Admin'").fetchone()[0]
+        self.assertTrue(self.storage.check_password("test-admin-password", admin_hash))
+
+    def test_reader_can_change_own_password_with_confirmation(self):
+        self.login()
+        token = self.token("/settings/users")
+        self.client.post("/settings/users", data={
+            "csrf_token": token, "username": "SelfServiceReader",
+            "email": "self-service@example.test", "role": "read",
+            "password": "initial-pass-123", "password_confirm": "initial-pass-123"})
+        self.client.post("/logout", data={"csrf_token": token})
+        self.login("SelfServiceReader", "initial-pass-123")
+        token = self.token("/profile")
+        profile = self.client.get("/profile").text
+        self.assertIn('name="new_password_confirm"', profile)
+        response = self.client.post("/profile/password", data={
+            "csrf_token": token, "current_password": "initial-pass-123",
+            "new_password": "new-reader-pass-123", "new_password_confirm": "different-pass-123"})
+        self.assertIn("Пароли не совпадают", response.text)
+        response = self.client.post("/profile/password", data={
+            "csrf_token": token, "current_password": "wrong-password",
+            "new_password": "new-reader-pass-123", "new_password_confirm": "new-reader-pass-123"})
+        self.assertIn("Текущий пароль неверен", response.text)
+        response = self.client.post("/profile/password", data={
+            "csrf_token": token, "current_password": "initial-pass-123",
+            "new_password": "short", "new_password_confirm": "short"})
+        self.assertIn("не менее 9 символов", response.text)
+        response = self.client.post("/profile/password", data={
+            "csrf_token": token, "current_password": "initial-pass-123",
+            "new_password": "new-reader-pass-123", "new_password_confirm": "new-reader-pass-123"})
+        self.assertIn("Пароль изменён", response.text)
+        self.client.post("/logout", data={"csrf_token": token})
+        self.assertEqual(self.login("SelfServiceReader", "initial-pass-123").url.path, "/login")
+        self.assertEqual(self.login("SelfServiceReader", "new-reader-pass-123").url.path, "/")
+
     def test_email_login_and_nine_character_password(self):
         self.login()
         token = self.token("/settings/users")
@@ -814,25 +889,27 @@ class AppTests(unittest.TestCase):
         base = {"csrf_token": token, "username": "EmailReader",
                 "email": "Reader.Login@Example.test", "role": "read"}
         response = self.client.post("/settings/users", data={
-            **base, "password": "12345678"})
+            **base, "password": "12345678", "password_confirm": "12345678"})
         self.assertIn("от 9 символов", response.text)
         response = self.client.post("/settings/users", data={
-            **base, "password": "123456789"})
+            **base, "password": "123456789", "password_confirm": "123456789"})
         self.assertIn("Пользователь создан", response.text)
         with closing(self.storage.connect()) as con:
             user = con.execute("SELECT id,email FROM users WHERE username='EmailReader'").fetchone()
         self.assertEqual(user["email"], "reader.login@example.test")
         response = self.client.post("/settings/users", data={
             **base, "username": "AnotherReader", "email": "READER.LOGIN@example.test",
-            "password": "123456789"})
+            "password": "123456789", "password_confirm": "123456789"})
         self.assertIn("Имя или email уже используется", response.text)
         response = self.client.post("/settings/users", data={
             **base, "username": "admin.login@example.test",
-            "email": "another@example.test", "password": "123456789"})
+            "email": "another@example.test", "password": "123456789",
+            "password_confirm": "123456789"})
         self.assertIn("Имя или email уже используется", response.text)
         response = self.client.post(f"/settings/users/{user['id']}", data={
             "csrf_token": token, "email": "new.reader@example.test",
-            "role": "read", "active": "1", "password": "shortpass"})
+            "role": "read", "active": "1", "password": "shortpass",
+            "password_confirm": "shortpass"})
         self.assertIn("Пользователь обновлён", response.text)
         self.client.post("/logout", data={"csrf_token": token})
         response = self.login("NEW.READER@EXAMPLE.TEST", "shortpass")
@@ -846,17 +923,18 @@ class AppTests(unittest.TestCase):
         csrf = self.token("/settings/users")
         response = self.client.post("/settings/admin-password", data={
             "csrf_token": csrf, "current_password": "test-admin-password",
-            "new_password": "12345678"})
+            "new_password": "12345678", "new_password_confirm": "12345678"})
         self.assertIn("не менее 9 символов", response.text)
         response = self.client.post("/settings/admin-password", data={
             "csrf_token": csrf, "current_password": "test-admin-password",
-            "new_password": "shortpass"})
+            "new_password": "shortpass", "new_password_confirm": "shortpass"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("Пароль Admin изменён", response.text)
         csrf = self.token("/settings/users")
         self.client.post("/settings/admin-password", data={
             "csrf_token": csrf, "current_password": "shortpass",
-            "new_password": "test-admin-password"})
+            "new_password": "test-admin-password",
+            "new_password_confirm": "test-admin-password"})
 
 
 if __name__ == "__main__":
