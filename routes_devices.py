@@ -14,7 +14,8 @@ from app_storage import (favorite_devices_for, favorite_ids_for,
 from app_web import checked_form, render, require_user
 from cable_test import CableTestBusy, run_cable_test
 from ping_monitor import snapshot_for
-from snmp_monitor import display_modem_values, snapshot_for as snmp_snapshot_for
+from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_for,
+                          uptime_for)
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
                             snapshot_for as switch_snapshot_for)
 from zabbix_service import (category_filter, device_descriptions, host_rows,
@@ -224,6 +225,25 @@ async def device_ping(request: Request, category: str, host_id: str):
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/uptime")
+async def device_uptime(request: Request, category: str, host_id: str):
+    require_user(request, api=True)
+    category_filter(category)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    device = next((row for row in rows if row["id"] == host_id), None)
+    if device is None:
+        raise HTTPException(404)
+    try:
+        seconds = await uptime_for(host_id, device["snmp_address"],
+                                   device["snmp_port"], snmp_community_for(category))
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse({"seconds": seconds}, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/devices/{category}/{host_id}/modem-channels")

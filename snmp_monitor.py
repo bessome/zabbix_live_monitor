@@ -18,7 +18,9 @@ from ping_monitor import validate_target
 POLL_SECONDS = 5
 ERROR_RATE_SECONDS = 10
 CACHE_SECONDS = 4.5
+UPTIME_CACHE_SECONDS = 9.5
 MAX_ENTRIES = 80
+UPTIME_OID = "1.3.6.1.2.1.1.3.0"
 _oid_pattern = re.compile(r"^\.?\d+(?:\.\d+)+$")
 _us_pattern = re.compile(r"^Upstream channel\s+(US\d*)\s+Level$", re.I)
 _ds_pattern = re.compile(
@@ -29,6 +31,7 @@ _error_pattern = re.compile(
     r"^Downstream channel(?:\s+(\d+|\{#SNMPINDEX\})(?:\s+(\S+MHz))?)?\s+ErrorRate$", re.I,
 )
 _entries = {}
+_uptime_entries = {}
 _entries_lock = threading.Lock()
 
 
@@ -220,6 +223,46 @@ class _Entry:
         self.error_updated = 0.0
         self.data = None
         self.previous_rate = {}
+
+
+class _UptimeEntry:
+    def __init__(self):
+        self.lock = asyncio.Lock()
+        self.last_seen = time.monotonic()
+        self.updated = 0.0
+        self.seconds = None
+
+
+async def uptime_for(host_id, address, port, community):
+    """Read sysUpTime.0 and share one SNMP poll for ten seconds."""
+    credential_id = hashlib.sha256(community.encode()).digest()
+    key = (str(host_id), address, str(port), credential_id)
+    with _entries_lock:
+        now = time.monotonic()
+        for old_key, old_entry in list(_uptime_entries.items()):
+            if now - old_entry.last_seen > 60:
+                del _uptime_entries[old_key]
+        entry = _uptime_entries.get(key)
+        if entry is None:
+            if len(_uptime_entries) >= MAX_ENTRIES:
+                raise RuntimeError("Слишком много активных SNMP-опросов.")
+            entry = _UptimeEntry()
+            _uptime_entries[key] = entry
+        entry.last_seen = now
+    async with entry.lock:
+        if entry.updated and time.monotonic() - entry.updated < UPTIME_CACHE_SECONDS:
+            return entry.seconds
+        definition = {"id": "sysUpTime", "label": "Uptime", "oid": UPTIME_OID,
+                      "multiplier": "1", "units": ""}
+        try:
+            values = await poll_values(address, port, community, [definition])
+            ticks = int(values[0]["value"])
+            seconds = ticks // 100 if ticks >= 0 else None
+        except (RuntimeError, ValueError, TypeError, IndexError, KeyError):
+            seconds = None
+        entry.seconds = seconds
+        entry.updated = time.monotonic()
+        return seconds
 
 
 async def snapshot_for(host_id, address, port, community, definitions):

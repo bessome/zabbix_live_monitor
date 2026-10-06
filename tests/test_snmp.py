@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pysnmp.proto.rfc1902 import Integer
 
 from snmp_monitor import (channel_definition, display_modem_values,
-                          link_error_rates, optical_definition, poll_values,
-                          snapshot_for)
+                           link_error_rates, optical_definition, poll_values,
+                           snapshot_for, uptime_for)
 
 
 class SnmpTests(unittest.TestCase):
@@ -206,6 +206,22 @@ class SnmpTests(unittest.TestCase):
             first, second = asyncio.run(run())
         self.assertEqual(first, second)
         self.assertEqual(poll.await_count, 1)
+
+    def test_uptime_converts_timeticks_and_shares_ten_second_poll(self):
+        with patch("snmp_monitor.poll_values", new_callable=AsyncMock,
+                   return_value=[{"value": "9006100"}]) as poll:
+            async def sample():
+                first = await uptime_for("uptime-test", "192.0.2.5", 161, "public")
+                second = await uptime_for("uptime-test", "192.0.2.5", 161, "public")
+                return first, second
+            self.assertEqual(asyncio.run(sample()), (90061, 90061))
+            self.assertEqual(poll.await_count, 1)
+            self.assertEqual(poll.await_args.args[:3], ("192.0.2.5", 161, "public"))
+            self.assertEqual(poll.await_args.args[3][0]["oid"], "1.3.6.1.2.1.1.3.0")
+        with patch("snmp_monitor.poll_values", new_callable=AsyncMock,
+                   side_effect=RuntimeError("SNMP timeout")):
+            self.assertIsNone(asyncio.run(uptime_for(
+                "uptime-timeout", "192.0.2.6", 161, "public")))
 
 
 if __name__ == "__main__":

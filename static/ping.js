@@ -9,17 +9,31 @@
     avg: document.getElementById("ping-avg"),
     max: document.getElementById("ping-max"),
     loss: document.getElementById("ping-loss"),
+    uptime: document.getElementById("ping-uptime"),
     state: document.getElementById("ping-state"),
     message: document.getElementById("ping-message")
   };
   const currentUnit = root.querySelector(".ping-unit");
   const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
     + "/" + encodeURIComponent(root.dataset.hostId) + "/ping";
+  const uptimeUrl = url.replace(/\/ping$/, "/uptime");
   let latest = null;
   let inFlight = false;
+  let uptimeInFlight = false;
 
   function millis(value) {
     return value == null ? "—" : Number(value).toFixed(value < 10 ? 1 : 0);
+  }
+
+  function formatUptime(seconds) {
+    if (!Number.isInteger(seconds) || seconds < 0) return "n/a";
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor(seconds % 86400 / 3600);
+    const minutes = Math.floor(seconds % 3600 / 60);
+    if (days) return days + "d " + hours + "h";
+    if (hours) return hours + "h " + minutes + "m";
+    if (minutes) return minutes + "m";
+    return seconds + "s";
   }
 
   function draw(data) {
@@ -161,8 +175,34 @@
     }
   }
 
+  async function refreshUptime() {
+    if (uptimeInFlight) return;
+    uptimeInFlight = true;
+    try {
+      const response = await fetch(uptimeUrl, {credentials: "same-origin", cache: "no-store"});
+      if (response.status === 401) {
+        location.href = "/login";
+        return;
+      }
+      if (!response.ok) throw new Error("SNMP недоступен");
+      const data = await response.json();
+      fields.uptime.textContent = formatUptime(data.seconds);
+    } catch (_) {
+      fields.uptime.textContent = "n/a";
+    } finally {
+      uptimeInFlight = false;
+    }
+  }
+
   window.addEventListener("resize", () => { if (latest) draw(latest); });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      refresh();
+      refreshUptime();
+    }
+  });
   refresh();
   setInterval(refresh, 1000);
+  refreshUptime();
+  setInterval(refreshUptime, 10000);
 })();

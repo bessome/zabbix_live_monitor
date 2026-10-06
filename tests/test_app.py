@@ -393,6 +393,28 @@ class AppTests(unittest.TestCase):
             self.assertEqual(ping.call_args.args, ("42", "192.0.2.42"))
             self.assertEqual(self.client.get("/api/devices/VOIP/999/ping").status_code, 404)
 
+    def test_device_uptime_reads_snmp_interface_with_category_community(self):
+        path = "/api/devices/VOIP/42/uptime"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.login()
+        device = {"id": "42", "name": "Phone", "address": "192.0.2.42",
+                  "snmp_address": "192.0.2.43", "snmp_port": "161"}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.snmp_community_for", return_value="phone-ro"),
+              patch("routes_devices.uptime_for", new_callable=AsyncMock,
+                    return_value=86461) as uptime,
+              patch("routes_devices.device_descriptions", return_value={})):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"seconds": 86461})
+            self.assertEqual(uptime.await_args.args,
+                             ("42", "192.0.2.43", "161", "phone-ro"))
+            self.assertEqual(self.client.get(path.replace("/42/", "/99/")).status_code, 404)
+            page = self.client.get("/devices/VOIP/42")
+            self.assertIn('id="ping-uptime"', page.text)
+            self.assertIn('>RTT</span>', page.text)
+            self.assertIn('>Loss</span>', page.text)
+
     def test_device_description_missing_or_without_value(self):
         with patch("zabbix_service.zabbix_call", return_value=[
             {"hostid": "1", "lastclock": "0", "lastvalue": "stale"},
