@@ -79,6 +79,7 @@
 .modem-overview-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:9px}
 .modem-overview-legend-item{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:6px;min-width:0;font-size:12px}
 .modem-overview-legend-item i{display:block;width:10px;height:10px;border-radius:50%}
+.modem-overview-legend-item i.loss-swatch{border-radius:2px}
 .modem-overview-legend-item span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .modem-overview-legend-item strong{font-variant-numeric:tabular-nums;white-space:nowrap}
 .modem-history-chart{width:100%;border:1px solid #dce6ef;border-radius:6px}
