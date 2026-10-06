@@ -42,6 +42,7 @@
 .modem-restarts:hover{background:#eaf3fa}
 .modem-restarts:focus-visible{outline:2px solid #176cad;outline-offset:2px}
 .modem-restarts strong{font-variant-numeric:tabular-nums}
+.modem-overview-button{min-height:34px;margin-bottom:8px;padding:6px 11px;font-size:13px;font-weight:700}
 .modem-error-rate{font-size:.85em;font-weight:600;white-space:nowrap}
 .modem-number{display:inline-block;border-radius:3px}
 .modem-number.modem-value-changed{animation:modem-value-pulse .8s ease-in-out infinite alternate}
@@ -72,6 +73,14 @@
 .modem-history-periods button{min-width:48px;padding:6px 10px;background:#e7edf3;color:#435a70;font-size:13px;font-weight:700}
 .modem-history-periods button[aria-pressed="true"]{background:#176cad;color:#fff}
 #modem-history-status{min-height:20px;margin:0 0 5px;color:#607185;font-size:13px}
+.modem-overview-dialog{width:min(900px,calc(100% - 24px))}
+#modem-overview-status{min-height:20px;margin:0 0 7px;color:#607185;font-size:12px}
+.modem-history-chart.modem-overview-chart canvas{height:300px}
+.modem-overview-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:9px}
+.modem-overview-legend-item{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:6px;min-width:0;font-size:12px}
+.modem-overview-legend-item i{display:block;width:10px;height:10px;border-radius:50%}
+.modem-overview-legend-item span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modem-overview-legend-item strong{font-variant-numeric:tabular-nums;white-space:nowrap}
 .modem-history-chart{width:100%;border:1px solid #dce6ef;border-radius:6px}
 .modem-history-chart canvas{display:block;width:100%;height:260px}
 .modem-history-stats{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:9px;font-size:12px;font-variant-numeric:tabular-nums}
@@ -94,6 +103,11 @@
   .modem-row>span{display:block;font-size:12px;line-height:1.25}
   .modem-row strong{display:block;font-size:14px;line-height:1.3}
   .modem-history-dialog{padding:12px}
+  .modem-overview-legend{grid-template-columns:1fr;gap:5px}
+  .modem-history-chart.modem-overview-chart canvas{height:220px}
+  .modem-overview-dialog{padding:12px}
+  #modem-overview-periods{display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+  #modem-overview-periods button{min-width:0}
   .modem-history-periods{display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
   .modem-history-periods button{min-width:0}
   .modem-history-chart canvas{height:220px}

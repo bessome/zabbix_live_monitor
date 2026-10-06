@@ -19,10 +19,10 @@ from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_fo
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
                             snapshot_for as switch_snapshot_for)
 from zabbix_service import (category_filter, device_descriptions, host_rows,
-                            modem_channel_definitions, modem_restarts_count_24h,
-                            modem_restarts_item, normalize_device_search,
-                            optical_power_definitions, ping_loss_definition,
-                            zabbix_call)
+                             modem_channel_definitions, modem_overview_definitions,
+                             modem_restarts_count_24h, modem_restarts_item,
+                             normalize_device_search, optical_power_definitions,
+                             ping_loss_definition, zabbix_call)
 
 router = APIRouter()
 HISTORY_PERIODS = {"1h": 3600, "12h": 43200, "24h": 86400,
@@ -404,6 +404,46 @@ async def modem_channel_history(request: Request, category: str, host_id: str,
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/modem-overview/history")
+async def modem_overview_history(request: Request, category: str, host_id: str,
+                                 period: str = "1h"):
+    require_user(request, api=True)
+    if category != "Modems":
+        raise HTTPException(404)
+    if period not in HISTORY_PERIODS:
+        raise HTTPException(422, "Неверный период графика.")
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        if not any(row["id"] == host_id for row in rows):
+            raise HTTPException(404)
+        definitions, loss_item = await asyncio.gather(
+            asyncio.to_thread(modem_channel_definitions, host_id),
+            asyncio.to_thread(ping_loss_definition, host_id))
+        mode, selected, missing = modem_overview_definitions(definitions, loss_item)
+        now = int(time.time())
+        histories = await asyncio.gather(
+            *(numeric_history(entry["item"], period, now) for entry in selected),
+            return_exceptions=True)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    series = []
+    for entry, history in zip(selected, histories):
+        if isinstance(history, Exception):
+            missing.append(entry["label"])
+            continue
+        series.append({"key": entry["key"], "label": entry["label"],
+                       "units": ("ош/с" if entry["key"] == "error_rate"
+                                 else entry["item"].get("units") or ""),
+                       "points": history["points"],
+                       "aggregation": history.get("aggregation")})
+    if selected and not series:
+        return JSONResponse({"error": "История Zabbix недоступна."}, status_code=503)
+    return JSONResponse({"mode": mode, "period": period,
+                         "from": now - HISTORY_PERIODS[period], "to": now,
+                         "series": series, "missing": missing},
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/devices/{category}/{host_id}/modem-restarts/{item_id}/history")

@@ -42,10 +42,24 @@
 </section>
 {% if category == 'Modems' %}
 <section class="panel modem-panel" id="modem-monitor" aria-label="Показатели каналов модема" data-category="{{ category }}" data-host-id="{{ device.id }}">
+<button type="button" id="modem-overview-open" class="modem-overview-button">Общий график</button>
 <p id="modem-state" class="modem-state" aria-live="polite">Загрузка каналов…</p>
 <div id="modem-channels" class="modem-channels"></div>
 <button type="button" id="modem-restarts" class="modem-restarts" hidden title="Открыть историю рестартов Zabbix"><span>Рестарты/ч</span><strong id="modem-restarts-value" class="modem-number">—</strong></button>
 </section>
+<dialog id="modem-overview-dialog" class="modem-history-dialog modem-overview-dialog" aria-labelledby="modem-overview-title">
+<div class="modem-history-heading"><h2 id="modem-overview-title">Общий график модема</h2><button type="button" id="modem-overview-close" aria-label="Закрыть график">×</button></div>
+<div id="modem-overview-periods" class="modem-history-periods" role="group" aria-label="Период общего графика">
+<button type="button" data-period="1h" aria-pressed="true">1h</button>
+<button type="button" data-period="12h" aria-pressed="false">12h</button>
+<button type="button" data-period="24h" aria-pressed="false">24h</button>
+<button type="button" data-period="2d" aria-pressed="false">2d</button>
+<button type="button" data-period="14d" aria-pressed="false">14d</button>
+</div>
+<p id="modem-overview-status" role="status">Загрузка…</p>
+<div class="modem-history-chart modem-overview-chart"><canvas id="modem-overview-canvas" role="img" aria-label="Общий график модема за 1h"></canvas></div>
+<div id="modem-overview-legend" class="modem-overview-legend"></div>
+</dialog>
 {% endif %}
 <dialog id="modem-history-dialog" class="modem-history-dialog" aria-labelledby="modem-history-title">
 <div class="modem-history-heading"><h2 id="modem-history-title">История канала</h2><button type="button" id="modem-history-close" aria-label="Закрыть график">×</button></div>
@@ -69,6 +83,7 @@
 </dl></section>
 <script src="{{ url_for('static', path='/ping.js').path }}?v={{ asset_version }}" defer></script>
 {% if category == 'Modems' %}<script src="{{ url_for('static', path='/modem.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
+{% if category == 'Modems' %}<script src="{{ url_for('static', path='/modem-overview.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'TV_Amplifires' %}<script src="{{ url_for('static', path='/optical.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'Switches' %}<script src="{{ url_for('static', path='/switch.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 <script src="{{ url_for('static', path='/metric-history.js').path }}?v={{ asset_version }}" defer></script>

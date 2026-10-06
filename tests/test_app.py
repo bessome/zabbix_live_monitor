@@ -609,6 +609,92 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.client.get(path.replace("/7/", "/8/")).status_code, 404)
             self.assertEqual(self.client.get(path.replace("/Modems/", "/VOIP/")).status_code, 404)
 
+    def test_modem_overview_selects_ds3_or_generic_channel_items(self):
+        def item(item_id, label, metric, channel, frequency="", error_rate_id=None):
+            return {"id": item_id, "label": label, "metric": metric,
+                    "channel": channel, "frequency": frequency,
+                    "error_rate_id": error_rate_id, "units": "dB",
+                    "value_type": "0"}
+        loss = item("9", "Потери", "loss", None)
+        multi = [
+            item("1", "US1 Level", "level", 1),
+            item("2", "US2 Level", "level", 2),
+            item("3", "DS2 435MHz SNR", "snr", 2, "435mhz"),
+            item("4", "DS3 447MHz Level", "level", 3, "447mhz"),
+            item("5", "DS3 447MHz SNR", "snr", 3, "447mhz", "6"),
+            item("6", "DS3 ErrorRate", "error_rate", 3),
+        ]
+        mode, selected, missing = self.zabbix.modem_overview_definitions(multi, loss)
+        self.assertEqual(mode, "multi")
+        self.assertEqual([(row["label"], row["item"]["id"]) for row in selected], [
+            ("US1 Level", "1"), ("DS3 Level", "4"), ("DS3 SNR", "5"),
+            ("DS3 ErrorRate", "6"), ("Loss", "9")])
+        self.assertEqual(missing, [])
+        generic = [item("11", "US Level", "level", 0),
+                   item("12", "DS Level", "level", None),
+                   item("13", "DS SNR", "snr", None, error_rate_id="14"),
+                   item("14", "DS ErrorRate", "error_rate", None)]
+        mode, selected, missing = self.zabbix.modem_overview_definitions(generic, loss)
+        self.assertEqual(mode, "single")
+        self.assertEqual([(row["label"], row["item"]["id"]) for row in selected], [
+            ("US Level", "11"), ("DS Level", "12"), ("DS SNR", "13"),
+            ("ErrorRate", "14"), ("Loss", "9")])
+        self.assertEqual(missing, [])
+        mode, selected, missing = self.zabbix.modem_overview_definitions(multi[:3], loss)
+        self.assertEqual(mode, "multi")
+        self.assertEqual(missing, ["DS3 Level", "DS3 SNR", "DS3 ErrorRate"])
+
+    def test_modem_overview_history_reads_five_zabbix_items(self):
+        path = "/api/devices/Modems/42/modem-overview/history"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.login()
+        definitions = [
+            {"id": "1", "label": "US Level", "metric": "level", "channel": 0,
+             "frequency": "", "units": "dBmV", "value_type": "0"},
+            {"id": "2", "label": "DS Level", "metric": "level", "channel": None,
+             "frequency": "", "units": "dBmV", "value_type": "0"},
+            {"id": "3", "label": "DS SNR", "metric": "snr", "channel": None,
+             "frequency": "", "units": "dB", "value_type": "0", "error_rate_id": "4"},
+            {"id": "4", "label": "DS ErrorRate", "metric": "error_rate",
+             "channel": None, "frequency": "", "units": "", "value_type": "3"},
+        ]
+        loss = {"id": "5", "label": "Потери", "units": "%", "value_type": "0"}
+        def history_api(method, params):
+            item_id = params["itemids"][0]
+            field = "value_avg" if method == "trend.get" else "value"
+            return [{"clock": "1799990000", field: item_id}]
+        with (patch("routes_devices.host_rows", return_value=[{"id": "42"}]),
+              patch("routes_devices.modem_channel_definitions", return_value=definitions),
+              patch("routes_devices.ping_loss_definition", return_value=loss),
+              patch("routes_devices.zabbix_call", side_effect=history_api) as api):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["mode"], "single")
+            self.assertEqual([row["key"] for row in response.json()["series"]],
+                             ["us", "ds_level", "ds_snr", "error_rate", "loss"])
+            self.assertEqual([row["points"][0]["value"] for row in response.json()["series"]],
+                             [1, 2, 3, 4, 5])
+            self.assertEqual({call.args[0] for call in api.call_args_list}, {"history.get"})
+            ranged = self.client.get(path, params={"period": "14d"})
+            self.assertEqual(ranged.status_code, 200)
+            self.assertEqual(ranged.json()["to"] - ranged.json()["from"], 1209600)
+            self.assertTrue(all(row["aggregation"] == "hourly_average"
+                                for row in ranged.json()["series"]))
+            self.assertEqual({call.args[0] for call in api.call_args_list},
+                             {"history.get", "trend.get"})
+            self.assertEqual(self.client.get(path, params={"period": "7d"}).status_code, 422)
+            self.assertEqual(self.client.get(path.replace("/42/", "/99/")).status_code, 404)
+            self.assertEqual(self.client.get(path.replace("/Modems/", "/VOIP/")).status_code, 404)
+            with patch("routes_devices.device_descriptions", return_value={}):
+                # A real device row is needed when the card records recent visits.
+                with patch("routes_devices.host_rows", return_value=[{
+                    "id": "42", "name": "Modem 42", "address": "192.0.2.42"}]):
+                    detail = self.client.get("/devices/Modems/42")
+            self.assertEqual(detail.status_code, 200)
+            self.assertIn('id="modem-overview-open"', detail.text)
+            self.assertIn('/static/modem-overview.js', detail.text)
+            self.assertEqual(self.client.get('/static/modem-overview.js').status_code, 200)
+
     def test_modem_restarts_use_latest_zabbix_item_and_guard_history(self):
         path = "/api/devices/Modems/42/modem-restarts"
         self.assertEqual(self.client.get(path).status_code, 401)

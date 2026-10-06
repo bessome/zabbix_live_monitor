@@ -94,7 +94,8 @@ html[data-theme="dark"] .modem-restarts{background:#24384a;border-color:#34495e}
 html[data-theme="dark"] .modem-restarts:hover{background:#2b465d}
 html[data-theme="dark"] .modem-history-dialog{background:#1a2938;color:#e6edf5;border-color:#40566a}
 html[data-theme="dark"] .modem-history-chart{border-color:#40566a}
-html[data-theme="dark"] #modem-history-status{color:#adbdcc}
+html[data-theme="dark"] #modem-history-status,
+html[data-theme="dark"] #modem-overview-status{color:#adbdcc}
 html[data-theme="dark"] .history-error-stat{color:#ffc04d}
 html[data-theme="dark"] .modem-history-periods button{background:#2b3e50;color:#d7e7f5}
 html[data-theme="dark"] .modem-history-periods button[aria-pressed="true"]{background:#2677b2;color:#fff}

@@ -136,6 +136,45 @@ def modem_channel_definitions(host_id):
     return definitions
 
 
+def modem_overview_definitions(definitions, loss_item):
+    """Pick the requested single-channel or US1/DS3 modem graph items."""
+    by_id = {item["id"]: item for item in definitions}
+    multi = any(item.get("channel") is not None
+                and item.get("label", "").startswith("DS")
+                and item.get("metric") in ("level", "snr")
+                for item in definitions)
+    if multi:
+        upstream = next((item for item in definitions
+                         if item.get("label") == "US1 Level"), None)
+        snr = next((item for item in definitions
+                    if item.get("channel") == 3 and item.get("metric") == "snr"), None)
+        levels = [item for item in definitions
+                  if item.get("channel") == 3 and item.get("metric") == "level"]
+        level = next((item for item in levels
+                      if snr and item.get("frequency") == snr.get("frequency")),
+                     levels[0] if levels else None)
+        names = ("US1 Level", "DS3 Level", "DS3 SNR", "DS3 ErrorRate")
+    else:
+        upstream = next((item for item in definitions
+                         if item.get("label") == "US Level"), None)
+        level = next((item for item in definitions
+                      if item.get("label") == "DS Level"), None)
+        snr = next((item for item in definitions
+                    if item.get("label") == "DS SNR"), None)
+        names = ("US Level", "DS Level", "DS SNR", "ErrorRate")
+    error = by_id.get(snr.get("error_rate_id")) if snr else None
+    selected = []
+    missing = []
+    for key, label, item in zip(("us", "ds_level", "ds_snr", "error_rate", "loss"),
+                                (*names, "Loss"),
+                                (upstream, level, snr, error, loss_item)):
+        if item is None:
+            missing.append(label)
+        else:
+            selected.append({"key": key, "label": label, "item": item})
+    return "multi" if multi else "single", selected, missing
+
+
 def modem_restarts_item(host_id):
     """Find the modem restarts item and read its latest Zabbix value."""
     with _cache_lock:
