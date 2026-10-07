@@ -36,7 +36,7 @@ DEFAULT_EXCLUDED_NAMES = "Vlan|AUX|Loop"
 MAX_PORTS = 2048
 CACHE_SECONDS = 4.5
 MAX_ENTRIES = 80
-TRAFFIC_CACHE_SECONDS = 9.5
+TRAFFIC_CACHE_SECONDS = 4.5
 MAX_TRAFFIC_ENTRIES = 400
 _entries = {}
 _traffic_entries = {}
@@ -241,7 +241,7 @@ def _bit_rate(current, previous, seconds):
 
 
 async def traffic_for(host_id, if_index, address, port, community):
-    """Share two IF-MIB counter samples per port across viewers, every 10 s."""
+    """Share IF-MIB counter samples per port across viewers, every 5 s."""
     credential_id = hashlib.sha256(community.encode()).digest()
     key = (str(host_id), int(if_index), address, int(port), credential_id)
     with _entries_lock:

@@ -125,7 +125,7 @@ class SwitchTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(poll.await_count, 1)
 
-    def test_traffic_rate_uses_if_mib_counters_and_shared_ten_second_samples(self):
+    def test_traffic_rate_uses_if_mib_counters_and_shared_five_second_samples(self):
         clock = [100.0]
         samples = [
             {"in_hc": "1000", "out_hc": "2000", "in_32": "1000", "out_32": "2000"},
@@ -143,14 +143,17 @@ class SwitchTests(unittest.TestCase):
               patch("switch_monitor.poll_values", side_effect=poll) as read):
             async def run():
                 first = await traffic_for("traffic-8", 8, "192.0.2.8", 161, "public")
-                clock[0] = 110.0
+                clock[0] = 104.4
+                cached = await traffic_for("traffic-8", 8, "192.0.2.8", 161, "public")
+                clock[0] = 105.0
                 second = await traffic_for("traffic-8", 8, "192.0.2.8", 161, "public")
                 third = await traffic_for("traffic-8", 8, "192.0.2.8", 161, "public")
-                return first, second, third
-            first, second, third = asyncio.run(run())
+                return first, cached, second, third
+            first, cached, second, third = asyncio.run(run())
         self.assertIsNone(first["down_bps"])
         self.assertIsNone(first["up_bps"])
-        self.assertEqual(second, {"down_bps": 2400, "up_bps": 1000})
+        self.assertEqual(first, cached)
+        self.assertEqual(second, {"down_bps": 4800, "up_bps": 2000})
         self.assertEqual(second, third)
         self.assertEqual(read.call_count, 2)
 
@@ -173,14 +176,14 @@ class SwitchTests(unittest.TestCase):
               patch("switch_monitor.poll_values", side_effect=poll)):
             async def run():
                 results = []
-                for moment in (200, 210, 220, 230):
+                for moment in (200, 205, 210, 215):
                     clock[0] = moment
                     results.append(await traffic_for(
                         "traffic-fallback", 9, "192.0.2.9", 161, "public"))
                 return results
             first, second, failed, recovered = asyncio.run(run())
         self.assertIsNone(first["down_bps"])
-        self.assertEqual(second, {"down_bps": 1600, "up_bps": 800})
+        self.assertEqual(second, {"down_bps": 3200, "up_bps": 1600})
         self.assertEqual(failed["error"], "SNMP timeout")
         self.assertIsNone(failed["down_bps"])
         self.assertIsNone(recovered["down_bps"])

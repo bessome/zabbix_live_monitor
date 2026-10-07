@@ -103,7 +103,7 @@
     dialog.showModal();
     refreshTraffic();
     clearInterval(trafficTimer);
-    trafficTimer = setInterval(refreshTraffic, 10000);
+    trafficTimer = setInterval(refreshTraffic, 5000);
   });
 
   document.getElementById("switch-cable-close").addEventListener("click", () => dialog.close());
