@@ -137,6 +137,7 @@ class SwitchTests(unittest.TestCase):
                 "1.3.6.1.2.1.31.1.1.1.6.8", "1.3.6.1.2.1.31.1.1.1.10.8",
                 "1.3.6.1.2.1.2.2.1.10.8", "1.3.6.1.2.1.2.2.1.16.8"])
             sample = samples.pop(0)
+            clock[0] += 1.0  # Simulate SNMP latency before the response is cached.
             return [{"id": key, "value": value} for key, value in sample.items()]
 
         with (patch("switch_monitor.time.monotonic", side_effect=lambda: clock[0]),

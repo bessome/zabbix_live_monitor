@@ -38,6 +38,7 @@
     if (!dialog.open || !selectedPort || trafficController) return;
     const port = selectedPort;
     const controller = new AbortController();
+    const started = performance.now();
     trafficController = controller;
     try {
       const response = await fetch(url + "/" + encodeURIComponent(port.index)
@@ -64,6 +65,10 @@
       }
     } finally {
       if (trafficController === controller) trafficController = null;
+      if (dialog.open && selectedPort === port) {
+        trafficTimer = setTimeout(refreshTraffic,
+          Math.max(0, 5000 - (performance.now() - started)));
+      }
     }
   }
 
@@ -101,14 +106,13 @@
     trafficDown.textContent = "n/a";
     trafficUp.textContent = "n/a";
     dialog.showModal();
+    clearTimeout(trafficTimer);
     refreshTraffic();
-    clearInterval(trafficTimer);
-    trafficTimer = setInterval(refreshTraffic, 5000);
   });
 
   document.getElementById("switch-cable-close").addEventListener("click", () => dialog.close());
   dialog.addEventListener("close", () => {
-    clearInterval(trafficTimer);
+    clearTimeout(trafficTimer);
     trafficTimer = null;
     if (trafficController) {
       trafficController.abort();

@@ -259,6 +259,7 @@ async def traffic_for(host_id, if_index, address, port, community):
     async with entry.lock:
         if entry.data is not None and time.monotonic() - entry.updated < TRAFFIC_CACHE_SECONDS:
             return entry.data
+        poll_started = time.monotonic()
         definitions = [{"id": name, "label": name,
                         "oid": f"{base}.{if_index}", "multiplier": "1", "units": ""}
                        for name, base in TRAFFIC_OID.items()]
@@ -267,7 +268,7 @@ async def traffic_for(host_id, if_index, address, port, community):
         except (RuntimeError, ValueError) as exc:
             entry.previous = None
             entry.data = {"down_bps": None, "up_bps": None, "error": str(exc)}
-            entry.updated = time.monotonic()
+            entry.updated = poll_started
             return entry.data
         measured = time.monotonic()
         values = {reading["id"]: reading["value"] for reading in readings}
@@ -284,5 +285,5 @@ async def traffic_for(host_id, if_index, address, port, community):
         if current["in"] is None and current["out"] is None:
             entry.data["error"] = "Счётчики трафика IF-MIB недоступны."
         entry.previous = (measured, current)
-        entry.updated = measured
+        entry.updated = poll_started
         return entry.data
