@@ -17,7 +17,7 @@ from ping_monitor import snapshot_for
 from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_for,
                           uptime_for)
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
-                            snapshot_for as switch_snapshot_for)
+                            snapshot_for as switch_snapshot_for, traffic_for)
 from zabbix_service import (category_filter, device_descriptions, host_rows,
                              modem_channel_definitions, modem_overview_definitions,
                              modem_restarts_count_24h, modem_restarts_item,
@@ -310,6 +310,32 @@ async def switch_ports(request: Request, category: str, host_id: str):
         result = await switch_snapshot_for(host_id, device["snmp_address"],
                                            device["snmp_port"], community,
                                            excluded_names)
+    except (RuntimeError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/switch-ports/{if_index}/traffic")
+async def switch_port_traffic(request: Request, category: str, host_id: str,
+                              if_index: int):
+    require_user(request, api=True)
+    if category != "Switches":
+        raise HTTPException(404)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        device = next((row for row in rows if row["id"] == host_id), None)
+        if device is None:
+            raise HTTPException(404)
+        community = snmp_community_for(category)
+        excluded_names = parse_excluded_names(
+            setting("switch_port_exclude", DEFAULT_EXCLUDED_NAMES))
+        snapshot = await switch_snapshot_for(host_id, device["snmp_address"],
+                                             device["snmp_port"], community,
+                                             excluded_names)
+        if not any(port["index"] == if_index for port in snapshot["ports"]):
+            raise HTTPException(404)
+        result = await traffic_for(host_id, if_index, device["snmp_address"],
+                                   device["snmp_port"], community)
     except (RuntimeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})

@@ -7,6 +7,8 @@
   const dialogTitle = document.getElementById("switch-cable-title");
   const dialogPort = document.getElementById("switch-cable-port");
   const dialogStatus = document.getElementById("switch-cable-status");
+  const trafficDown = document.getElementById("switch-traffic-down");
+  const trafficUp = document.getElementById("switch-traffic-up");
   const results = document.getElementById("switch-cable-results");
   const pairs = document.getElementById("switch-cable-pairs");
   const start = document.getElementById("switch-cable-start");
@@ -20,6 +22,50 @@
   let inFlight = false;
   let selectedPort = null;
   let testInFlight = false;
+  let trafficTimer = null;
+  let trafficController = null;
+
+  function formatTraffic(bps) {
+    if (bps == null || !Number.isFinite(bps)) return "n/a";
+    const units = bps >= 1e9 ? [1e9, "Гбит/с"]
+      : bps >= 1e6 ? [1e6, "Мбит/с"]
+      : bps >= 1e3 ? [1e3, "Кбит/с"] : [1, "бит/с"];
+    return new Intl.NumberFormat("ru-RU", {maximumFractionDigits: 1})
+      .format(bps / units[0]) + " " + units[1];
+  }
+
+  async function refreshTraffic() {
+    if (!dialog.open || !selectedPort || trafficController) return;
+    const port = selectedPort;
+    const controller = new AbortController();
+    trafficController = controller;
+    try {
+      const response = await fetch(url + "/" + encodeURIComponent(port.index)
+        + "/traffic", {credentials: "same-origin", cache: "no-store",
+          signal: controller.signal});
+      if (response.status === 401) {
+        location.href = "/login";
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "SNMP недоступен");
+      if (dialog.open && selectedPort === port) {
+        trafficDown.textContent = formatTraffic(data.down_bps);
+        trafficUp.textContent = formatTraffic(data.up_bps);
+        trafficDown.parentElement.title = data.error || "Из коммутатора в устройство";
+        trafficUp.parentElement.title = data.error || "Из устройства в коммутатор";
+      }
+    } catch (error) {
+      if (error.name !== "AbortError" && dialog.open && selectedPort === port) {
+        trafficDown.textContent = "n/a";
+        trafficUp.textContent = "n/a";
+        trafficDown.parentElement.title = error.message;
+        trafficUp.parentElement.title = error.message;
+      }
+    } finally {
+      if (trafficController === controller) trafficController = null;
+    }
+  }
 
   function render(ports) {
     const fragment = document.createDocumentFragment();
@@ -32,7 +78,7 @@
         : port.speed_mbps >= 1000 ? (port.speed_mbps / 1000) + " Гбит/с"
         : port.speed_mbps + " Мбит/с";
       tile.className = "switch-port " + port.state;
-      tile.title = port.name + " · " + status + " · открыть тест кабеля";
+      tile.title = port.name + " · " + status + " · нагрузка и тест кабеля";
       tile.setAttribute("aria-label", tile.title);
       tile.dataset.index = String(port.index);
       tile.dataset.name = port.name;
@@ -47,15 +93,29 @@
     const tile = event.target.closest(".switch-port");
     if (!tile || !list.contains(tile) || testInFlight) return;
     selectedPort = {index: tile.dataset.index, name: tile.dataset.name};
-    dialogTitle.textContent = "Тест кабеля · " + selectedPort.name;
+    dialogTitle.textContent = "Порт · " + selectedPort.name;
     dialogPort.textContent = "Порт " + selectedPort.name;
     dialogStatus.textContent = "";
     pairs.replaceChildren();
     results.hidden = true;
+    trafficDown.textContent = "n/a";
+    trafficUp.textContent = "n/a";
     dialog.showModal();
+    refreshTraffic();
+    clearInterval(trafficTimer);
+    trafficTimer = setInterval(refreshTraffic, 10000);
   });
 
   document.getElementById("switch-cable-close").addEventListener("click", () => dialog.close());
+  dialog.addEventListener("close", () => {
+    clearInterval(trafficTimer);
+    trafficTimer = null;
+    if (trafficController) {
+      trafficController.abort();
+      trafficController = null;
+    }
+    selectedPort = null;
+  });
   if (start) start.addEventListener("click", async () => {
     if (!selectedPort || testInFlight) return;
     const port = selectedPort;

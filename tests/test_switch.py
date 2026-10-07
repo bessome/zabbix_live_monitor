@@ -4,7 +4,8 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, OID, build_ports,
-                            parse_excluded_names, poll_ports, snapshot_for)
+                             parse_excluded_names, poll_ports, snapshot_for,
+                             traffic_for)
 
 
 class SwitchTests(unittest.TestCase):
@@ -123,6 +124,66 @@ class SwitchTests(unittest.TestCase):
             first, second = asyncio.run(run())
         self.assertEqual(first, second)
         self.assertEqual(poll.await_count, 1)
+
+    def test_traffic_rate_uses_if_mib_counters_and_shared_ten_second_samples(self):
+        clock = [100.0]
+        samples = [
+            {"in_hc": "1000", "out_hc": "2000", "in_32": "1000", "out_32": "2000"},
+            {"in_hc": "2250", "out_hc": "5000", "in_32": "2250", "out_32": "5000"},
+        ]
+
+        async def poll(address, port, community, definitions):
+            self.assertEqual([item["oid"] for item in definitions], [
+                "1.3.6.1.2.1.31.1.1.1.6.8", "1.3.6.1.2.1.31.1.1.1.10.8",
+                "1.3.6.1.2.1.2.2.1.10.8", "1.3.6.1.2.1.2.2.1.16.8"])
+            sample = samples.pop(0)
+            return [{"id": key, "value": value} for key, value in sample.items()]
+
+        with (patch("switch_monitor.time.monotonic", side_effect=lambda: clock[0]),
+              patch("switch_monitor.poll_values", side_effect=poll) as read):
+            async def run():
+                first = await traffic_for("traffic-8", 8, "192.0.2.8", 161, "public")
+                clock[0] = 110.0
+                second = await traffic_for("traffic-8", 8, "192.0.2.8", 161, "public")
+                third = await traffic_for("traffic-8", 8, "192.0.2.8", 161, "public")
+                return first, second, third
+            first, second, third = asyncio.run(run())
+        self.assertIsNone(first["down_bps"])
+        self.assertIsNone(first["up_bps"])
+        self.assertEqual(second, {"down_bps": 2400, "up_bps": 1000})
+        self.assertEqual(second, third)
+        self.assertEqual(read.call_count, 2)
+
+    def test_traffic_uses_32_bit_fallback_and_clears_sample_after_timeout(self):
+        clock = [200.0]
+        samples = [
+            {"in_hc": None, "out_hc": None, "in_32": "100", "out_32": "200"},
+            {"in_hc": None, "out_hc": None, "in_32": "1100", "out_32": "2200"},
+            RuntimeError("SNMP timeout"),
+            {"in_hc": None, "out_hc": None, "in_32": "3000", "out_32": "4000"},
+        ]
+
+        async def poll(*args):
+            sample = samples.pop(0)
+            if isinstance(sample, Exception):
+                raise sample
+            return [{"id": key, "value": value} for key, value in sample.items()]
+
+        with (patch("switch_monitor.time.monotonic", side_effect=lambda: clock[0]),
+              patch("switch_monitor.poll_values", side_effect=poll)):
+            async def run():
+                results = []
+                for moment in (200, 210, 220, 230):
+                    clock[0] = moment
+                    results.append(await traffic_for(
+                        "traffic-fallback", 9, "192.0.2.9", 161, "public"))
+                return results
+            first, second, failed, recovered = asyncio.run(run())
+        self.assertIsNone(first["down_bps"])
+        self.assertEqual(second, {"down_bps": 1600, "up_bps": 800})
+        self.assertEqual(failed["error"], "SNMP timeout")
+        self.assertIsNone(failed["down_bps"])
+        self.assertIsNone(recovered["down_bps"])
 
 
 if __name__ == "__main__":

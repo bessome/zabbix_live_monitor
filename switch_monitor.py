@@ -14,6 +14,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from pysnmp.proto.rfc1905 import EndOfMibView, NoSuchInstance, NoSuchObject
 
 from ping_monitor import validate_target
+from snmp_monitor import poll_values
 
 OID = {
     "ifDescr": "1.3.6.1.2.1.2.2.1.2",
@@ -24,12 +25,21 @@ OID = {
     "ifHighSpeed": "1.3.6.1.2.1.31.1.1.1.15",
     "ifConnectorPresent": "1.3.6.1.2.1.31.1.1.1.17",
 }
+TRAFFIC_OID = {
+    "in_hc": "1.3.6.1.2.1.31.1.1.1.6",
+    "out_hc": "1.3.6.1.2.1.31.1.1.1.10",
+    "in_32": "1.3.6.1.2.1.2.2.1.10",
+    "out_32": "1.3.6.1.2.1.2.2.1.16",
+}
 ETHERNET_TYPES = {6, 62, 69, 117}
 DEFAULT_EXCLUDED_NAMES = "Vlan|AUX|Loop"
 MAX_PORTS = 2048
 CACHE_SECONDS = 4.5
 MAX_ENTRIES = 80
+TRAFFIC_CACHE_SECONDS = 9.5
+MAX_TRAFFIC_ENTRIES = 400
 _entries = {}
+_traffic_entries = {}
 _entries_lock = threading.Lock()
 
 
@@ -196,4 +206,83 @@ async def snapshot_for(host_id, address, port, community, excluded_names=()):
         ports = await poll_ports(address, port, community, excluded_names)
         entry.data = {"ports": ports, "updated_at": int(time.time())}
         entry.updated = time.monotonic()
+        return entry.data
+
+
+class _TrafficEntry:
+    def __init__(self):
+        self.lock = asyncio.Lock()
+        self.last_seen = time.monotonic()
+        self.updated = 0.0
+        self.previous = None
+        self.data = None
+
+
+def _counter(values, direction):
+    for kind in ("hc", "32"):
+        try:
+            value = int(values[f"{direction}_{kind}"])
+            if value >= 0:
+                return value, kind
+        except (KeyError, TypeError, ValueError):
+            pass
+    return None
+
+
+def _bit_rate(current, previous, seconds):
+    if current is None or previous is None or current[1] != previous[1]:
+        return None
+    delta = current[0] - previous[0]
+    if delta < 0 and current[1] == "32" and previous[0] > 0xF0000000:
+        delta += 2 ** 32
+    if delta < 0 or seconds <= 0:
+        return None
+    return round(delta * 8 / seconds)
+
+
+async def traffic_for(host_id, if_index, address, port, community):
+    """Share two IF-MIB counter samples per port across viewers, every 10 s."""
+    credential_id = hashlib.sha256(community.encode()).digest()
+    key = (str(host_id), int(if_index), address, int(port), credential_id)
+    with _entries_lock:
+        now = time.monotonic()
+        for old_key, old_entry in list(_traffic_entries.items()):
+            if now - old_entry.last_seen > 60:
+                del _traffic_entries[old_key]
+        entry = _traffic_entries.get(key)
+        if entry is None:
+            if len(_traffic_entries) >= MAX_TRAFFIC_ENTRIES:
+                raise RuntimeError("Слишком много активных SNMP-опросов портов.")
+            entry = _TrafficEntry()
+            _traffic_entries[key] = entry
+        entry.last_seen = now
+    async with entry.lock:
+        if entry.data is not None and time.monotonic() - entry.updated < TRAFFIC_CACHE_SECONDS:
+            return entry.data
+        definitions = [{"id": name, "label": name,
+                        "oid": f"{base}.{if_index}", "multiplier": "1", "units": ""}
+                       for name, base in TRAFFIC_OID.items()]
+        try:
+            readings = await poll_values(address, port, community, definitions)
+        except (RuntimeError, ValueError) as exc:
+            entry.previous = None
+            entry.data = {"down_bps": None, "up_bps": None, "error": str(exc)}
+            entry.updated = time.monotonic()
+            return entry.data
+        measured = time.monotonic()
+        values = {reading["id"]: reading["value"] for reading in readings}
+        current = {direction: _counter(values, direction)
+                   for direction in ("in", "out")}
+        previous = entry.previous
+        seconds = measured - previous[0] if previous else 0
+        entry.data = {
+            "down_bps": _bit_rate(current["out"], previous[1]["out"], seconds)
+            if previous else None,
+            "up_bps": _bit_rate(current["in"], previous[1]["in"], seconds)
+            if previous else None,
+        }
+        if current["in"] is None and current["out"] is None:
+            entry.data["error"] = "Счётчики трафика IF-MIB недоступны."
+        entry.previous = (measured, current)
+        entry.updated = measured
         return entry.data

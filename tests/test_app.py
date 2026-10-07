@@ -491,6 +491,10 @@ class AppTests(unittest.TestCase):
             self.assertLess(detail.text.index('id="switch-monitor"'),
                             detail.text.index('id="ping-monitor"'))
             self.assertIn('/static/switch.js', detail.text)
+            self.assertIn('href="/static/switch.css?', detail.text)
+            self.assertEqual(self.client.get("/static/switch.css").status_code, 200)
+            self.assertIn('id="switch-traffic-down"', detail.text)
+            self.assertIn('id="switch-traffic-up"', detail.text)
             response = self.client.get("/api/devices/Switches/42/switch-ports")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["ports"][0]["state"], "fast")
@@ -499,6 +503,27 @@ class AppTests(unittest.TestCase):
                                ("vlan", "aux", "loop")))
             self.assertEqual(self.client.get(
                 "/api/devices/Modems/42/switch-ports").status_code, 404)
+
+    def test_switch_port_traffic_checks_host_port_and_allows_read_role(self):
+        path = "/api/devices/Switches/42/switch-ports/8/traffic"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.login()
+        device = {"id": "42", "snmp_address": "192.0.2.42", "snmp_port": "161"}
+        snapshot = {"ports": [{"index": 8, "name": "Gi1/0/8"}]}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.switch_snapshot_for", new_callable=AsyncMock,
+                    return_value=snapshot),
+              patch("routes_devices.traffic_for", new_callable=AsyncMock,
+                    return_value={"down_bps": 2400, "up_bps": 1000}) as traffic):
+            with patch("routes_devices.require_user", return_value={"role": "read"}):
+                response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"down_bps": 2400, "up_bps": 1000})
+            self.assertEqual(traffic.await_args.args,
+                             ("42", 8, "192.0.2.42", "161", "public"))
+            self.assertEqual(self.client.get(path.replace("/8/", "/9/")).status_code, 404)
+            self.assertEqual(self.client.get(path.replace("/42/", "/99/")).status_code, 404)
+            self.assertEqual(self.client.get(path.replace("/Switches/", "/Modems/")).status_code, 404)
 
     def test_switch_cable_test_requires_execute_role_and_uses_selected_port(self):
         path = "/api/devices/Switches/42/switch-ports/8/cable-test"

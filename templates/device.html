@@ -9,8 +9,8 @@
 <div id="switch-ports" class="switch-ports"></div>
 </section>
 <dialog id="switch-cable-dialog" class="switch-cable-dialog" aria-labelledby="switch-cable-title">
-<div class="switch-cable-heading"><h2 id="switch-cable-title">Тест кабеля</h2><button type="button" id="switch-cable-close" aria-label="Закрыть">×</button></div>
-<p id="switch-cable-port"></p>
+<div class="switch-cable-heading"><h2 id="switch-cable-title">Порт</h2><button type="button" id="switch-cable-close" aria-label="Закрыть">×</button></div>
+<div class="switch-cable-topline"><p id="switch-cable-port"></p><div class="switch-port-traffic" aria-label="Текущая нагрузка порта"><span title="Из коммутатора в устройство">↓ Down <strong id="switch-traffic-down">n/a</strong></span><span title="Из устройства в коммутатор">↑ Up <strong id="switch-traffic-up">n/a</strong></span></div></div>
 <p class="switch-cable-warning">Тест может ненадолго отключить линк выбранного порта. Не запускайте его на порту управления коммутатором.</p>
 {% if current_user.role in ('admin', 'execute') %}
 <input type="hidden" id="switch-cable-csrf" value="{{ csrf_token }}">

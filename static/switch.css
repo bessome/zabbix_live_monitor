@@ -23,6 +23,11 @@
 .switch-cable-heading button{width:36px;min-height:36px;padding:0;font-size:25px;line-height:1}
 .switch-cable-warning{padding:8px 10px;border-radius:6px;background:#fff2d9;color:#69420a;font-size:13px}
 #switch-cable-port{font-weight:700}
+.switch-cable-topline{display:flex;align-items:flex-start;justify-content:space-between;gap:8px 16px;flex-wrap:wrap}
+.switch-cable-topline p{margin:8px 0}
+.switch-port-traffic{display:flex;gap:6px 12px;flex-wrap:wrap;justify-content:flex-end;margin:8px 0;font-size:12px;color:#536171;font-variant-numeric:tabular-nums}
+.switch-port-traffic span{white-space:nowrap}
+.switch-port-traffic strong{color:#172333}
 #switch-cable-status{min-height:20px;font-size:13px}
 #switch-cable-results th,#switch-cable-results td{padding:7px 5px;font-size:13px}
 #switch-cable-results[hidden]{display:none}
