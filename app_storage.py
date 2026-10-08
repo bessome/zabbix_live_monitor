@@ -59,6 +59,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS cmts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                city TEXT NOT NULL DEFAULT '',
                 address TEXT NOT NULL UNIQUE,
                 port INTEGER NOT NULL DEFAULT 161 CHECK (port BETWEEN 1 AND 65535),
                 read_community TEXT
@@ -103,6 +104,9 @@ def init_db():
                         "CHECK (theme IN ('light', 'dark'))")
         if "email" not in columns:
             con.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        cmts_columns = {row["name"] for row in con.execute("PRAGMA table_info(cmts)")}
+        if "city" not in cmts_columns:
+            con.execute("ALTER TABLE cmts ADD COLUMN city TEXT NOT NULL DEFAULT ''")
         con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique "
                     "ON users(email COLLATE NOCASE) WHERE email IS NOT NULL")
         if con.execute("SELECT id FROM users WHERE role='admin' LIMIT 1").fetchone() is None:
@@ -228,16 +232,16 @@ def encrypt_community(community):
 
 def cmts_list():
     with closing(connect()) as con:
-        rows = con.execute("SELECT id,name,address,port,read_community FROM cmts "
+        rows = con.execute("SELECT id,name,city,address,port,read_community FROM cmts "
                            "ORDER BY name COLLATE NOCASE").fetchall()
-    return [{"id": row["id"], "name": row["name"],
+    return [{"id": row["id"], "name": row["name"], "city": row["city"],
              "address": row["address"], "port": row["port"],
              "community_configured": bool(row["read_community"])} for row in rows]
 
 
 def cmts_for(cmts_id):
     with closing(connect()) as con:
-        row = con.execute("SELECT id,name,address,port,read_community FROM cmts WHERE id=?",
+        row = con.execute("SELECT id,name,city,address,port,read_community FROM cmts WHERE id=?",
                           (cmts_id,)).fetchone()
     if row is None:
         return None

@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% block title %}Районы CMTS · Zabbix Live Monitoring{% endblock %}
+{% block content %}
+<h1>Районы {{ cmts.name }}</h1>
+<p><a href="/settings/cmts">← К настройкам CMTS</a></p>
+<p>Город: {{ plan.city }}. Модемов на CMTS: {{ plan.modem_count }}. Районов: {{ plan.area_count }}.</p>
+<section class="panel">
+<h2>Изменения</h2>
+<p>Создать групп: {{ plan.groups_to_create|length }}. Переместить модемов: {{ plan.assignments|length }}. Без однозначного района или хоста: {{ plan.skipped|length }}.</p>
+{% if plan.groups_to_create %}<h3>Новые группы</h3><ul>{% for name in plan.groups_to_create %}<li>{{ name }}</li>{% endfor %}</ul>{% endif %}
+{% if plan.assignments %}
+<h3>Модемы</h3>
+<div class="cmts-group-table"><table><thead><tr><th>Хост Zabbix</th><th>MAC</th><th>Совпадение</th><th>Текущий район</th><th>Новый район</th></tr></thead><tbody>
+{% for item in plan.assignments %}<tr><td>{{ item.host }}</td><td>{{ item.mac }}</td><td>{{ item.method }}</td><td>{{ item['from']|join(', ') or '—' }}</td><td>{{ item.group }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if plan.groups_to_create or plan.assignments %}
+<form method="post" action="/settings/cmts/{{ cmts.id }}/groups/apply">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="digest" value="{{ plan.digest }}">
+<button type="submit">Применить изменения в Zabbix</button>
+</form>
+{% endif %}
+</section>
+{% if plan.skipped %}<section class="panel"><h2>Без изменений</h2>
+<div class="cmts-group-table"><table><thead><tr><th>MAC</th><th>IP</th><th>Причина</th></tr></thead><tbody>
+{% for item in plan.skipped %}<tr><td>{{ item.mac }}</td><td>{{ item.ip or '—' }}</td><td>{{ item.reason }}</td></tr>{% endfor %}
+</tbody></table></div></section>{% endif %}
+{% endblock %}

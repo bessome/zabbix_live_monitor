@@ -305,6 +305,12 @@ class AppTests(unittest.TestCase):
         self.assertNotIn('href="/settings"', reader_page)
         self.assertEqual(self.client.get("/settings").status_code, 403)
         self.assertEqual(self.client.get("/settings/users").status_code, 403)
+        self.assertEqual(self.client.post("/settings/cmts/1/groups/preview",
+                                          data={"csrf_token": self.token("/profile")}).status_code,
+                         403)
+        self.assertEqual(self.client.post("/settings/cmts/1/groups/apply",
+                                          data={"csrf_token": self.token("/profile")}).status_code,
+                         403)
         self.assertEqual(self.client.post("/settings/admin-email", data={
             "csrf_token": self.token("/profile"), "email": "reader.admin@example.test"
         }).status_code, 403)
@@ -1197,15 +1203,28 @@ class AppTests(unittest.TestCase):
         csrf = self.token("/settings/cmts")
         response = self.client.post("/settings/cmts", data={
             "csrf_token": csrf, "name": "Test CMTS", "address": "192.0.2.10",
-            "port": "161", "community": "test-ro"})
+            "city": "Parnu", "port": "161", "community": "test-ro"})
         self.assertIn("CMTS сохранена", response.text)
+        self.assertIn('name="city" maxlength="80" value="Parnu"', response.text)
         with closing(self.storage.connect()) as con:
             row = con.execute(
-                "SELECT id,read_community FROM cmts WHERE name='Test CMTS'"
+                "SELECT id,city,read_community FROM cmts WHERE name='Test CMTS'"
             ).fetchone()
         self.assertIsNotNone(row)
+        self.assertEqual(row["city"], "Parnu")
         self.assertNotEqual(row["read_community"], "test-ro")
         cmts_id = row["id"]
+        self.assertEqual(self.storage.cmts_for(cmts_id)["city"], "Parnu")
+        response = self.client.post("/settings/cmts", data={
+            "csrf_token": csrf, "cmts_id": str(cmts_id), "name": "Test CMTS",
+            "city": "Pärnu", "address": "192.0.2.10", "port": "161"})
+        self.assertIn("CMTS сохранена", response.text)
+        self.assertEqual(self.storage.cmts_for(cmts_id)["city"], "Pärnu")
+        response = self.client.post("/settings/cmts", data={
+            "csrf_token": csrf, "cmts_id": str(cmts_id), "name": "Test CMTS",
+            "city": "Bad/City", "address": "192.0.2.10", "port": "161"})
+        self.assertIn("Укажите город", response.text)
+        self.assertEqual(self.storage.cmts_for(cmts_id)["city"], "Pärnu")
         modem = {"cmts_id": cmts_id, "cmts_name": "Test CMTS",
                  "mac": "cc:35:40:e8:ee:64", "mac_compact": "cc3540e8ee64",
                  "ip": "10.19.0.223"}
@@ -1233,6 +1252,26 @@ class AppTests(unittest.TestCase):
                 f"/api/cmts/{cmts_id}/modems/cc3540e8ee64/modem-channels")
         self.assertEqual(channels.status_code, 200)
         self.assertEqual(channels.json()["items"][0]["value"], "48.5")
+        plan = {"city": "Pärnu", "modem_count": 1, "area_count": 1,
+                "groups_to_create": ["Pärnu/modems/mai_37"],
+                "assignments": [{"host": "Modem", "mac": "cc3540e8ee64",
+                                 "method": "MAC", "from": [],
+                                 "group": "Pärnu/modems/mai_37"}],
+                "skipped": [], "digest": "test-digest"}
+        with patch("routes_settings.build_plan", new_callable=AsyncMock,
+                   return_value=plan) as build:
+            preview = self.client.post(
+                f"/settings/cmts/{cmts_id}/groups/preview",
+                data={"csrf_token": csrf})
+            self.assertEqual(preview.status_code, 200)
+            self.assertIn("Pärnu/modems/mai_37", preview.text)
+            self.assertIn('action="/settings/cmts/', preview.text)
+            self.assertEqual(build.await_args.args[0]["city"], "Pärnu")
+            with patch("routes_settings.apply_plan", return_value=(1, 1)):
+                applied = self.client.post(
+                    f"/settings/cmts/{cmts_id}/groups/apply",
+                    data={"csrf_token": csrf, "digest": "test-digest"})
+            self.assertIn("Создано групп: 1", applied.text)
         response = self.client.post(f"/settings/cmts/{cmts_id}/delete",
                                     data={"csrf_token": csrf})
         self.assertIn("CMTS удалена", response.text)

@@ -12,9 +12,10 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from app_config import CATEGORIES, format_display_timestamp
 from app_storage import (DEFAULT_ACTIVITY_RETENTION_DAYS, check_password,
-                         cmts_list, connect, encrypt_community, hash_password,
-                         purge_expired_activity, setting)
+                          cmts_for, cmts_list, connect, encrypt_community, hash_password,
+                          purge_expired_activity, setting)
 from app_web import add_message, checked_form, render, require_admin
+from cmts_groups import apply_plan, build_plan
 from switch_monitor import DEFAULT_EXCLUDED_NAMES, parse_excluded_names
 from zabbix_service import category_filter, clear_caches, zabbix_call, zabbix_catalog
 
@@ -46,6 +47,7 @@ async def save_cmts(request: Request):
     require_admin(request)
     form = await checked_form(request)
     name = str(form.get("name", "")).strip()
+    city = str(form.get("city", "")).strip()
     address = str(form.get("address", "")).strip()
     community = str(form.get("community", ""))
     try:
@@ -56,6 +58,9 @@ async def save_cmts(request: Request):
             raise ValueError("Укажите корректный IP-адрес CMTS.") from exc
         if not name or len(name) > 80 or any(ord(c) < 32 for c in name):
             raise ValueError("Укажите имя CMTS до 80 символов.")
+        if (not city or len(city) > 80 or any(ord(c) < 32 for c in city)
+                or "/" in city or "\\" in city):
+            raise ValueError("Укажите город до 80 символов без / и \\.")
         if not 1 <= port <= 65535:
             raise ValueError("Порт SNMP должен быть от 1 до 65535.")
         if len(community) > 128 or any(ord(c) < 32 for c in community):
@@ -73,15 +78,15 @@ async def save_cmts(request: Request):
                 if not con.execute("SELECT 1 FROM cmts WHERE id=?", (int(raw_id),)).fetchone():
                     raise HTTPException(404)
                 con.execute(
-                    "UPDATE cmts SET name=?,address=?,port=?,"
+                    "UPDATE cmts SET name=?,city=?,address=?,port=?,"
                     "read_community=CASE WHEN ? THEN NULL ELSE COALESCE(?,read_community) END "
                     "WHERE id=?",
-                    (name, address, port, form.get("clear_community") == "1",
+                    (name, city, address, port, form.get("clear_community") == "1",
                      encrypted, int(raw_id)))
             else:
                 con.execute(
-                    "INSERT INTO cmts(name,address,port,read_community) VALUES (?,?,?,?)",
-                    (name, address, port, encrypted))
+                    "INSERT INTO cmts(name,city,address,port,read_community) VALUES (?,?,?,?,?)",
+                    (name, city, address, port, encrypted))
             con.commit()
     except sqlite3.IntegrityError:
         add_message(request, "CMTS с таким именем или адресом уже добавлена.", "error")
@@ -98,6 +103,43 @@ async def delete_cmts(request: Request, cmts_id: int):
         con.execute("DELETE FROM cmts WHERE id=?", (cmts_id,))
         con.commit()
     add_message(request, "CMTS удалена.")
+    return RedirectResponse("/settings/cmts", status_code=303)
+
+
+@router.post("/settings/cmts/{cmts_id}/groups/preview")
+async def preview_cmts_groups(request: Request, cmts_id: int):
+    require_admin(request)
+    await checked_form(request)
+    cmts = cmts_for(cmts_id)
+    if cmts is None:
+        raise HTTPException(404)
+    try:
+        plan = await build_plan(cmts)
+    except (RuntimeError, OSError, ValueError) as exc:
+        add_message(request, str(exc), "error")
+        return RedirectResponse("/settings/cmts", status_code=303)
+    return render(request, "cmts_group_preview.html", cmts=cmts, plan=plan)
+
+
+@router.post("/settings/cmts/{cmts_id}/groups/apply")
+async def apply_cmts_groups(request: Request, cmts_id: int):
+    require_admin(request)
+    form = await checked_form(request)
+    cmts = cmts_for(cmts_id)
+    if cmts is None:
+        raise HTTPException(404)
+    try:
+        plan = await build_plan(cmts)
+        if plan["digest"] != str(form.get("digest", "")):
+            add_message(request, "Данные CMTS или Zabbix изменились. Проверьте новый список.",
+                        "error")
+            return render(request, "cmts_group_preview.html", cmts=cmts, plan=plan)
+        created, changed = await asyncio.to_thread(apply_plan, plan)
+    except (RuntimeError, OSError, ValueError) as exc:
+        add_message(request, str(exc), "error")
+        return RedirectResponse("/settings/cmts", status_code=303)
+    clear_caches()
+    add_message(request, f"Создано групп: {created}. Обновлено модемов: {changed}.")
     return RedirectResponse("/settings/cmts", status_code=303)
 
 

@@ -7,6 +7,7 @@
 <form method="post" action="/settings/cmts" class="cmts-form">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Название<input name="name" maxlength="80" required placeholder="Pärnu uBR10k"></label>
+<label>Город<input name="city" maxlength="80" required placeholder="Parnu"></label>
 <label>IP-адрес<input name="address" required placeholder="85.196.241.110"></label>
 <label>SNMP порт<input name="port" type="number" min="1" max="65535" value="161" required></label>
 <label>SNMP read community<input name="community" type="password" maxlength="128" autocomplete="new-password" placeholder="public"></label>
@@ -20,11 +21,16 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="cmts_id" value="{{ item.id }}">
 <label>Название<input name="name" maxlength="80" value="{{ item.name }}" required></label>
+<label>Город<input name="city" maxlength="80" value="{{ item.city }}" required placeholder="Parnu"></label>
 <label>IP-адрес<input name="address" value="{{ item.address }}" required></label>
 <label>SNMP порт<input name="port" type="number" min="1" max="65535" value="{{ item.port }}" required></label>
 <label>SNMP read community<input name="community" type="password" maxlength="128" autocomplete="new-password" placeholder="{{ 'Задана — оставьте пустым, чтобы сохранить' if item.community_configured else 'public' }}"></label>
 <label class="snmp-clear"><input name="clear_community" type="checkbox" value="1"> Сбросить community на public</label>
 <button type="submit">Сохранить</button>
+</form>
+<form method="post" action="/settings/cmts/{{ item.id }}/groups/preview">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<button type="submit">Проверить районы модемов</button>
 </form>
 <form method="post" action="/settings/cmts/{{ item.id }}/delete">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
