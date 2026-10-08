@@ -109,7 +109,7 @@ def _hosts_for_modems():
         raise RuntimeError("Сначала задайте фильтр категории Modems в настройках Zabbix.")
     return zabbix_call("host.get", {
         "output": ["hostid", "host", "name"],
-        "selectGroups": ["groupid", "name"],
+        "selectHostGroups": ["groupid", "name"],
         "selectInterfaces": ["ip", "dns"],
         "selectInventory": ["macaddress_a", "macaddress_b"],
         "groupids" if mode == "group" else "templateids": ids,
@@ -164,7 +164,9 @@ def make_plan(city, snapshot, hosts, groups):
         seen_hosts.add(hostid)
         group_name = prefix + "/" + group_segment(modem["alias"])
         occupied_groups.add(group_name)
-        old_groups = host.get("groups", [])
+        if "hostgroups" not in host:
+            raise RuntimeError("Zabbix не вернул группы хоста; проверка районов остановлена.")
+        old_groups = host["hostgroups"]
         current = {str(group["groupid"]): group["name"] for group in old_groups}
         managed = {groupid for groupid, name in current.items()
                    if name.startswith(prefix + "/")}

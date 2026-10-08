@@ -53,8 +53,8 @@ class CmtsGroupTests(unittest.IsolatedAsyncioTestCase):
         ]}
         hosts = [{"hostid": "42", "host": "00:24:d1:aa:d4:05", "name": "Modem 42",
                   "inventory": {}, "interfaces": [{"ip": "192.0.2.1"}],
-                  "groups": [{"groupid": "1", "name": "Modems"},
-                             {"groupid": "2", "name": "Parnu/modems/old"}]}]
+                   "hostgroups": [{"groupid": "1", "name": "Modems"},
+                                  {"groupid": "2", "name": "Parnu/modems/old"}]}]
         groups = [{"groupid": "2", "name": "Parnu/modems/old"}]
         plan = cmts_groups.make_plan("Parnu", snapshot, hosts, groups)
         self.assertEqual(plan["groups_to_create"], ["Parnu/modems/mai_37"])
@@ -64,6 +64,40 @@ class CmtsGroupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(plan["skipped"]), 1)
         self.assertEqual(plan["skipped"][0]["reason"],
                          "нет единого описания upstream")
+
+    def test_already_grouped_modem_needs_no_change(self):
+        snapshot = {"modems": [{"mac": "0024d1aad405", "ip": "192.0.2.1",
+                                "alias": "mai_37", "index": "2457601",
+                                "ifindices": [3961], "reason": ""}]}
+        hosts = [{"hostid": "42", "host": "00:24:d1:aa:d4:05", "name": "Modem 42",
+                  "inventory": {}, "interfaces": [{"ip": "192.0.2.1"}],
+                  "hostgroups": [{"groupid": "1", "name": "Modems"},
+                                 {"groupid": "3", "name": "Parnu/modems/mai_37"}]}]
+        groups = [{"groupid": "3", "name": "Parnu/modems/mai_37"}]
+        plan = cmts_groups.make_plan("Parnu", snapshot, hosts, groups)
+        self.assertEqual(plan["groups_to_create"], [])
+        self.assertEqual(plan["assignments"], [])
+        self.assertEqual(plan["skipped"], [])
+        self.assertEqual(plan["area_count"], 1)
+
+    def test_missing_hostgroups_stops_preview(self):
+        snapshot = {"modems": [{"mac": "0024d1aad405", "ip": None,
+                                "alias": "mai_37", "index": "2457601",
+                                "ifindices": [3961], "reason": ""}]}
+        hosts = [{"hostid": "42", "host": "0024d1aad405", "name": "Modem 42",
+                  "inventory": {}, "interfaces": []}]
+        with self.assertRaisesRegex(RuntimeError, "не вернул группы хоста"):
+            cmts_groups.make_plan("Parnu", snapshot, hosts, [])
+
+    def test_host_query_requests_hostgroups(self):
+        call = MagicMock(return_value=[])
+        service = SimpleNamespace(category_filter=lambda _: ("group", ["1"]),
+                                  zabbix_call=call)
+        with patch.dict(sys.modules, {"zabbix_service": service}):
+            cmts_groups._hosts_for_modems()
+        self.assertEqual(call.call_args.args[0], "host.get")
+        self.assertEqual(call.call_args.args[1]["selectHostGroups"],
+                         ["groupid", "name"])
 
     def test_no_group_is_created_without_a_matching_zabbix_modem(self):
         snapshot = {"modems": [{"mac": "0024d1aad405", "ip": None,
