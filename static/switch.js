@@ -22,8 +22,14 @@
   let inFlight = false;
   let selectedPort = null;
   let testInFlight = false;
+  let cableCountdownTimer = null;
   let trafficTimer = null;
   let trafficController = null;
+
+  function stopCableCountdown() {
+    clearInterval(cableCountdownTimer);
+    cableCountdownTimer = null;
+  }
 
   function formatTraffic(bps) {
     if (bps == null || !Number.isFinite(bps)) return "n/a";
@@ -112,6 +118,7 @@
 
   document.getElementById("switch-cable-close").addEventListener("click", () => dialog.close());
   dialog.addEventListener("close", () => {
+    stopCableCountdown();
     clearTimeout(trafficTimer);
     trafficTimer = null;
     if (trafficController) {
@@ -127,7 +134,16 @@
     start.disabled = true;
     results.hidden = true;
     pairs.replaceChildren();
-    dialogStatus.textContent = "Тест идёт… Результат примерно через 5 секунд.";
+    const countdownUntil = performance.now() + 5000;
+    const updateCountdown = () => {
+      const seconds = Math.max(0, Math.ceil((countdownUntil - performance.now()) / 1000));
+      dialogStatus.textContent = seconds
+        ? "Тест идёт… ~" + seconds + " с"
+        : "Тест идёт… ожидаем результат";
+    };
+    updateCountdown();
+    stopCableCountdown();
+    cableCountdownTimer = setInterval(updateCountdown, 250);
     try {
       const body = new FormData();
       body.append("csrf_token", csrf.value);
@@ -155,6 +171,7 @@
     } catch (error) {
       dialogStatus.textContent = error.message;
     } finally {
+      stopCableCountdown();
       testInFlight = false;
       start.disabled = false;
     }
