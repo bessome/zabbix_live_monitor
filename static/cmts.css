@@ -25,3 +25,12 @@ html[data-theme="dark"] .cmts-result:hover{background:#28435b;color:#fff}
 @media(max-width:600px){.cmts-search-form{grid-template-columns:minmax(0,1fr) 105px}.cmts-search-form button{grid-column:1/-1}.cmts-result{flex-direction:column;gap:2px}.cmts-search-dialog,.cmts-detail-dialog{padding:10px}}
 
 .device-heading-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+
+.devices-heading h1{margin:0}
+@media(max-width:720px){
+  .devices-heading{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .devices-heading h1{font-size:clamp(17px,5vw,24px);white-space:nowrap;overflow-wrap:normal}
+  .devices-heading .device-heading-actions{flex:0 0 auto;flex-wrap:nowrap;gap:6px}
+  .devices-heading #updated{display:inline;margin:0;white-space:nowrap;font-size:11px}
+  .devices-heading-modems .cmts-search-open{min-height:40px;padding:6px 8px;font-size:12px}
+}

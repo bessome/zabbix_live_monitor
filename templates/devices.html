@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}{{ category }} · Zabbix Live Monitoring{% endblock %}
-{% block content %}<section class="heading"><div><h1>{{ category }}</h1></div>
-<div class="device-heading-actions">{% if category == 'Modems' %}<button type="button" id="cmts-search-open" class="cmts-search-open">Расширенный поиск</button>{% endif %}<span id="updated">—</span></div></section>
+{% block content %}<section class="heading devices-heading{{ ' devices-heading-modems' if category == 'Modems' else '' }}"><div><h1>{{ category }}</h1></div>
+<div class="device-heading-actions">{% if category == 'Modems' %}<button type="button" id="cmts-search-open" class="cmts-search-open">Расширенный поиск</button>{% endif %}<span id="updated" title="Время обновления">—</span></div></section>
 {% if not configured %}<p class="message">Для этого меню пока не задан фильтр. Администратор может выбрать группы или шаблоны в настройках.</p>{% endif %}
 <section class="panel" id="device-list" data-category="{{ category }}">
 <div class="device-toolbar">
@@ -112,7 +112,7 @@ async function refresh() {
       : "Страница " + data.page + " из " + data.pages;
     first.disabled = previous.disabled = data.page <= 1;
     next.disabled = last.disabled = data.page >= data.pages;
-    document.getElementById("updated").textContent = "Обновлено: " + displayTime.format(new Date(data.updated_at * 1000));
+    document.getElementById("updated").textContent = displayTime.format(new Date(data.updated_at * 1000));
   } catch (error) {
     if (sequence === requestSequence) status.textContent = error.message;
   }
