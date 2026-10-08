@@ -26,7 +26,6 @@ class CmtsGroupTests(unittest.IsolatedAsyncioTestCase):
         tables = [
             {"3961": _Value("mai_37"), "3962": _Value("mai_37"),
              "4705": _Value("side_9/tammsaare_32")},
-            {"3961": _Value(205), "3962": _Value(205), "4705": _Value(205)},
             {"2457601": _Value(bytes.fromhex("0024d1aad405")),
              "2966380": _Value(bytes.fromhex("cc3540e8ee64"))},
             {"2457601": _Value("192.0.2.1"), "2966380": _Value("192.0.2.2")},
@@ -58,13 +57,23 @@ class CmtsGroupTests(unittest.IsolatedAsyncioTestCase):
                              {"groupid": "2", "name": "Parnu/modems/old"}]}]
         groups = [{"groupid": "2", "name": "Parnu/modems/old"}]
         plan = cmts_groups.make_plan("Parnu", snapshot, hosts, groups)
-        self.assertIn("Parnu/modems/side_9 - tammsaare_32",
-                      plan["groups_to_create"])
+        self.assertEqual(plan["groups_to_create"], ["Parnu/modems/mai_37"])
+        self.assertEqual(plan["area_count"], 1)
         self.assertEqual(plan["assignments"][0]["remove_groupids"], ["2"])
         self.assertEqual(plan["assignments"][0]["from"], ["Parnu/modems/old"])
         self.assertEqual(len(plan["skipped"]), 1)
         self.assertEqual(plan["skipped"][0]["reason"],
                          "нет единого описания upstream")
+
+    def test_no_group_is_created_without_a_matching_zabbix_modem(self):
+        snapshot = {"modems": [{"mac": "0024d1aad405", "ip": None,
+                                "alias": "mai_37", "index": "2457601",
+                                "ifindices": [3961], "reason": ""}]}
+        plan = cmts_groups.make_plan("Parnu", snapshot, [], [])
+        self.assertEqual(plan["groups_to_create"], [])
+        self.assertEqual(plan["assignments"], [])
+        self.assertEqual(plan["area_count"], 0)
+        self.assertEqual(plan["skipped"][0]["reason"], "хост Zabbix не найден")
 
     def test_apply_adds_target_before_removing_only_old_city_group(self):
         plan = {"city": "Parnu", "groups_to_create": ["Parnu/modems/mai_37"],

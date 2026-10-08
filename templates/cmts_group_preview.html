@@ -2,7 +2,7 @@
 {% block content %}
 <h1>Районы {{ cmts.name }}</h1>
 <p><a href="/settings/cmts">← К настройкам CMTS</a></p>
-<p>Город: {{ plan.city }}. Модемов на CMTS: {{ plan.modem_count }}. Районов: {{ plan.area_count }}.</p>
+<p>Город: {{ plan.city }}. Модемов на CMTS: {{ plan.modem_count }}. Районов с найденными модемами Zabbix: {{ plan.area_count }}.</p>
 <section class="panel">
 <h2>Изменения</h2>
 <p>Создать групп: {{ plan.groups_to_create|length }}. Переместить модемов: {{ plan.assignments|length }}. Без однозначного района или хоста: {{ plan.skipped|length }}.</p>

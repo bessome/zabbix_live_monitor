@@ -12,7 +12,6 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from cmts_monitor import IP_COLUMN, MAC_COLUMN, _address, _target
 
 IF_ALIAS = "1.3.6.1.2.1.31.1.1.1.18"
-IF_TYPE = "1.3.6.1.2.1.2.2.1.3"
 UPSTREAM = "1.3.6.1.2.1.10.127.1.3.3.1.5"
 DOCSIS3_UPSTREAM = "1.3.6.1.4.1.4491.2.1.20.1.4.1.2"
 MAX_ROWS = 100000
@@ -55,15 +54,14 @@ async def scan(cmts):
     async def read():
         target = await _target(cmts)
         with SnmpEngine() as engine:
-            aliases, types, macs, ips, old_up, new_up = await asyncio.gather(*(
+            aliases, macs, ips, old_up, new_up = await asyncio.gather(*(
                 _walk(engine, target, cmts["community"], base)
-                for base in (IF_ALIAS, IF_TYPE, MAC_COLUMN, IP_COLUMN,
-                             UPSTREAM, DOCSIS3_UPSTREAM)
+                for base in (IF_ALIAS, MAC_COLUMN, IP_COLUMN, UPSTREAM, DOCSIS3_UPSTREAM)
             ))
-        return aliases, types, macs, ips, old_up, new_up
+        return aliases, macs, ips, old_up, new_up
 
     try:
-        aliases, types, macs, ips, old_up, new_up = await asyncio.wait_for(
+        aliases, macs, ips, old_up, new_up = await asyncio.wait_for(
             read(), SCAN_SECONDS)
     except asyncio.TimeoutError as exc:
         raise RuntimeError("Превышено время опроса CMTS.") from exc
@@ -73,8 +71,6 @@ async def scan(cmts):
             alias_by_index[int(index)] = value.asOctets().decode("utf-8", "replace").strip()
         except (ValueError, AttributeError):
             alias_by_index[int(index)] = value.prettyPrint().strip()
-    upstream_types = {int(index) for index, value in types.items()
-                      if index.isdecimal() and str(value.prettyPrint()) in ("129", "205")}
     channels = {}
     for instance in new_up:
         parts = instance.split(".")
@@ -102,10 +98,7 @@ async def scan(cmts):
                        "ifindices": sorted(ifindices),
                        "reason": "" if alias else
                        ("нет upstream" if not ifindices else "нет единого описания upstream")})
-    candidates = {alias_by_index[index] for index in upstream_types
-                  if alias_by_index.get(index)}
-    candidates.update(modem["alias"] for modem in modems if modem["alias"])
-    return {"modems": modems, "aliases": sorted(candidates, key=str.casefold)}
+    return {"modems": modems}
 
 
 def _hosts_for_modems():
@@ -143,6 +136,7 @@ def make_plan(city, snapshot, hosts, groups):
     assignments = []
     skipped = []
     seen_hosts = set()
+    occupied_groups = set()
     modem_ip_counts = {}
     for modem in snapshot["modems"]:
         if modem["ip"]:
@@ -169,6 +163,7 @@ def make_plan(city, snapshot, hosts, groups):
             continue
         seen_hosts.add(hostid)
         group_name = prefix + "/" + group_segment(modem["alias"])
+        occupied_groups.add(group_name)
         old_groups = host.get("groups", [])
         current = {str(group["groupid"]): group["name"] for group in old_groups}
         managed = {groupid for groupid, name in current.items()
@@ -182,12 +177,12 @@ def make_plan(city, snapshot, hosts, groups):
                             "has_target": desired_id in managed,
                             "remove_groupids": sorted(managed - {desired_id}),
                             "from": sorted(current[groupid] for groupid in managed)})
-    names = sorted({prefix + "/" + group_segment(alias)
-                    for alias in snapshot["aliases"]}, key=str.casefold)
-    new_groups = [name for name in [prefix, *names] if name not in existing]
+    new_groups = sorted((name for name in occupied_groups if name not in existing),
+                        key=str.casefold)
     plan = {"city": city, "groups_to_create": new_groups,
             "assignments": assignments, "skipped": skipped,
-            "modem_count": len(snapshot["modems"]), "area_count": len(names)}
+            "modem_count": len(snapshot["modems"]),
+            "area_count": len(occupied_groups)}
     plan["digest"] = hashlib.sha256(json.dumps(plan, sort_keys=True,
                                                 ensure_ascii=False).encode()).hexdigest()
     return plan
