@@ -1192,5 +1192,51 @@ class AppTests(unittest.TestCase):
             "new_password_confirm": "test-admin-password"})
 
 
+    def test_cmts_settings_search_and_discovered_card(self):
+        self.login()
+        csrf = self.token("/settings/cmts")
+        response = self.client.post("/settings/cmts", data={
+            "csrf_token": csrf, "name": "Test CMTS", "address": "192.0.2.10",
+            "port": "161", "community": "test-ro"})
+        self.assertIn("CMTS сохранена", response.text)
+        with closing(self.storage.connect()) as con:
+            row = con.execute(
+                "SELECT id,read_community FROM cmts WHERE name='Test CMTS'"
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertNotEqual(row["read_community"], "test-ro")
+        cmts_id = row["id"]
+        modem = {"cmts_id": cmts_id, "cmts_name": "Test CMTS",
+                 "mac": "cc:35:40:e8:ee:64", "mac_compact": "cc3540e8ee64",
+                 "ip": "10.19.0.223"}
+        with patch("routes_cmts.search_cmts", new_callable=AsyncMock,
+                   return_value=([modem], False)) as lookup:
+            response = self.client.get("/api/cmts/search", params={
+                "q": "CC35.40E8.EE64", "cmts_id": cmts_id})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"][0]["ip"], "10.19.0.223")
+        self.assertEqual(lookup.await_args.args[1], "cc3540e8ee64")
+        with patch("routes_cmts.resolve_mac", new_callable=AsyncMock,
+                   return_value=modem):
+            response = self.client.get(
+                f"/cmts/{cmts_id}/modems/CC35.40E8.EE64")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("10.19.0.223", response.text)
+        self.assertIn("/static/cmts.css", response.text)
+        self.assertIn('data-direct-snmp="true"', response.text)
+        self.assertEqual(self.client.get("/static/cmts.css").status_code, 200)
+        with patch("routes_cmts.basic_channels", new_callable=AsyncMock,
+                   return_value={"items": [{"id": "us", "label": "US Level",
+                                            "value": "48.5", "units": "dBmV"}],
+                                 "updated_at": 1}):
+            channels = self.client.get(
+                f"/api/cmts/{cmts_id}/modems/cc3540e8ee64/modem-channels")
+        self.assertEqual(channels.status_code, 200)
+        self.assertEqual(channels.json()["items"][0]["value"], "48.5")
+        response = self.client.post(f"/settings/cmts/{cmts_id}/delete",
+                                    data={"csrf_token": csrf})
+        self.assertIn("CMTS удалена", response.text)
+
+
 if __name__ == "__main__":
     unittest.main()

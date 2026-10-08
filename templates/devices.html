@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}{{ category }} · Zabbix Live Monitoring{% endblock %}
 {% block content %}<section class="heading"><div><h1>{{ category }}</h1></div>
-<span id="updated">—</span></section>
+<div class="device-heading-actions">{% if category == 'Modems' %}<button type="button" id="cmts-search-open" class="cmts-search-open">Расширенный поиск</button>{% endif %}<span id="updated">—</span></div></section>
 {% if not configured %}<p class="message">Для этого меню пока не задан фильтр. Администратор может выбрать группы или шаблоны в настройках.</p>{% endif %}
 <section class="panel" id="device-list" data-category="{{ category }}">
 <div class="device-toolbar">
@@ -17,6 +17,23 @@
 <button id="next-page" type="button" aria-label="Следующая страница">›</button>
 <button id="last-page" type="button" aria-label="Последняя страница">»</button>
 </div></section>
+{% if category == 'Modems' %}
+<dialog id="cmts-search-dialog" class="cmts-search-dialog" aria-labelledby="cmts-search-title">
+<div class="cmts-dialog-head"><h2 id="cmts-search-title">Поиск модема на CMTS</h2><button type="button" id="cmts-search-close" aria-label="Закрыть">×</button></div>
+<form id="cmts-search-form" class="cmts-search-form">
+<label>MAC или часть MAC<input id="cmts-mac-query" type="search" required placeholder="cc35.40e8.ee64" autocomplete="off"></label>
+<label>CMTS<select id="cmts-select"><option value="">Все CMTS</option>{% for item in cmts %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></label>
+<button type="submit">Найти</button>
+</form>
+<p id="cmts-search-status" role="status">{{ 'Введите MAC для поиска.' if cmts else 'CMTS ещё не добавлены. Администратор может добавить их в настройках.' }}</p>
+<div id="cmts-search-results" class="cmts-search-results"></div>
+</dialog>
+<dialog id="cmts-detail-dialog" class="cmts-detail-dialog" aria-label="Карточка модема">
+<div class="cmts-dialog-head"><h2>Модем</h2><button type="button" id="cmts-detail-close" aria-label="Закрыть">×</button></div>
+<iframe id="cmts-detail-frame" title="Карточка найденного модема" loading="lazy"></iframe>
+</dialog>
+<script src="{{ url_for('static', path='/cmts-search.js').path }}?v={{ asset_version }}" defer></script>
+{% endif %}
 <script>
 const category = document.getElementById("device-list").dataset.category;
 const rows = document.getElementById("rows");

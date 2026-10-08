@@ -56,6 +56,13 @@ def init_db():
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS cmts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                address TEXT NOT NULL UNIQUE,
+                port INTEGER NOT NULL DEFAULT 161 CHECK (port BETWEEN 1 AND 65535),
+                read_community TEXT
+            );
             CREATE TABLE IF NOT EXISTS activity_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 occurred_at INTEGER NOT NULL,
@@ -217,3 +224,31 @@ def _snmp_community_for(category, prefix, default):
 
 def encrypt_community(community):
     return _community_cipher.encrypt(community.encode()).decode()
+
+
+def cmts_list():
+    with closing(connect()) as con:
+        rows = con.execute("SELECT id,name,address,port,read_community FROM cmts "
+                           "ORDER BY name COLLATE NOCASE").fetchall()
+    return [{"id": row["id"], "name": row["name"],
+             "address": row["address"], "port": row["port"],
+             "community_configured": bool(row["read_community"])} for row in rows]
+
+
+def cmts_for(cmts_id):
+    with closing(connect()) as con:
+        row = con.execute("SELECT id,name,address,port,read_community FROM cmts WHERE id=?",
+                          (cmts_id,)).fetchone()
+    if row is None:
+        return None
+    result = dict(row)
+    if result["read_community"]:
+        try:
+            result["community"] = _community_cipher.decrypt(
+                result["read_community"].encode()).decode()
+        except (InvalidToken, UnicodeDecodeError) as exc:
+            raise RuntimeError("Не удалось прочитать SNMP community CMTS. Задайте её заново.") from exc
+    else:
+        result["community"] = "public"
+    del result["read_community"]
+    return result

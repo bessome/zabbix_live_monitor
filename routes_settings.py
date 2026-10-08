@@ -1,5 +1,6 @@
 """Administrative settings, Zabbix catalog and user management."""
 import asyncio
+import ipaddress
 import os
 import re
 import sqlite3
@@ -11,7 +12,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from app_config import CATEGORIES, format_display_timestamp
 from app_storage import (DEFAULT_ACTIVITY_RETENTION_DAYS, check_password,
-                         connect, encrypt_community, hash_password,
+                         cmts_list, connect, encrypt_community, hash_password,
                          purge_expired_activity, setting)
 from app_web import add_message, checked_form, render, require_admin
 from switch_monitor import DEFAULT_EXCLUDED_NAMES, parse_excluded_names
@@ -33,6 +34,72 @@ def identifier_in_use(con, username, email, excluding_id=-1):
     ).fetchone() is not None
 
 router = APIRouter()
+
+@router.get("/settings/cmts")
+def cmts_page(request: Request):
+    require_admin(request)
+    return render(request, "cmts_settings.html", cmts=cmts_list())
+
+
+@router.post("/settings/cmts")
+async def save_cmts(request: Request):
+    require_admin(request)
+    form = await checked_form(request)
+    name = str(form.get("name", "")).strip()
+    address = str(form.get("address", "")).strip()
+    community = str(form.get("community", ""))
+    try:
+        port = int(str(form.get("port", "161")))
+        try:
+            address = str(ipaddress.ip_address(address))
+        except ValueError as exc:
+            raise ValueError("Укажите корректный IP-адрес CMTS.") from exc
+        if not name or len(name) > 80 or any(ord(c) < 32 for c in name):
+            raise ValueError("Укажите имя CMTS до 80 символов.")
+        if not 1 <= port <= 65535:
+            raise ValueError("Порт SNMP должен быть от 1 до 65535.")
+        if len(community) > 128 or any(ord(c) < 32 for c in community):
+            raise ValueError("Неверная SNMP community.")
+    except ValueError as exc:
+        add_message(request, str(exc) if str(exc) else "Неверный адрес CMTS.", "error")
+        return RedirectResponse("/settings/cmts", status_code=303)
+    raw_id = str(form.get("cmts_id", "")).strip()
+    if raw_id and not raw_id.isdecimal():
+        raise HTTPException(400)
+    encrypted = encrypt_community(community) if community else None
+    try:
+        with closing(connect()) as con:
+            if raw_id:
+                if not con.execute("SELECT 1 FROM cmts WHERE id=?", (int(raw_id),)).fetchone():
+                    raise HTTPException(404)
+                con.execute(
+                    "UPDATE cmts SET name=?,address=?,port=?,"
+                    "read_community=CASE WHEN ? THEN NULL ELSE COALESCE(?,read_community) END "
+                    "WHERE id=?",
+                    (name, address, port, form.get("clear_community") == "1",
+                     encrypted, int(raw_id)))
+            else:
+                con.execute(
+                    "INSERT INTO cmts(name,address,port,read_community) VALUES (?,?,?,?)",
+                    (name, address, port, encrypted))
+            con.commit()
+    except sqlite3.IntegrityError:
+        add_message(request, "CMTS с таким именем или адресом уже добавлена.", "error")
+        return RedirectResponse("/settings/cmts", status_code=303)
+    add_message(request, "CMTS сохранена.")
+    return RedirectResponse("/settings/cmts", status_code=303)
+
+
+@router.post("/settings/cmts/{cmts_id}/delete")
+async def delete_cmts(request: Request, cmts_id: int):
+    require_admin(request)
+    await checked_form(request)
+    with closing(connect()) as con:
+        con.execute("DELETE FROM cmts WHERE id=?", (cmts_id,))
+        con.commit()
+    add_message(request, "CMTS удалена.")
+    return RedirectResponse("/settings/cmts", status_code=303)
+
 
 @router.get("/settings")
 def settings_page(request: Request):

@@ -7,7 +7,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app_storage import (favorite_devices_for, favorite_ids_for,
+from app_storage import (cmts_list, favorite_devices_for, favorite_ids_for,
                          recent_devices_for, record_recent_device, remove_favorite,
                          save_favorite, setting, snmp_community_for,
                          snmp_write_community_for)
@@ -113,7 +113,8 @@ def devices(request: Request, category: str):
     require_user(request)
     mode, ids = category_filter(category)
     return render(request, "devices.html", category=category,
-                   mode=mode, configured=bool(ids))
+                   mode=mode, configured=bool(ids),
+                   cmts=cmts_list() if category == "Modems" else [])
 
 
 @router.get("/favorites")

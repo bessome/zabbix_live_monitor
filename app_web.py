@@ -58,6 +58,7 @@ def render(request, name, **context):
             "/": "Главная", "/favorites": "Избранное и история",
             "/profile": "Мои настройки",
             "/settings": "Настройки приложения",
+            "/settings/cmts": "CMTS",
             "/settings/users": "Пользователи",
             "/settings/activity": "Журнал посещений",
         }.get(path)
@@ -65,6 +66,8 @@ def render(request, name, **context):
             category = path.split("/")[2]
             device = context.get("device")
             section = category if device is None else f"{category} / {device['name']}"
+        if section is None and path.startswith("/cmts/"):
+            section = "Modems / поиск CMTS"
         record_activity(current_user, "view", (section or path)[:160], path[:300])
     return templates.TemplateResponse(
         request=request, name=name,

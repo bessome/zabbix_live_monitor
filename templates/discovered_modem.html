@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru" data-theme="{{ current_user.theme }}" data-timezone="{{ display_timezone }}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ modem.mac }} · Zabbix Live Monitoring</title>
+<link rel="stylesheet" href="/static/style.css?v={{ asset_version }}">
+<link rel="stylesheet" href="/static/mobile.css?v={{ asset_version }}">
+<link rel="stylesheet" href="/static/ping.css?v={{ asset_version }}">
+<link rel="stylesheet" href="/static/theme.css?v={{ asset_version }}">
+<link rel="stylesheet" href="/static/cmts.css?v={{ asset_version }}">
+</head>
+<body><main class="discovered-card">
+<div class="discovered-title"><div><h1>{{ modem.ip or 'IP неизвестен' }}</h1><p>{{ modem.mac }} · {{ modem.cmts_name }}</p></div>
+{% if modem.ip %}<a href="http://{{ modem.ip }}" target="_blank" rel="noopener noreferrer" title="Открыть интерфейс модема">↗</a>{% endif %}</div>
+{% if modem.ip %}
+<section class="panel ping-panel" id="ping-monitor" data-api-base="/api/cmts/{{ modem.cmts_id }}/modems/{{ modem.mac_compact }}">
+<div class="ping-heading"><h2>Пинг устройства</h2><span id="ping-state" class="ping-state">Ожидание…</span></div>
+<div class="ping-chart"><canvas id="ping-canvas" role="img" aria-label="Пинг за последнюю минуту"></canvas>
+<div class="ping-overlay" aria-label="Текущая статистика пинга">
+<div><small>Сейч</small><strong id="ping-current">—</strong><span class="ping-unit">мс</span></div>
+<div><small>Мин</small><strong id="ping-min">—</strong></div>
+<div><small>Ср</small><strong id="ping-avg">—</strong></div>
+<div><small>Макс</small><strong id="ping-max">—</strong></div>
+<div><span class="ping-loss-trigger"><small>Пот</small><strong id="ping-loss">—</strong></span></div>
+</div></div>
+<div class="ping-legend"><span><i class="ping-line"></i>RTT</span><span><i class="ping-loss-mark"></i>Loss</span><span title="SNMP sysUpTime">Uptime <strong id="ping-uptime">n/a</strong></span></div>
+<p id="ping-message" aria-live="polite">Ожидание первого результата…</p>
+</section>
+<section class="panel modem-panel" id="modem-monitor" data-direct-snmp="true" data-api-base="/api/cmts/{{ modem.cmts_id }}/modems/{{ modem.mac_compact }}">
+<h2>Каналы модема</h2>
+<p id="modem-state" class="modem-state" aria-live="polite">Загрузка каналов…</p>
+<div id="modem-channels" class="modem-channels"></div>
+</section>
+<script src="/static/ping.js?v={{ asset_version }}" defer></script>
+<script src="/static/modem.js?v={{ asset_version }}" defer></script>
+{% else %}<p class="message">CMTS видит модем, но пока не знает его IP-адрес.</p>{% endif %}
+</main></body></html>

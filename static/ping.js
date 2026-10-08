@@ -14,8 +14,8 @@
     message: document.getElementById("ping-message")
   };
   const currentUnit = root.querySelector(".ping-unit");
-  const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
-    + "/" + encodeURIComponent(root.dataset.hostId) + "/ping";
+  const url = (root.dataset.apiBase || ("/api/devices/" + encodeURIComponent(root.dataset.category)
+    + "/" + encodeURIComponent(root.dataset.hostId))) + "/ping";
   const uptimeUrl = url.replace(/\/ping$/, "/uptime");
   let latest = null;
   let inFlight = false;

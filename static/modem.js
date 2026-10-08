@@ -6,8 +6,9 @@
   const restartButton = document.getElementById("modem-restarts");
   const restartValue = document.getElementById("modem-restarts-value");
   const dailyRestarts = document.getElementById("modem-restarts-daily");
-  const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
-    + "/" + encodeURIComponent(root.dataset.hostId) + "/modem-channels";
+  const direct = root.dataset.directSnmp === "true";
+  const url = (root.dataset.apiBase || ("/api/devices/" + encodeURIComponent(root.dataset.category)
+    + "/" + encodeURIComponent(root.dataset.hostId))) + "/modem-channels";
   const restartUrl = url.replace(/\/modem-channels$/, "/modem-restarts");
   let signature = "";
   let inFlight = false;
@@ -31,12 +32,12 @@
           list.appendChild(heading);
           currentGroup = group;
         }
-        const row = document.createElement("button");
-        row.type = "button";
+        const row = document.createElement(direct ? "div" : "button");
+        if (!direct) row.type = "button";
         row.className = "modem-row";
         if ("error_rate" in item) row.classList.add("modem-row-with-errors");
         row.dataset.itemId = item.id;
-        row.title = "Открыть график Zabbix за последний час";
+        row.title = direct ? "Текущие данные SNMP" : "Открыть график Zabbix за последний час";
         const label = document.createElement("span");
         label.textContent = item.label;
         label.className = item.label.startsWith("US") ? "modem-label-us"
@@ -178,6 +179,8 @@
 
   refresh();
   setInterval(refresh, 5000);
-  refreshRestarts();
-  setInterval(refreshRestarts, 15000);
+  if (!direct) {
+    refreshRestarts();
+    setInterval(refreshRestarts, 15000);
+  }
 })();

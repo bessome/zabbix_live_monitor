@@ -1,0 +1,27 @@
+.cmts-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}
+.cmts-form label{margin:0}.cmts-form button{align-self:end}
+.cmts-delete{margin-top:14px;background:#9a3434}
+.cmts-search-open{white-space:nowrap}
+.cmts-search-dialog,.cmts-detail-dialog{border:1px solid #aab7c5;border-radius:12px;background:var(--panel-bg,#fff);color:inherit;padding:16px;width:min(760px,calc(100vw - 20px));max-height:calc(100dvh - 24px)}
+.cmts-search-dialog::backdrop,.cmts-detail-dialog::backdrop{background:#0b1725b0}
+.cmts-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cmts-dialog-head h2{margin:0}.cmts-dialog-head button{font-size:22px;line-height:1;padding:4px 10px}
+.cmts-search-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(115px,180px) auto;gap:8px;margin:14px 0}
+.cmts-search-form label{margin:0;font-size:13px}.cmts-search-form input,.cmts-search-form select{margin-top:3px}
+.cmts-search-form button{align-self:end;white-space:nowrap}
+.cmts-search-results{max-height:55dvh;overflow:auto}
+.cmts-result{display:flex;width:100%;justify-content:space-between;gap:8px;background:transparent;color:inherit;border-bottom:1px solid #ccd7e1;border-radius:0;text-align:left;padding:11px 6px}
+.cmts-result:hover{background:#e8f2fa;color:#142638}
+.cmts-result small{color:#697b8b}.cmts-result:disabled{opacity:.55;cursor:default}
+.cmts-detail-dialog{width:min(950px,calc(100vw - 12px));height:calc(100dvh - 24px);max-height:none;display:none;flex-direction:column}
+.cmts-detail-dialog[open]{display:flex}.cmts-detail-dialog iframe{border:0;width:100%;flex:1;min-height:0}
+.discovered-card{max-width:950px;margin:0 auto;padding:12px}
+.discovered-card .panel{margin:10px 0;padding:14px}
+.discovered-title{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.discovered-title h1{font-size:20px;margin:0}.discovered-title p{margin:0;color:#718093}
+.discovered-title a{font-size:22px;text-decoration:none}
+html[data-theme="dark"] .cmts-search-dialog,html[data-theme="dark"] .cmts-detail-dialog{background:#172638;border-color:#41566a}
+html[data-theme="dark"] .cmts-result:hover{background:#28435b;color:#fff}
+@media(max-width:600px){.cmts-search-form{grid-template-columns:minmax(0,1fr) 105px}.cmts-search-form button{grid-column:1/-1}.cmts-result{flex-direction:column;gap:2px}.cmts-search-dialog,.cmts-detail-dialog{padding:10px}}
+
+.device-heading-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
