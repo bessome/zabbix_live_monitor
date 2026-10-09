@@ -670,6 +670,17 @@ class AppTests(unittest.TestCase):
             ("US1 Level", "1"), ("DS3 Level", "4"), ("DS3 SNR", "5"),
             ("DS3 ErrorRate", "6"), ("Loss", "9")])
         self.assertEqual(missing, [])
+        later_upstreams = [item("16", "US6 Level", "level", 6),
+                           item("15", "US5 Level", "level", 5), *multi[2:]]
+        mode, selected, missing = self.zabbix.modem_overview_definitions(later_upstreams, loss)
+        self.assertEqual(mode, "multi")
+        self.assertEqual((selected[0]["label"], selected[0]["item"]["id"]),
+                         ("US5 Level", "15"))
+        self.assertEqual(missing, [])
+        mixed_upstreams = [later_upstreams[0], multi[0], later_upstreams[1], *multi[2:]]
+        _, selected, _ = self.zabbix.modem_overview_definitions(mixed_upstreams, loss)
+        self.assertEqual((selected[0]["label"], selected[0]["item"]["id"]),
+                         ("US1 Level", "1"))
         generic = [item("11", "US Level", "level", 0),
                    item("12", "DS Level", "level", None),
                    item("13", "DS SNR", "snr", None, error_rate_id="14"),
@@ -734,6 +745,10 @@ class AppTests(unittest.TestCase):
             self.assertIn('id="modem-overview-open"', detail.text)
             self.assertIn('/static/modem-overview.js', detail.text)
             self.assertEqual(self.client.get('/static/modem-overview.js').status_code, 200)
+            self.assertIn('id="victor-open"', detail.text)
+            self.assertIn('id="victor-dialog"', detail.text)
+            self.assertRegex(detail.text, r'src="/static/victor\.js\?v=\d+"')
+            self.assertEqual(self.client.get('/static/victor.js').status_code, 200)
 
     def test_modem_restarts_use_latest_zabbix_item_and_guard_history(self):
         path = "/api/devices/Modems/42/modem-restarts"

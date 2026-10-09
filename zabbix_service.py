@@ -137,15 +137,19 @@ def modem_channel_definitions(host_id):
 
 
 def modem_overview_definitions(definitions, loss_item):
-    """Pick the requested single-channel or US1/DS3 modem graph items."""
+    """Pick the first numbered upstream and DS3, or generic modem graph items."""
     by_id = {item["id"]: item for item in definitions}
     multi = any(item.get("channel") is not None
                 and item.get("label", "").startswith("DS")
                 and item.get("metric") in ("level", "snr")
                 for item in definitions)
     if multi:
-        upstream = next((item for item in definitions
-                         if item.get("label") == "US1 Level"), None)
+        upstream = min((item for item in definitions
+                        if item.get("label", "").startswith("US")
+                        and item.get("metric") == "level"
+                        and isinstance(item.get("channel"), int)
+                        and item["channel"] > 0),
+                       key=lambda item: item["channel"], default=None)
         snr = next((item for item in definitions
                     if item.get("channel") == 3 and item.get("metric") == "snr"), None)
         levels = [item for item in definitions
@@ -153,7 +157,8 @@ def modem_overview_definitions(definitions, loss_item):
         level = next((item for item in levels
                       if snr and item.get("frequency") == snr.get("frequency")),
                      levels[0] if levels else None)
-        names = ("US1 Level", "DS3 Level", "DS3 SNR", "DS3 ErrorRate")
+        names = (upstream["label"] if upstream else "US Level",
+                 "DS3 Level", "DS3 SNR", "DS3 ErrorRate")
     else:
         upstream = next((item for item in definitions
                          if item.get("label") == "US Level"), None)

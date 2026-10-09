@@ -43,6 +43,8 @@
 .modem-restarts:focus-visible{outline:2px solid #176cad;outline-offset:2px}
 .modem-restarts strong{font-variant-numeric:tabular-nums}
 .modem-overview-button{min-height:34px;margin-bottom:8px;padding:6px 11px;font-size:13px;font-weight:700}
+.modem-graph-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.modem-graph-actions .modem-overview-button{margin-bottom:0}
 .modem-error-rate{font-size:.85em;font-weight:600;white-space:nowrap}
 .modem-number{display:inline-block;border-radius:3px}
 .modem-number.modem-value-changed{animation:modem-value-pulse .8s ease-in-out infinite alternate}
@@ -82,6 +84,19 @@
 .modem-overview-legend-item i.loss-swatch{border-radius:2px}
 .modem-overview-legend-item span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .modem-overview-legend-item strong{font-variant-numeric:tabular-nums;white-space:nowrap}
+.victor-dialog{width:min(92vw,1400px);background:#f3f3f3;color:#202020}
+.victor-dialog .modem-history-heading h2{min-width:0;overflow-wrap:anywhere;font:500 clamp(16px,2vw,21px)/1.35 Consolas,monospace}
+.victor-dialog .modem-history-periods{margin:14px 0 8px}
+.victor-dialog #victor-status{min-height:18px;margin:0 0 5px;font-size:12px;color:#555}
+.victor-chart{border:1px solid #c9c9c9;background:#fff}
+.victor-chart canvas{display:block;width:100%;height:clamp(280px,48dvh,520px)}
+.victor-legend{margin-top:12px;font:12px/1.5 Consolas,monospace}
+.victor-legend-row{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:8px;align-items:center}
+.victor-legend-swatch{width:11px;height:11px;border:1px solid #333}
+.victor-legend-name{min-width:0;overflow-wrap:anywhere}
+.victor-legend-values{display:grid;grid-template-columns:repeat(3,82px);gap:8px;text-align:right;font-variant-numeric:tabular-nums}
+html[data-theme="dark"] .modem-history-dialog.victor-dialog{background:#e9e9e9;color:#202020;border-color:#9b9b9b}
+html[data-theme="dark"] .victor-dialog #victor-status{color:#555}
 .modem-history-chart{width:100%;border:1px solid #dce6ef;border-radius:6px}
 .modem-history-chart canvas{display:block;width:100%;height:clamp(300px,52dvh,520px)}
 .modem-history-stats{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:9px;font-size:12px;font-variant-numeric:tabular-nums}
@@ -104,6 +119,9 @@
   .modem-row>span{display:block;font-size:12px;line-height:1.25}
   .modem-row strong{display:block;font-size:14px;line-height:1.3}
   .modem-history-dialog{width:min(420px,calc(100vw - 24px));padding:12px}
+  .victor-chart canvas{height:clamp(220px,35dvh,340px)}
+  .victor-legend-row{grid-template-columns:12px minmax(0,1fr);gap:2px 7px;margin-bottom:7px}
+  .victor-legend-values{grid-column:2;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;text-align:left;font-size:11px}
   .modem-overview-legend{grid-template-columns:1fr;gap:5px}
   .modem-history-chart.modem-overview-chart canvas{height:220px}
   .modem-overview-dialog{padding:12px}
