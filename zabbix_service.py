@@ -22,6 +22,7 @@ _optical_items_cache = {}
 _ping_loss_items_cache = {}
 _olt_hosts_cache = None
 _olt_items_cache = {}
+_OLT_ITEM_MARKERS = ("ONU OPT RX", "OLT Status interface", "OLT Optical RX")
 _cache_lock = threading.Lock()
 _search_letters = str.maketrans({"ä": "a", "ö": "o", "õ": "o", "ü": "u"})
 
@@ -350,11 +351,11 @@ def normalize_olt_item_search(value):
 
 def is_olt_target_item(name):
     folded = " ".join(name.casefold().split())
-    return "onu opt rx" in folded or "olt status interface" in folded
+    return any(marker.casefold() in folded for marker in _OLT_ITEM_MARKERS)
 
 
 def olt_items(host_ids, query, limit=100):
-    """Find only the two ONU-related item types by a partial MAC."""
+    """Find the ONU/OLT optical and status items by a partial MAC."""
     if not host_ids:
         return [], False
     needle = normalize_olt_item_search(query)
@@ -369,7 +370,7 @@ def olt_items(host_ids, query, limit=100):
             candidates = None
     if candidates is None:
         by_id = {}
-        for marker in ("ONU OPT RX", "OLT Status interface"):
+        for marker in _OLT_ITEM_MARKERS:
             items = zabbix_call("item.get", {
                 "output": ["itemid", "hostid", "name", "key_", "status",
                            "value_type", "units", "lastvalue", "lastclock"],

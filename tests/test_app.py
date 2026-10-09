@@ -133,6 +133,11 @@ class AppTests(unittest.TestCase):
                 self.assertEqual(api.call_args.args[1]["hostids"], ["10"])
                 self.assertEqual(api.call_args.args[1]["itemids"], ["55"])
                 self.assertEqual(history.await_args.args[1], "1h")
+            with (patch("routes_onu.zabbix_call", return_value=[{
+                    **item, "name": "OLT Optical RX 70 A5 6A AD C2 EE"}]),
+                  patch("routes_onu.numeric_history", new_callable=AsyncMock,
+                        return_value={"points": [], "label": "OLT Optical RX"})):
+                self.assertEqual(self.client.get(history_path).status_code, 200)
             with patch("routes_onu.zabbix_call", return_value=[{**item, "hostid": "11"}]):
                 self.assertEqual(self.client.get(history_path).status_code, 404)
             with patch("routes_onu.zabbix_call", return_value=[{**item, "value_type": "4"}]):
@@ -147,20 +152,22 @@ class AppTests(unittest.TestCase):
               "key_": "onu.rx[70A56AADC2EE]"}
         status = {"itemid": "2", "name": "OLT Status interface 70:A5:6A:AD:C2:EE",
                   "key_": "olt.status[70A56AADC2EE]"}
+        optical = {"itemid": "4", "name": "OLT Optical RX 70A56AADC2EE",
+                   "key_": "olt.optical.rx[70A56AADC2EE]"}
         unrelated = {"itemid": "3", "name": "ONU Voltage 70 A5 6A AD C2 EE",
                      "key_": "onu.voltage[70A56AADC2EE]"}
         with patch("zabbix_service.zabbix_call",
-                   side_effect=[[host], [rx, unrelated], [status]]) as api:
+                   side_effect=[[host], [rx, unrelated], [status], [optical]]) as api:
             self.assertEqual(self.zabbix.olt_hosts()[0]["name"], "OLT A")
             for query in ("70 A5 6A AD C2 EE", "70A56AADC2EE", "A5 6A", "A56A"):
                 rows, more = self.zabbix.olt_items(["10"], query)
-                self.assertEqual({row["itemid"] for row in rows}, {"1", "2"})
+                self.assertEqual({row["itemid"] for row in rows}, {"1", "2", "4"})
                 self.assertFalse(more)
             self.assertEqual(self.zabbix.olt_items(["10"], "ONU"), ([], False))
         self.assertEqual(api.call_args_list[0].args[1]["groupids"], ["100"])
-        self.assertEqual(api.call_count, 3)
+        self.assertEqual(api.call_count, 4)
         self.assertEqual([call.args[1]["search"]["name"] for call in api.call_args_list[1:]],
-                         ["ONU OPT RX", "OLT Status interface"])
+                         ["ONU OPT RX", "OLT Status interface", "OLT Optical RX"])
         self.assertTrue(all(call.args[1]["hostids"] == ["10"]
                             for call in api.call_args_list[1:]))
         self.zabbix.clear_caches()
