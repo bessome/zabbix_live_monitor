@@ -103,24 +103,26 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.get("/static/onu.js").status_code, 200)
         hosts = [{"id": "10", "name": "OLT A", "technical_name": "olt-a"},
                  {"id": "11", "name": "OLT B", "technical_name": "olt-b"}]
-        item = {"itemid": "55", "hostid": "10", "name": "ONU 123 RX power",
-                "key_": "onu.rx[123]", "units": "dBm", "lastvalue": "-22.3",
+        item = {"itemid": "55", "hostid": "10", "name": "ONU OPT RX 70 A5 6A AD C2 EE",
+                "key_": "onu.rx[70A56AADC2EE]", "units": "dBm", "lastvalue": "-22.3",
                 "lastclock": "1799999990", "value_type": "0", "status": "0"}
         with (patch("routes_onu.olt_hosts", return_value=hosts),
               patch("routes_onu.olt_items", return_value=([item], False)) as search):
             self.assertEqual(len(self.client.get("/api/onu-ont/olts").json()["olts"]), 2)
-            self.assertIn("Введите не менее двух", self.client.get(
+            self.assertIn("Введите минимум два", self.client.get(
                 "/api/onu-ont/items").json()["hint"])
+            self.assertIn("Введите минимум два", self.client.get(
+                "/api/onu-ont/items?q=ONU").json()["hint"])
             self.assertEqual(self.client.get(
                 "/api/onu-ont/items?host_id=99&q=onu").status_code, 404)
-            found = self.client.get("/api/onu-ont/items?host_id=10&q=123")
+            found = self.client.get("/api/onu-ont/items?host_id=10&q=70%20A5")
             self.assertEqual(found.status_code, 200)
-            self.assertEqual(search.call_args.args, (["10"], "123"))
-            self.assertEqual(found.json()["items"][0]["name"], "ONU 123 RX power")
+            self.assertEqual(search.call_args.args, (["10"], "70 A5"))
+            self.assertEqual(found.json()["items"][0]["name"], item["name"])
             self.assertTrue(found.json()["items"][0]["numeric"])
             with patch("routes_onu.olt_items", return_value=([{**item, "hostid": "11"}], False)):
                 self.assertEqual(self.client.get(
-                    "/api/onu-ont/items?host_id=10&q=123").json()["items"], [])
+                    "/api/onu-ont/items?host_id=10&q=70A5").json()["items"], [])
             history_path = "/api/onu-ont/olts/10/items/55/history"
             self.assertEqual(self.client.get(history_path.replace("/10/", "/99/")).status_code, 404)
             self.assertEqual(self.client.get(history_path + "?period=7d").status_code, 422)
@@ -135,18 +137,32 @@ class AppTests(unittest.TestCase):
                 self.assertEqual(self.client.get(history_path).status_code, 404)
             with patch("routes_onu.zabbix_call", return_value=[{**item, "value_type": "4"}]):
                 self.assertEqual(self.client.get(history_path).status_code, 404)
+            with patch("routes_onu.zabbix_call", return_value=[{**item, "name": "ONU Voltage"}]):
+                self.assertEqual(self.client.get(history_path).status_code, 404)
 
-    def test_olt_lookup_uses_group_100_and_searches_item_name_or_key(self):
+    def test_olt_lookup_matches_partial_mac_with_or_without_spaces(self):
         self.zabbix.clear_caches()
         host = {"hostid": "10", "host": "olt-a", "name": "OLT A"}
-        with patch("zabbix_service.zabbix_call", side_effect=[[host], []]) as api:
+        rx = {"itemid": "1", "name": "ONU OPT RX 70 A5 6A AD C2 EE",
+              "key_": "onu.rx[70A56AADC2EE]"}
+        status = {"itemid": "2", "name": "OLT Status interface 70:A5:6A:AD:C2:EE",
+                  "key_": "olt.status[70A56AADC2EE]"}
+        unrelated = {"itemid": "3", "name": "ONU Voltage 70 A5 6A AD C2 EE",
+                     "key_": "onu.voltage[70A56AADC2EE]"}
+        with patch("zabbix_service.zabbix_call",
+                   side_effect=[[host], [rx, unrelated], [status]]) as api:
             self.assertEqual(self.zabbix.olt_hosts()[0]["name"], "OLT A")
-            self.zabbix.olt_items(["10"], "ONU-123")
+            for query in ("70 A5 6A AD C2 EE", "70A56AADC2EE", "A5 6A", "A56A"):
+                rows, more = self.zabbix.olt_items(["10"], query)
+                self.assertEqual({row["itemid"] for row in rows}, {"1", "2"})
+                self.assertFalse(more)
+            self.assertEqual(self.zabbix.olt_items(["10"], "ONU"), ([], False))
         self.assertEqual(api.call_args_list[0].args[1]["groupids"], ["100"])
-        params = api.call_args_list[1].args[1]
-        self.assertEqual(params["hostids"], ["10"])
-        self.assertEqual(params["search"], {"name": "ONU-123", "key_": "ONU-123"})
-        self.assertTrue(params["searchByAny"])
+        self.assertEqual(api.call_count, 3)
+        self.assertEqual([call.args[1]["search"]["name"] for call in api.call_args_list[1:]],
+                         ["ONU OPT RX", "OLT Status interface"])
+        self.assertTrue(all(call.args[1]["hostids"] == ["10"]
+                            for call in api.call_args_list[1:]))
         self.zabbix.clear_caches()
 
     def test_favorites_are_personal_and_recent_history_keeps_last_fifteen(self):

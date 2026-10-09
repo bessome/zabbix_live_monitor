@@ -21,6 +21,7 @@ _modem_restarts_daily_cache = {}
 _optical_items_cache = {}
 _ping_loss_items_cache = {}
 _olt_hosts_cache = None
+_olt_items_cache = {}
 _cache_lock = threading.Lock()
 _search_letters = str.maketrans({"ä": "a", "ö": "o", "õ": "o", "ü": "u"})
 
@@ -337,21 +338,55 @@ def olt_hosts():
     return rows
 
 
+def _compact_olt_text(value):
+    return re.sub(r"[^0-9a-z]", "", value.casefold())
+
+
+def normalize_olt_item_search(value):
+    """Accept a partial hexadecimal MAC with optional separators."""
+    compact = _compact_olt_text(value)
+    return compact if re.fullmatch(r"[0-9a-f]+", compact) else ""
+
+
+def is_olt_target_item(name):
+    folded = " ".join(name.casefold().split())
+    return "onu opt rx" in folded or "olt status interface" in folded
+
+
 def olt_items(host_ids, query, limit=100):
-    """Search item names and keys within already validated OLT host IDs."""
+    """Find only the two ONU-related item types by a partial MAC."""
     if not host_ids:
         return [], False
-    params = {
-        "output": ["itemid", "hostid", "name", "key_", "status",
-                   "value_type", "units", "lastvalue", "lastclock"],
-        "hostids": host_ids, "filter": {"status": "0"},
-        "sortfield": "name", "sortorder": "ASC", "limit": limit + 1,
-    }
-    if query:
-        params["search"] = {"name": query, "key_": query}
-        params["searchByAny"] = True
-    items = zabbix_call("item.get", params)
-    return items[:limit], len(items) > limit
+    needle = normalize_olt_item_search(query)
+    if len(needle) < 2:
+        return [], False
+    cache_key = tuple(sorted(host_ids))
+    with _cache_lock:
+        cached = _olt_items_cache.get(cache_key)
+        if cached and time.monotonic() - cached[0] < 30:
+            candidates = cached[1]
+        else:
+            candidates = None
+    if candidates is None:
+        by_id = {}
+        for marker in ("ONU OPT RX", "OLT Status interface"):
+            items = zabbix_call("item.get", {
+                "output": ["itemid", "hostid", "name", "key_", "status",
+                           "value_type", "units", "lastvalue", "lastclock"],
+                "hostids": host_ids, "filter": {"status": "0"},
+                "search": {"name": marker},
+            })
+            for item in items:
+                if is_olt_target_item(item.get("name", "")):
+                    by_id[str(item["itemid"])] = item
+        candidates = list(by_id.values())
+        with _cache_lock:
+            _olt_items_cache[cache_key] = (time.monotonic(), candidates)
+    matches = [item for item in candidates
+               if needle in _compact_olt_text(item.get("name", ""))
+               or needle in _compact_olt_text(item.get("key_", ""))]
+    matches.sort(key=lambda item: (item.get("name", "").casefold(), str(item["itemid"])))
+    return matches[:limit], len(matches) > limit
 
 
 def clear_caches():
@@ -365,3 +400,4 @@ def clear_caches():
         _optical_items_cache.clear()
         _ping_loss_items_cache.clear()
         _olt_hosts_cache = None
+        _olt_items_cache.clear()

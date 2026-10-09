@@ -6,7 +6,8 @@ from fastapi.responses import JSONResponse
 
 from app_web import render, require_user
 from routes_devices import HISTORY_PERIODS, numeric_history
-from zabbix_service import olt_hosts, olt_items, zabbix_call
+from zabbix_service import (is_olt_target_item, normalize_olt_item_search,
+                            olt_hosts, olt_items, zabbix_call)
 
 router = APIRouter()
 
@@ -38,9 +39,9 @@ async def onu_items(request: Request, q: str = "", host_id: str = ""):
         visible = {host["id"]: host for host in hosts}
         if host_id and host_id not in visible:
             raise HTTPException(404)
-        if not host_id and len(query) < 2:
+        if len(normalize_olt_item_search(query)) < 2:
             return JSONResponse({"items": [], "has_more": False,
-                                 "hint": "Введите не менее двух символов или выберите OLT."},
+                                 "hint": "Введите минимум два символа MAC-адреса."},
                                 headers={"Cache-Control": "no-store"})
         host_ids = [host_id] if host_id else list(visible)
         items, has_more = await asyncio.to_thread(olt_items, host_ids, query)
@@ -49,7 +50,8 @@ async def onu_items(request: Request, q: str = "", host_id: str = ""):
     result = []
     for item in items:
         host = visible.get(str(item.get("hostid")))
-        if not host or (host_id and host["id"] != host_id):
+        if (not host or (host_id and host["id"] != host_id)
+                or not is_olt_target_item(item.get("name", ""))):
             continue
         updated_at = int(item.get("lastclock") or 0)
         result.append({
@@ -81,6 +83,7 @@ async def onu_item_history(request: Request, host_id: str, item_id: str,
         item = next((row for row in items if str(row.get("itemid")) == item_id
                      and str(row.get("hostid")) == host_id
                      and str(row.get("status")) == "0"
+                     and is_olt_target_item(row.get("name", ""))
                      and str(row.get("value_type")) in ("0", "3")), None)
         if item is None:
             raise HTTPException(404)
