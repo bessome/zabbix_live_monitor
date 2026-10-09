@@ -64,7 +64,7 @@
 @media(prefers-reduced-motion:reduce){.modem-number.modem-value-changed{animation:none;background:#e3a23355}}
 .snmp-clear{display:flex;align-items:center;gap:8px;font-weight:400}
 .snmp-clear input{width:20px;height:20px;margin:0;flex:none}
-.modem-history-dialog{width:min(760px,calc(100% - 24px));max-height:calc(100dvh - 24px);padding:16px;border:1px solid #cbd7e3;border-radius:10px;background:#fff;color:#172333;box-shadow:0 16px 50px #10192355}
+.modem-history-dialog{width:min(88vw,1400px);max-height:calc(100dvh - 24px);overflow:auto;padding:20px;border:1px solid #cbd7e3;border-radius:10px;background:#fff;color:#172333;box-shadow:0 16px 50px #10192355}
 .modem-history-dialog::backdrop{background:#101923aa}
 .modem-history-heading{display:flex;align-items:start;justify-content:space-between;gap:10px}
 .modem-history-heading h2{margin:0}
@@ -73,9 +73,9 @@
 .modem-history-periods button{min-width:48px;padding:6px 10px;background:#e7edf3;color:#435a70;font-size:13px;font-weight:700}
 .modem-history-periods button[aria-pressed="true"]{background:#176cad;color:#fff}
 #modem-history-status{min-height:20px;margin:0 0 5px;color:#607185;font-size:13px}
-.modem-overview-dialog{width:min(900px,calc(100% - 24px))}
+.modem-overview-dialog{width:min(92vw,1600px)}
 #modem-overview-status{min-height:20px;margin:0 0 7px;color:#607185;font-size:12px}
-.modem-history-chart.modem-overview-chart canvas{height:300px}
+.modem-history-chart.modem-overview-chart canvas{height:clamp(320px,56dvh,580px)}
 .modem-overview-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:9px}
 .modem-overview-legend-item{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:6px;min-width:0;font-size:12px}
 .modem-overview-legend-item i{display:block;width:10px;height:10px;border-radius:50%}
@@ -83,7 +83,7 @@
 .modem-overview-legend-item span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .modem-overview-legend-item strong{font-variant-numeric:tabular-nums;white-space:nowrap}
 .modem-history-chart{width:100%;border:1px solid #dce6ef;border-radius:6px}
-.modem-history-chart canvas{display:block;width:100%;height:260px}
+.modem-history-chart canvas{display:block;width:100%;height:clamp(300px,52dvh,520px)}
 .modem-history-stats{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:9px;font-size:12px;font-variant-numeric:tabular-nums}
 .modem-history-stats span{white-space:nowrap}
 .history-error-stat{color:#a86400;font-weight:700}
@@ -103,7 +103,7 @@
   .modem-row{display:block;min-width:0;padding:4px 0}
   .modem-row>span{display:block;font-size:12px;line-height:1.25}
   .modem-row strong{display:block;font-size:14px;line-height:1.3}
-  .modem-history-dialog{padding:12px}
+  .modem-history-dialog{width:min(420px,calc(100vw - 24px));padding:12px}
   .modem-overview-legend{grid-template-columns:1fr;gap:5px}
   .modem-history-chart.modem-overview-chart canvas{height:220px}
   .modem-overview-dialog{padding:12px}
