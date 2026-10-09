@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}ONU/ONT · Zabbix Live Monitoring{% endblock %}
+{% block content %}
+<section class="heading"><h1>ONU/ONT</h1></section>
+<section class="panel" id="onu-monitor">
+<div class="onu-toolbar">
+<label>Поиск item по имени или ключу<input id="onu-query" type="search" placeholder="ONU, ONT, серийный номер или ключ" autocomplete="off"></label>
+<label>OLT<select id="onu-olt"><option value="">Все OLT</option></select></label>
+</div>
+<p id="onu-status" role="status">Загрузка OLT из Zabbix…</p>
+<div class="table-wrap"><table class="onu-table"><thead><tr><th>Item</th><th>OLT</th><th>Значение</th><th>Обновлено</th><th></th></tr></thead><tbody id="onu-rows"></tbody></table></div>
+</section>
+<dialog id="onu-history-dialog" class="modem-history-dialog" aria-labelledby="onu-history-title">
+<div class="modem-history-heading"><h2 id="onu-history-title">История item</h2><button type="button" id="onu-history-close" aria-label="Закрыть график">×</button></div>
+<div id="onu-history-periods" class="modem-history-periods" role="group" aria-label="Период графика">
+<button type="button" data-period="1h" aria-pressed="true">1h</button><button type="button" data-period="12h" aria-pressed="false">12h</button><button type="button" data-period="24h" aria-pressed="false">24h</button><button type="button" data-period="2d" aria-pressed="false">2d</button><button type="button" data-period="14d" aria-pressed="false">14d</button>
+</div>
+<p id="onu-history-status" role="status">Загрузка…</p>
+<div class="modem-history-chart"><canvas id="onu-history-canvas" role="img" aria-label="История item OLT"></canvas></div>
+<div id="onu-history-stats" class="modem-history-stats"></div>
+</dialog>
+<script src="{{ url_for('static', path='/onu.js').path }}?v={{ asset_version }}" defer></script>
+{% endblock %}
