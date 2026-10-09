@@ -120,6 +120,17 @@ class AppTests(unittest.TestCase):
             self.assertEqual(search.call_args.args, (["10"], "70 A5"))
             self.assertEqual(found.json()["items"][0]["name"], item["name"])
             self.assertTrue(found.json()["items"][0]["numeric"])
+            self.assertIsNone(found.json()["items"][0]["interface_state"])
+            interface = {**item,
+                         "name": "OLT Status interface EPON0/1:6 (C4 CD 50 43 11 12 )",
+                         "key_": "ifOperStatus.[EPON0/1:6]", "units": ""}
+            for raw, state in (("1", "up"), ("2", "down"), ("3", None)):
+                with patch("routes_onu.olt_items", return_value=([{
+                        **interface, "lastvalue": raw}], False)):
+                    row = self.client.get(
+                        "/api/onu-ont/items?host_id=10&q=C4%20CD").json()["items"][0]
+                    self.assertEqual(row["value"], raw)
+                    self.assertEqual(row["interface_state"], state)
             with patch("routes_onu.olt_items", return_value=([{**item, "hostid": "11"}], False)):
                 self.assertEqual(self.client.get(
                     "/api/onu-ont/items?host_id=10&q=70A5").json()["items"], [])
@@ -134,9 +145,9 @@ class AppTests(unittest.TestCase):
                 self.assertEqual(api.call_args.args[1]["itemids"], ["55"])
                 self.assertEqual(history.await_args.args[1], "1h")
             with (patch("routes_onu.zabbix_call", return_value=[{
-                    **item, "name": "OLT Optical RX 70 A5 6A AD C2 EE"}]),
+                    **item, "name": "ONU Optical RX 70 A5 6A AD C2 EE"}]),
                   patch("routes_onu.numeric_history", new_callable=AsyncMock,
-                        return_value={"points": [], "label": "OLT Optical RX"})):
+                        return_value={"points": [], "label": "ONU Optical RX"})):
                 self.assertEqual(self.client.get(history_path).status_code, 200)
             with patch("routes_onu.zabbix_call", return_value=[{**item, "hostid": "11"}]):
                 self.assertEqual(self.client.get(history_path).status_code, 404)
@@ -152,25 +163,95 @@ class AppTests(unittest.TestCase):
               "key_": "onu.rx[70A56AADC2EE]"}
         status = {"itemid": "2", "name": "OLT Status interface 70:A5:6A:AD:C2:EE",
                   "key_": "olt.status[70A56AADC2EE]"}
-        optical = {"itemid": "4", "name": "OLT Optical RX 70A56AADC2EE",
+        epon_status = {"itemid": "5",
+                       "name": "OLT Status interface EPON0/1:6 (C4 CD 50 43 11 12 )",
+                       "key_": "ifOperStatus.[EPON0/1:6]"}
+        optical = {"itemid": "4", "name": "ONU Optical RX 70A56AADC2EE",
                    "key_": "olt.optical.rx[70A56AADC2EE]"}
         unrelated = {"itemid": "3", "name": "ONU Voltage 70 A5 6A AD C2 EE",
                      "key_": "onu.voltage[70A56AADC2EE]"}
         with patch("zabbix_service.zabbix_call",
-                   side_effect=[[host], [rx, unrelated], [status], [optical]]) as api:
+                   side_effect=[[host], [rx, unrelated], [status, epon_status],
+                                [optical]]) as api:
             self.assertEqual(self.zabbix.olt_hosts()[0]["name"], "OLT A")
             for query in ("70 A5 6A AD C2 EE", "70A56AADC2EE", "A5 6A", "A56A"):
                 rows, more = self.zabbix.olt_items(["10"], query)
                 self.assertEqual({row["itemid"] for row in rows}, {"1", "2", "4"})
                 self.assertFalse(more)
+            rows, more = self.zabbix.olt_items(["10"], "C4CD5043")
+            self.assertEqual([row["itemid"] for row in rows], ["5"])
+            self.assertFalse(more)
             self.assertEqual(self.zabbix.olt_items(["10"], "ONU"), ([], False))
+            self.assertFalse(self.zabbix.is_olt_target_item("OLT Optical RX 70A56AADC2EE"))
         self.assertEqual(api.call_args_list[0].args[1]["groupids"], ["100"])
         self.assertEqual(api.call_count, 4)
         self.assertEqual([call.args[1]["search"]["name"] for call in api.call_args_list[1:]],
-                         ["ONU OPT RX", "OLT Status interface", "OLT Optical RX"])
+                         ["ONU OPT RX", "OLT Status interface", "ONU Optical RX"])
         self.assertTrue(all(call.args[1]["hostids"] == ["10"]
                             for call in api.call_args_list[1:]))
         self.zabbix.clear_caches()
+
+    def test_onu_live_uses_each_items_oid_and_rejects_other_serial(self):
+        self.zabbix.clear_caches()
+        serial = "70 A5 6A AD C2 EE"
+        rx = {"itemid": "55", "hostid": "10", "name": "ONU OPT RX " + serial,
+              "status": "0", "type": "20", "snmp_oid": "1.3.6.1.4.1.345.1",
+              "interfaceid": "7", "units": "dBm", "value_type": "0", "preprocessing": []}
+        optical = {**rx, "itemid": "56", "name": "ONU Optical RX " + serial,
+                   "snmp_oid": "1.3.6.1.4.1.345.2"}
+        state = {**rx, "itemid": "57",
+                 "name": "OLT Status interface EPON0/1:6 (" + serial + " )",
+                 "snmp_oid": "1.3.6.1.4.1.345.3", "units": ""}
+        other = {**rx, "itemid": "58", "name": "ONU OPT RX 70 A5 6A AD C2 EF",
+                 "snmp_oid": "1.3.6.1.4.1.345.4"}
+        interface = {"interfaceid": "7", "hostid": "10", "type": "2",
+                     "ip": "192.0.2.10", "useip": "1", "port": "161",
+                     "details": {"version": "2", "community": "test-community"}}
+        def api(method, params):
+            if method == "hostinterface.get":
+                return [interface]
+            if params["itemids"] == ["55"]:
+                return [rx]
+            return [rx, optical, state, other]
+        with (patch("zabbix_service.zabbix_call", side_effect=api),
+              patch("zabbix_service.olt_items", return_value=([rx, optical, state, other], False))):
+            config = self.zabbix.olt_live_config("10", "55")
+        self.assertEqual(config["serial"], "70A56AADC2EE")
+        self.assertEqual({row["id"] for row in config["rows"]}, {"55", "56", "57"})
+        definitions = next(iter(config["groups"].values()))
+        self.assertEqual({d["oid"] for d in definitions},
+                         {"1.3.6.1.4.1.345.1", "1.3.6.1.4.1.345.2",
+                          "1.3.6.1.4.1.345.3"})
+        self.assertEqual(self.zabbix.olt_item_serial("EPON0/1:6"), None)
+        self.zabbix.clear_caches()
+
+    def test_onu_live_api_returns_current_values_and_na_on_timeout(self):
+        path = "/api/onu-ont/olts/10/items/55/live"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.login()
+        hosts = [{"id": "10", "name": "OLT A"}]
+        config = {"serial": "70A56AADC2EE",
+                  "rows": [{"id": "55", "label": "ONU OPT RX", "units": "dBm"},
+                           {"id": "57", "label": "OLT Status interface", "units": ""}],
+                  "groups": {("192.0.2.10", "161", "test-community"):
+                             [{"id": "55"}, {"id": "57"}]}}
+        with (patch("routes_onu.olt_hosts", return_value=hosts),
+              patch("routes_onu.olt_live_config", return_value=config),
+              patch("routes_onu.snapshot_for", new_callable=AsyncMock,
+                    return_value={"items": [{"id": "55", "value": "-22.3"},
+                                            {"id": "57", "value": "1"}]}) as poll):
+            result = self.client.get(path)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json()["items"][1]["interface_state"], "up")
+            self.assertEqual(poll.await_args.args[1:4],
+                             ("192.0.2.10", "161", "test-community"))
+            poll.side_effect = RuntimeError("SNMP timeout")
+            failed = self.client.get(path)
+            self.assertEqual([row["value"] for row in failed.json()["items"]],
+                             [None, None])
+            self.assertIn("SNMP timeout", failed.json()["error"])
+            self.assertEqual(self.client.get(path.replace("/10/", "/11/")).status_code, 404)
+        self.assertIn('id="onu-live-dialog"', self.client.get("/onu-ont").text)
 
     def test_favorites_are_personal_and_recent_history_keeps_last_fifteen(self):
         path = "/api/favorites/VOIP/favorite-test-host"

@@ -6,9 +6,11 @@
 .onu-table td{overflow-wrap:anywhere;vertical-align:top}
 .onu-item-name{font-weight:650}.onu-item-key{display:block;color:#64707b;font-size:12px;font-weight:400}
 .onu-value{font-variant-numeric:tabular-nums;white-space:pre-wrap}
+.onu-state-up{color:#167344;font-weight:700}.onu-state-down{color:#ba342d;font-weight:700}
 .onu-graph-button{padding:5px 9px;font-size:12px}
 #onu-history-status{min-height:20px;margin:0 0 6px;color:#607185;font-size:13px}
 html[data-theme="dark"] #onu-status,html[data-theme="dark"] #onu-history-status,html[data-theme="dark"] .onu-item-key{color:#adbdcc}
+html[data-theme="dark"] .onu-state-up{color:#6add9c}html[data-theme="dark"] .onu-state-down{color:#ff8d85}
 @media(max-width:720px){
   .onu-toolbar{grid-template-columns:1fr;gap:0}
   .onu-table,.onu-table tbody,.onu-table tr,.onu-table td{display:block;width:100%}
@@ -20,3 +22,14 @@ html[data-theme="dark"] #onu-status,html[data-theme="dark"] #onu-history-status,
   html[data-theme="dark"] .onu-table tr{border-color:#34495e}
   html[data-theme="dark"] .onu-table td:not(:first-child)::before{color:#adbdcc}
 }
+
+.onu-table tbody tr{cursor:pointer}
+.onu-table tbody tr:focus-visible{outline:2px solid #176cad;outline-offset:-2px}
+.onu-live-dialog{width:min(680px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+#onu-live-status{color:#607185;font-size:13px}
+.onu-live-values{display:grid;gap:9px}
+.onu-live-value{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:10px 12px;border:1px solid #dce6ef;border-radius:8px}
+.onu-live-value span{overflow-wrap:anywhere}
+.onu-live-value strong{white-space:nowrap;font-variant-numeric:tabular-nums}
+html[data-theme="dark"] .onu-live-value{border-color:#34495e}
+@media(max-width:540px){.onu-live-value{display:block}.onu-live-value strong{display:block;margin-top:5px}}

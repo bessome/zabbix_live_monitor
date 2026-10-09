@@ -6,8 +6,9 @@ from fastapi.responses import JSONResponse
 
 from app_web import render, require_user
 from routes_devices import HISTORY_PERIODS, numeric_history
+from snmp_monitor import snapshot_for
 from zabbix_service import (is_olt_target_item, normalize_olt_item_search,
-                            olt_hosts, olt_items, zabbix_call)
+                            olt_hosts, olt_items, olt_live_config, zabbix_call)
 
 router = APIRouter()
 
@@ -54,15 +55,64 @@ async def onu_items(request: Request, q: str = "", host_id: str = ""):
                 or not is_olt_target_item(item.get("name", ""))):
             continue
         updated_at = int(item.get("lastclock") or 0)
+        value = item.get("lastvalue") if updated_at else None
+        interface_state = None
+        if value is not None and "olt status interface" in item["name"].casefold():
+            try:
+                interface_state = {1.0: "up", 2.0: "down"}.get(float(value))
+            except (TypeError, ValueError):
+                pass
         result.append({
             "id": str(item["itemid"]), "host_id": host["id"],
             "olt": host["name"], "name": item["name"],
             "key": item.get("key_") or "", "units": item.get("units") or "",
-            "value": item.get("lastvalue") if updated_at else None,
+            "value": value, "interface_state": interface_state,
             "updated_at": updated_at,
             "numeric": str(item.get("value_type")) in ("0", "3"),
         })
     return JSONResponse({"items": result, "has_more": has_more},
+                        headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/onu-ont/olts/{host_id}/items/{item_id}/live")
+async def onu_item_live(request: Request, host_id: str, item_id: str):
+    require_user(request, api=True)
+    if not host_id.isdecimal() or not item_id.isdecimal():
+        raise HTTPException(404)
+    try:
+        hosts = await asyncio.to_thread(olt_hosts)
+        host = next((row for row in hosts if row["id"] == host_id), None)
+        if host is None:
+            raise HTTPException(404)
+        config = await asyncio.to_thread(olt_live_config, host_id, item_id)
+        if config is None:
+            raise HTTPException(404)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    values = {}
+    errors = []
+    for (address, port, community), definitions in config["groups"].items():
+        try:
+            snapshot = await snapshot_for(host_id, address, port, community, definitions)
+            values.update({row["id"]: row["value"] for row in snapshot["items"]})
+        except (RuntimeError, ValueError) as exc:
+            errors.append(str(exc))
+    rows = []
+    for row in config["rows"]:
+        value = values.get(row["id"])
+        state = None
+        if value is not None and "olt status interface" in row["label"].casefold():
+            try:
+                state = {1.0: "up", 2.0: "down"}.get(float(value))
+            except (TypeError, ValueError):
+                pass
+        rows.append({"id": row["id"], "label": row["label"], "units": row["units"],
+                     "value": value, "interface_state": state})
+    error = ("; ".join(errors) if errors else
+             "Нет доступных SNMP OID или SNMPv2c community для этой ONU."
+             if not config["groups"] else None)
+    return JSONResponse({"serial": config["serial"], "olt": host["name"],
+                         "items": rows, "error": error},
                         headers={"Cache-Control": "no-store"})
 
 

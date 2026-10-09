@@ -5,6 +5,11 @@
   const olt = document.getElementById("onu-olt");
   const rows = document.getElementById("onu-rows");
   const status = document.getElementById("onu-status");
+  const liveDialog = document.getElementById("onu-live-dialog");
+  const liveTitle = document.getElementById("onu-live-title");
+  const liveStatus = document.getElementById("onu-live-status");
+  const liveValues = document.getElementById("onu-live-values");
+  const liveClose = document.getElementById("onu-live-close");
   const dialog = document.getElementById("onu-history-dialog");
   const title = document.getElementById("onu-history-title");
   const close = document.getElementById("onu-history-close");
@@ -19,6 +24,9 @@
   });
   let searchController = null;
   let searchTimer = null;
+  let liveController = null;
+  let liveTimer = null;
+  let liveUrl = "";
   let historyController = null;
   let historyTimer = null;
   let historyUrl = "";
@@ -50,6 +58,15 @@
     rows.replaceChildren();
     for (const item of data.items) {
       const tr = document.createElement("tr");
+      tr.tabIndex = 0;
+      tr.setAttribute("aria-label", "Текущие значения " + item.name);
+      tr.addEventListener("click", () => openLive(item));
+      tr.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openLive(item);
+        }
+      });
       const name = cell(tr, "Item", item.name);
       name.className = "onu-item-name";
       const key = document.createElement("small");
@@ -57,9 +74,13 @@
       key.textContent = item.key;
       name.appendChild(key);
       cell(tr, "OLT", item.olt);
+      const stateLabel = item.interface_state === "up" ? "Up" :
+        item.interface_state === "down" ? "Down" : null;
       const value = cell(tr, "Значение", item.value === null ? "—" :
-        String(item.value) + (item.units ? " " + item.units : ""));
-      value.className = "onu-value";
+        (stateLabel ? stateLabel + " (" + item.value + ")" : String(item.value))
+        + (item.units ? " " + item.units : ""));
+      value.className = "onu-value" + (item.interface_state ?
+        " onu-state-" + item.interface_state : "");
       cell(tr, "Обновлено", item.updated_at ?
         updatedFormat.format(new Date(item.updated_at * 1000)) : "—");
       const actions = cell(tr, "", "");
@@ -69,7 +90,11 @@
         button.className = "onu-graph-button";
         button.textContent = "График";
         button.setAttribute("aria-label", "История " + item.name);
-        button.addEventListener("click", () => openHistory(item));
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          openHistory(item);
+        });
+        button.addEventListener("keydown", event => event.stopPropagation());
         actions.appendChild(button);
       }
       rows.appendChild(tr);
@@ -103,6 +128,70 @@
     searchTimer = setTimeout(search, 300);
   });
   olt.addEventListener("change", search);
+
+  function showLive(data) {
+    liveTitle.textContent = data.olt + " · " + data.serial;
+    liveStatus.textContent = data.error || "Текущие значения SNMP · обновление каждые 5 секунд";
+    liveValues.replaceChildren();
+    for (const item of data.items) {
+      const row = document.createElement("div");
+      row.className = "onu-live-value";
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      const value = document.createElement("strong");
+      const state = item.interface_state === "up" ? "Up" :
+        item.interface_state === "down" ? "Down" : null;
+      value.textContent = item.value === null ? "n/a" :
+        state ? state + " (" + item.value + ")" :
+          String(item.value) + (item.units ? " " + item.units : "");
+      if (item.interface_state) value.className = "onu-state-" + item.interface_state;
+      row.append(label, value);
+      liveValues.appendChild(row);
+    }
+    if (!data.items.length) liveStatus.textContent = "Для этого MAC items не найдены.";
+  }
+
+  async function refreshLive() {
+    if (!liveDialog.open || !liveUrl || liveController) return;
+    const url = liveUrl;
+    const active = new AbortController();
+    liveController = active;
+    try {
+      const data = await request(url, active.signal);
+      if (liveDialog.open && liveUrl === url) showLive(data);
+    } catch (error) {
+      if (error.name !== "AbortError" && liveDialog.open && liveUrl === url) {
+        liveStatus.textContent = error.message;
+        liveValues.querySelectorAll("strong").forEach(value => {
+          value.textContent = "n/a";
+          value.className = "";
+        });
+      }
+    } finally {
+      if (liveController === active) liveController = null;
+    }
+  }
+
+  function openLive(item) {
+    if (liveDialog.open) liveDialog.close();
+    liveUrl = "/api/onu-ont/olts/" + encodeURIComponent(item.host_id) +
+      "/items/" + encodeURIComponent(item.id) + "/live";
+    liveTitle.textContent = item.olt + " · " + item.name;
+    liveStatus.textContent = "Опрос SNMP…";
+    liveValues.replaceChildren();
+    liveDialog.showModal();
+    refreshLive();
+    liveTimer = setInterval(refreshLive, 5000);
+  }
+
+  liveClose.addEventListener("click", () => liveDialog.close());
+  liveDialog.addEventListener("close", () => {
+    clearInterval(liveTimer);
+    liveTimer = null;
+    if (liveController) liveController.abort();
+    liveController = null;
+    liveUrl = "";
+  });
 
   function clearChart() {
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -174,8 +263,10 @@
   function showHistory(data) {
     latest = data;
     title.textContent = data.label;
+    const interfaceStatus = data.label.toLowerCase().includes("olt status interface");
     historyStatus.textContent = data.points.length
-      ? (data.aggregation === "hourly_average" ? "Почасовое среднее Zabbix" : "")
+      ? [data.aggregation === "hourly_average" ? "Почасовое среднее Zabbix" : "",
+        interfaceStatus ? "1 — Up, 2 — Down" : ""].filter(Boolean).join(" · ")
       : "За выбранный период данных нет.";
     stats.replaceChildren();
     if (data.points.length) {
@@ -184,7 +275,9 @@
       for (const [label, value] of [["Последнее", values.at(-1)],
         ["Мин", Math.min(...values)], ["Макс", Math.max(...values)]]) {
         const span = document.createElement("span");
-        span.textContent = label + ": " + Number(value.toFixed(2)) + unit;
+        const state = interfaceStatus && value === 1 ? "Up (1)" :
+          interfaceStatus && value === 2 ? "Down (2)" : null;
+        span.textContent = label + ": " + (state || Number(value.toFixed(2)) + unit);
         stats.appendChild(span);
       }
     }

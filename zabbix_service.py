@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 from app_config import CATEGORIES
 from app_storage import setting
-from snmp_monitor import channel_definition, link_error_rates, optical_definition
+from snmp_monitor import channel_definition, link_error_rates, optical_definition, snmp_item_definition
 
 _cache = {}
 _catalog_cache = {}
@@ -22,7 +22,8 @@ _optical_items_cache = {}
 _ping_loss_items_cache = {}
 _olt_hosts_cache = None
 _olt_items_cache = {}
-_OLT_ITEM_MARKERS = ("ONU OPT RX", "OLT Status interface", "OLT Optical RX")
+_olt_live_cache = {}
+_OLT_ITEM_MARKERS = ("ONU OPT RX", "OLT Status interface", "ONU Optical RX")
 _cache_lock = threading.Lock()
 _search_letters = str.maketrans({"ä": "a", "ö": "o", "õ": "o", "ü": "u"})
 
@@ -390,6 +391,81 @@ def olt_items(host_ids, query, limit=100):
     return matches[:limit], len(matches) > limit
 
 
+_olt_serial_pattern = re.compile(
+    r"(?<![0-9a-f])(?:[0-9a-f]{2}[\s:-]?){5}[0-9a-f]{2}(?![0-9a-f])", re.I)
+
+
+def olt_item_serial(name):
+    match = _olt_serial_pattern.search(name)
+    return re.sub(r"[^0-9a-f]", "", match.group().casefold()) if match else None
+
+
+def olt_live_config(host_id, item_id):
+    """Resolve exact ONU items and their own Zabbix OIDs."""
+    cache_key = (str(host_id), str(item_id))
+    with _cache_lock:
+        cached = _olt_live_cache.get(cache_key)
+        if cached and time.monotonic() - cached[0] < 60:
+            return cached[1]
+    selected = zabbix_call("item.get", {
+        "output": ["itemid", "hostid", "name", "status"],
+        "hostids": [host_id], "itemids": [item_id],
+    })
+    clicked = next((row for row in selected
+                    if str(row.get("itemid")) == str(item_id)
+                    and str(row.get("hostid")) == str(host_id)
+                    and str(row.get("status")) == "0"
+                    and is_olt_target_item(row.get("name", ""))), None)
+    serial = olt_item_serial(clicked["name"]) if clicked else None
+    if serial is None:
+        return None
+    candidates, _ = olt_items([host_id], serial, limit=1000)
+    ids = [str(row["itemid"]) for row in candidates
+           if str(row.get("hostid")) == str(host_id)
+           and olt_item_serial(row.get("name", "")) == serial]
+    if str(item_id) not in ids:
+        ids.append(str(item_id))
+    items = zabbix_call("item.get", {
+        "output": ["itemid", "hostid", "name", "type", "status", "snmp_oid",
+                   "interfaceid", "units", "value_type"],
+        "hostids": [host_id], "itemids": ids,
+        "selectPreprocessing": "extend",
+    })
+    valid = [row for row in items if str(row.get("hostid")) == str(host_id)
+             and str(row.get("status")) == "0"
+             and is_olt_target_item(row.get("name", ""))
+             and olt_item_serial(row.get("name", "")) == serial]
+    definitions = [(row, snmp_item_definition(row, row["name"])) for row in valid]
+    interface_ids = sorted({str(row.get("interfaceid")) for row, definition in definitions
+                            if definition and row.get("interfaceid")})
+    interfaces = zabbix_call("hostinterface.get", {
+        "output": "extend", "interfaceids": interface_ids,
+    }) if interface_ids else []
+    by_interface = {str(row["interfaceid"]): row for row in interfaces
+                    if str(row.get("hostid")) == str(host_id) and str(row.get("type")) == "2"}
+    groups = {}
+    rows = []
+    for item, definition in definitions:
+        interface = by_interface.get(str(item.get("interfaceid")))
+        details = (interface.get("details") or {}) if interface else {}
+        community = str(details.get("community") or "").strip()
+        if not community or community.startswith("{$"):
+            community = os.environ.get("ONU_SNMP_COMMUNITY", "").strip()
+        address = ((interface.get("dns") if str(interface.get("useip")) == "0"
+                    else interface.get("ip")) if interface else None)
+        port = str(interface.get("port") or "161") if interface else "161"
+        available = bool(definition and address and community
+                         and str(details.get("version", "2")) == "2")
+        if available:
+            groups.setdefault((address, port, community), []).append(definition)
+        rows.append({"id": str(item["itemid"]), "label": item["name"],
+                     "units": item.get("units") or "", "available": available})
+    result = {"serial": serial.upper(), "rows": rows, "groups": groups}
+    with _cache_lock:
+        _olt_live_cache[cache_key] = (time.monotonic(), result)
+    return result
+
+
 def clear_caches():
     global _olt_hosts_cache
     with _cache_lock:
@@ -402,3 +478,4 @@ def clear_caches():
         _ping_loss_items_cache.clear()
         _olt_hosts_cache = None
         _olt_items_cache.clear()
+        _olt_live_cache.clear()

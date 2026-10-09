@@ -9,6 +9,11 @@
 <p id="onu-status" role="status">Загрузка OLT из Zabbix…</p>
 <div class="table-wrap"><table class="onu-table"><thead><tr><th>Item</th><th>OLT</th><th>Значение</th><th>Обновлено</th><th></th></tr></thead><tbody id="onu-rows"></tbody></table></div>
 </section>
+<dialog id="onu-live-dialog" class="onu-live-dialog" aria-labelledby="onu-live-title">
+<div class="modem-history-heading"><h2 id="onu-live-title">ONU/ONT</h2><button type="button" id="onu-live-close" aria-label="Закрыть">×</button></div>
+<p id="onu-live-status" role="status">Опрос SNMP…</p>
+<div id="onu-live-values" class="onu-live-values"></div>
+</dialog>
 <dialog id="onu-history-dialog" class="modem-history-dialog" aria-labelledby="onu-history-title">
 <div class="modem-history-heading"><h2 id="onu-history-title">История item</h2><button type="button" id="onu-history-close" aria-label="Закрыть график">×</button></div>
 <div id="onu-history-periods" class="modem-history-periods" role="group" aria-label="Период графика">
