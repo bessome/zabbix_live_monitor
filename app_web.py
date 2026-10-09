@@ -68,6 +68,8 @@ def render(request, name, **context):
             section = category if device is None else f"{category} / {device['name']}"
         if section is None and path.startswith("/cmts/"):
             section = "Modems / поиск CMTS"
+        if section is None and path == "/onu-ont":
+            section = "ONU/ONT"
         record_activity(current_user, "view", (section or path)[:160], path[:300])
     return templates.TemplateResponse(
         request=request, name=name,

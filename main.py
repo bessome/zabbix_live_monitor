@@ -11,6 +11,7 @@ from app_web import SESSION_SECONDS
 from routes_account import router as account_router
 from routes_devices import router as devices_router
 from routes_cmts import router as cmts_router
+from routes_onu import router as onu_router
 from routes_settings import router as settings_router
 
 app = FastAPI(title="Zabbix Live Monitoring", docs_url=None, redoc_url=None)
@@ -21,6 +22,7 @@ app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 app.include_router(account_router)
 app.include_router(devices_router)
 app.include_router(cmts_router)
+app.include_router(onu_router)
 app.include_router(settings_router)
 init_db()
 

@@ -9,7 +9,8 @@
 <link rel="stylesheet" href="{{ url_for('static', path='/switch.css').path }}?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ url_for('static', path='/favorites.css').path }}?v={{ asset_version }}">
 <link rel="stylesheet" href="{{ url_for('static', path='/theme.css').path }}?v={{ asset_version }}">
-<link rel="stylesheet" href="{{ url_for('static', path='/cmts.css').path }}?v={{ asset_version }}"></head>
+<link rel="stylesheet" href="{{ url_for('static', path='/cmts.css').path }}?v={{ asset_version }}">
+<link rel="stylesheet" href="{{ url_for('static', path='/onu.css').path }}?v={{ asset_version }}"></head>
 <body>
 <header class="site-header"><a class="brand" href="/">Zabbix Live Monitoring</a>
 {% if current_user %}<span class="user-badge">{{ current_user.username }} · {{ current_user.role }}</span>
@@ -30,7 +31,7 @@
 {% endif %}
 </header>
 {% if current_user %}<nav class="site-nav" aria-label="Разделы приложения">
-<div class="device-nav"><a href="/favorites" class="{% if request.url.path == '/favorites' %}active{% endif %}">★ Избранное</a>{% for item in categories %}<a href="/devices/{{ item }}" class="{% if category is defined and category == item %}active{% endif %}">{{ item }}</a>{% endfor %}</div>
+<div class="device-nav"><a href="/favorites" class="{% if request.url.path == '/favorites' %}active{% endif %}">★ Избранное</a>{% for item in categories %}<a href="/devices/{{ item }}" class="{% if category is defined and category == item %}active{% endif %}">{{ item }}</a>{% endfor %}<a href="/onu-ont" class="{% if request.url.path == '/onu-ont' %}active{% endif %}">ONU/ONT</a></div>
 </nav>{% endif %}
 <main>
 {% for message in messages %}<p class="message {{ message.kind }}">{{ message.text }}</p>{% endfor %}

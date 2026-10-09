@@ -75,16 +75,79 @@ class AppTests(unittest.TestCase):
         self.assertNotIn(">Главная</a>", nav)
         links = re.findall(r'href="/devices/([^"]+)"', nav)
         self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "VOIP", "Routers"])
+        self.assertIn('href="/onu-ont"', nav)
 
     def test_static_assets_use_origin_relative_urls(self):
         page = self.client.get("/login")
         self.assertEqual(page.status_code, 200)
         self.assertRegex(page.text, r'href="/static/style\.css\?v=\d+"')
+        self.assertRegex(page.text, r'href="/static/onu\.css\?v=\d+"')
         self.assertRegex(page.text, r'src="/static/view-mode\.js\?v=\d+"')
         self.assertNotIn('href="http://', page.text)
         self.assertNotIn('src="http://', page.text)
         self.assertEqual(self.client.get("/static/style.css").status_code, 200)
         self.assertEqual(self.client.get("/static/view-mode.js").status_code, 200)
+        self.assertEqual(self.client.get("/static/onu.css").status_code, 200)
+
+    def test_onu_olt_item_search_and_history_are_scoped_to_group(self):
+        self.assertEqual(self.client.get("/onu-ont", follow_redirects=False).status_code, 303)
+        self.assertEqual(self.client.get("/api/onu-ont/olts").status_code, 401)
+        self.login()
+        page = self.client.get("/onu-ont")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="onu-query"', page.text)
+        self.assertIn('id="onu-olt"', page.text)
+        self.assertRegex(page.text, r'src="/static/onu\.js\?v=\d+"')
+        self.assertRegex(page.text, r'href="/static/onu\.css\?v=\d+"')
+        self.assertNotIn('src="http://', page.text)
+        self.assertEqual(self.client.get("/static/onu.js").status_code, 200)
+        hosts = [{"id": "10", "name": "OLT A", "technical_name": "olt-a"},
+                 {"id": "11", "name": "OLT B", "technical_name": "olt-b"}]
+        item = {"itemid": "55", "hostid": "10", "name": "ONU 123 RX power",
+                "key_": "onu.rx[123]", "units": "dBm", "lastvalue": "-22.3",
+                "lastclock": "1799999990", "value_type": "0", "status": "0"}
+        with (patch("routes_onu.olt_hosts", return_value=hosts),
+              patch("routes_onu.olt_items", return_value=([item], False)) as search):
+            self.assertEqual(len(self.client.get("/api/onu-ont/olts").json()["olts"]), 2)
+            self.assertIn("Введите не менее двух", self.client.get(
+                "/api/onu-ont/items").json()["hint"])
+            self.assertEqual(self.client.get(
+                "/api/onu-ont/items?host_id=99&q=onu").status_code, 404)
+            found = self.client.get("/api/onu-ont/items?host_id=10&q=123")
+            self.assertEqual(found.status_code, 200)
+            self.assertEqual(search.call_args.args, (["10"], "123"))
+            self.assertEqual(found.json()["items"][0]["name"], "ONU 123 RX power")
+            self.assertTrue(found.json()["items"][0]["numeric"])
+            with patch("routes_onu.olt_items", return_value=([{**item, "hostid": "11"}], False)):
+                self.assertEqual(self.client.get(
+                    "/api/onu-ont/items?host_id=10&q=123").json()["items"], [])
+            history_path = "/api/onu-ont/olts/10/items/55/history"
+            self.assertEqual(self.client.get(history_path.replace("/10/", "/99/")).status_code, 404)
+            self.assertEqual(self.client.get(history_path + "?period=7d").status_code, 422)
+            with (patch("routes_onu.zabbix_call", return_value=[item]) as api,
+                  patch("routes_onu.numeric_history", new_callable=AsyncMock,
+                        return_value={"points": [], "label": item["name"]}) as history):
+                self.assertEqual(self.client.get(history_path).status_code, 200)
+                self.assertEqual(api.call_args.args[1]["hostids"], ["10"])
+                self.assertEqual(api.call_args.args[1]["itemids"], ["55"])
+                self.assertEqual(history.await_args.args[1], "1h")
+            with patch("routes_onu.zabbix_call", return_value=[{**item, "hostid": "11"}]):
+                self.assertEqual(self.client.get(history_path).status_code, 404)
+            with patch("routes_onu.zabbix_call", return_value=[{**item, "value_type": "4"}]):
+                self.assertEqual(self.client.get(history_path).status_code, 404)
+
+    def test_olt_lookup_uses_group_100_and_searches_item_name_or_key(self):
+        self.zabbix.clear_caches()
+        host = {"hostid": "10", "host": "olt-a", "name": "OLT A"}
+        with patch("zabbix_service.zabbix_call", side_effect=[[host], []]) as api:
+            self.assertEqual(self.zabbix.olt_hosts()[0]["name"], "OLT A")
+            self.zabbix.olt_items(["10"], "ONU-123")
+        self.assertEqual(api.call_args_list[0].args[1]["groupids"], ["100"])
+        params = api.call_args_list[1].args[1]
+        self.assertEqual(params["hostids"], ["10"])
+        self.assertEqual(params["search"], {"name": "ONU-123", "key_": "ONU-123"})
+        self.assertTrue(params["searchByAny"])
+        self.zabbix.clear_caches()
 
     def test_favorites_are_personal_and_recent_history_keeps_last_fifteen(self):
         path = "/api/favorites/VOIP/favorite-test-host"
@@ -846,6 +909,7 @@ class AppTests(unittest.TestCase):
                 detail = self.client.get("/devices/Modems/42")
             self.assertEqual(detail.status_code, 200)
             self.assertIn('data-period="14d"', detail.text)
+            self.assertRegex(detail.text, r'href="/static/onu\.css\?v=\d+"')
             self.assertIn('id="modem-restarts"', detail.text)
             self.assertIn('id="modem-restarts-daily"', detail.text)
             self.assertIn('/static/metric-history.js', detail.text)

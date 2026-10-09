@@ -20,6 +20,7 @@ _modem_restarts_cache = {}
 _modem_restarts_daily_cache = {}
 _optical_items_cache = {}
 _ping_loss_items_cache = {}
+_olt_hosts_cache = None
 _cache_lock = threading.Lock()
 _search_letters = str.maketrans({"ä": "a", "ö": "o", "õ": "o", "ü": "u"})
 
@@ -317,7 +318,44 @@ def zabbix_catalog(kind):
     return items
 
 
+def olt_hosts():
+    """OLT hosts in the Zabbix group linked from the ONU/ONT section."""
+    global _olt_hosts_cache
+    with _cache_lock:
+        cached = _olt_hosts_cache
+        if cached and time.monotonic() - cached[0] < 60:
+            return cached[1]
+    hosts = zabbix_call("host.get", {
+        "output": ["hostid", "host", "name"], "groupids": ["100"],
+        "sortfield": "name", "sortorder": "ASC",
+    })
+    rows = [{"id": str(host["hostid"]), "name": host["name"],
+             "technical_name": host.get("host") or ""} for host in hosts]
+    rows.sort(key=lambda row: row["name"].casefold())
+    with _cache_lock:
+        _olt_hosts_cache = (time.monotonic(), rows)
+    return rows
+
+
+def olt_items(host_ids, query, limit=100):
+    """Search item names and keys within already validated OLT host IDs."""
+    if not host_ids:
+        return [], False
+    params = {
+        "output": ["itemid", "hostid", "name", "key_", "status",
+                   "value_type", "units", "lastvalue", "lastclock"],
+        "hostids": host_ids, "filter": {"status": "0"},
+        "sortfield": "name", "sortorder": "ASC", "limit": limit + 1,
+    }
+    if query:
+        params["search"] = {"name": query, "key_": query}
+        params["searchByAny"] = True
+    items = zabbix_call("item.get", params)
+    return items[:limit], len(items) > limit
+
+
 def clear_caches():
+    global _olt_hosts_cache
     with _cache_lock:
         _cache.clear()
         _catalog_cache.clear()
@@ -326,3 +364,4 @@ def clear_caches():
         _modem_restarts_daily_cache.clear()
         _optical_items_cache.clear()
         _ping_loss_items_cache.clear()
+        _olt_hosts_cache = None
