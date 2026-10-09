@@ -68,6 +68,8 @@ class AppTests(unittest.TestCase):
         self.assertLess(header.index('action="/logout"'), header.index('class="settings-menu"'))
         self.assertIn('class="logout-button" aria-label="Выйти"', header)
         self.assertIn('aria-label="Настройки" title="Настройки"><svg', header)
+        self.assertIn('data-view-mode="mobile"', header)
+        self.assertIn('data-view-mode="desktop"', header)
         nav = response.text.split('<div class="device-nav">', 1)[1].split("</div>", 1)[0]
         self.assertNotIn("settings-menu", nav)
         self.assertNotIn(">Главная</a>", nav)
@@ -78,8 +80,11 @@ class AppTests(unittest.TestCase):
         page = self.client.get("/login")
         self.assertEqual(page.status_code, 200)
         self.assertRegex(page.text, r'href="/static/style\.css\?v=\d+"')
+        self.assertRegex(page.text, r'src="/static/view-mode\.js\?v=\d+"')
         self.assertNotIn('href="http://', page.text)
+        self.assertNotIn('src="http://', page.text)
         self.assertEqual(self.client.get("/static/style.css").status_code, 200)
+        self.assertEqual(self.client.get("/static/view-mode.js").status_code, 200)
 
     def test_favorites_are_personal_and_recent_history_keeps_last_fifteen(self):
         path = "/api/favorites/VOIP/favorite-test-host"
@@ -103,6 +108,10 @@ class AppTests(unittest.TestCase):
             detail = self.client.get("/devices/VOIP/favorite-test-host")
         self.assertEqual(detail.status_code, 200)
         self.assertIn('data-favorite="true"', detail.text)
+        self.assertIn('src="/static/view-mode.js', detail.text)
+        self.assertIn('href="/static/mobile.css', detail.text)
+        self.assertNotIn('src="http://', detail.text)
+        self.assertNotIn('<link rel="stylesheet" href="http://', detail.text)
         page = self.client.get("/favorites")
         self.assertIn("Favorite phone", page.text)
         self.assertIn("Недавно открытые", page.text)

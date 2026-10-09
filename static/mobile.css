@@ -27,9 +27,22 @@
 .settings-menu summary::-webkit-details-marker{display:none}
 .settings-menu summary:hover,.settings-menu summary.active,.settings-menu[open] summary{background:#365879;color:#fff}
 .settings-menu summary:focus-visible,.settings-submenu a:focus-visible{outline:2px solid #8dc9ff;outline-offset:2px}
-.settings-submenu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:205px;padding:5px;border:1px solid #cbd7e3;border-radius:8px;background:#fff;box-shadow:0 10px 30px #10192344}
+.settings-submenu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:250px;padding:5px;border:1px solid #cbd7e3;border-radius:8px;background:#fff;box-shadow:0 10px 30px #10192344}
 .settings-submenu a{display:block;min-height:42px;padding:10px 12px;border-radius:5px;color:#172333;text-decoration:none;white-space:nowrap}
 .settings-submenu a:hover,.settings-submenu a.active{background:#e8f3fb;color:#154f7d}
+.view-mode-options{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:10px 7px 5px;border-top:1px solid #dbe4ed}
+.view-mode-options span{grid-column:1/-1;color:#617083;font-size:12px}
+.view-mode-options button{padding:7px 5px;background:#e8f0f6;color:#193750;font-size:13px}
+.view-mode-options button[aria-pressed="true"]{background:#1662a0;color:#fff}
+.view-mode-options button:focus-visible{outline:2px solid #1662a0;outline-offset:2px}
+html[data-view-mode="desktop"] body{min-width:1000px}
+html[data-view-mode="mobile"] body{max-width:420px;margin:0 auto}
+html[data-view-mode="mobile"]{background:#e6edf3}
+html[data-view-mode="mobile"][data-theme="dark"]{background:#0b1420}
+html[data-theme="dark"] .view-mode-options{border-color:#40566a}
+html[data-theme="dark"] .view-mode-options span{color:#adbdcc}
+html[data-theme="dark"] .view-mode-options button{background:#29445e;color:#e6edf5}
+html[data-theme="dark"] .view-mode-options button[aria-pressed="true"]{background:#2677b2;color:#fff}
 @media (max-width:720px){
   body{font-size:16px}
   .site-header{padding:10px 12px;gap:8px;flex-wrap:wrap}
