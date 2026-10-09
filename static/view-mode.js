@@ -37,7 +37,8 @@
   });
 
   function compactRule(rule) {
-    return rule.type === CSSRule.MEDIA_RULE && /max-width\s*:\s*(?:600|720)px/i.test(rule.conditionText);
+    // The device cards switch to one column at 1050px; their compact details switch at 720px.
+    return rule.type === CSSRule.MEDIA_RULE && /max-width\s*:\s*(?:600|720|1050)px/i.test(rule.conditionText);
   }
 
   const compactRules = [];
