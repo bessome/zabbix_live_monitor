@@ -99,7 +99,9 @@ async def onu_item_live(request: Request, host_id: str, item_id: str):
             errors.append(str(exc))
     rows = []
     for row in config["rows"]:
-        value = values.get(row["id"])
+        source = "snmp" if row.get("available", True) else "zabbix"
+        value = (values.get(row["id"]) if source == "snmp"
+                 else row.get("lastvalue"))
         state = None
         if value is not None and "olt status interface" in row["label"].casefold():
             try:
@@ -107,10 +109,11 @@ async def onu_item_live(request: Request, host_id: str, item_id: str):
             except (TypeError, ValueError):
                 pass
         rows.append({"id": row["id"], "label": row["label"], "units": row["units"],
-                     "value": value, "interface_state": state})
+                     "value": value, "interface_state": state, "source": source})
     error = ("; ".join(errors) if errors else
              "Нет доступных SNMP OID или SNMPv2c community для этой ONU."
-             if not config["groups"] else None)
+             if not config["groups"] and not any(row["value"] is not None for row in rows)
+             else None)
     return JSONResponse({"serial": config["serial"], "olt": host["name"],
                          "items": rows, "error": error},
                         headers={"Cache-Control": "no-store"})
