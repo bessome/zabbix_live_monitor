@@ -8,7 +8,8 @@ from app_web import render, require_user
 from routes_devices import HISTORY_PERIODS, numeric_history
 from snmp_monitor import snapshot_for
 from zabbix_service import (is_olt_target_item, normalize_olt_item_search,
-                            olt_hosts, olt_items, olt_live_config, zabbix_call)
+                            olt_hosts, olt_items, olt_latest_values, olt_live_config,
+                            zabbix_call)
 
 router = APIRouter()
 
@@ -87,6 +88,8 @@ async def onu_item_live(request: Request, host_id: str, item_id: str):
         config = await asyncio.to_thread(olt_live_config, host_id, item_id)
         if config is None:
             raise HTTPException(404)
+        fallback_ids = [row["id"] for row in config["rows"] if not row.get("available", True)]
+        latest_values = await asyncio.to_thread(olt_latest_values, host_id, fallback_ids)
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     values = {}
@@ -100,8 +103,7 @@ async def onu_item_live(request: Request, host_id: str, item_id: str):
     rows = []
     for row in config["rows"]:
         source = "snmp" if row.get("available", True) else "zabbix"
-        value = (values.get(row["id"]) if source == "snmp"
-                 else row.get("lastvalue"))
+        value = values.get(row["id"]) if source == "snmp" else latest_values.get(row["id"])
         state = None
         if value is not None and "olt status interface" in row["label"].casefold():
             try:

@@ -428,7 +428,7 @@ def olt_live_config(host_id, item_id):
         ids.append(str(item_id))
     items = zabbix_call("item.get", {
         "output": ["itemid", "hostid", "name", "type", "status", "snmp_oid",
-                   "interfaceid", "units", "value_type", "lastvalue", "lastclock"],
+                   "interfaceid", "units", "value_type"],
         "hostids": [host_id], "itemids": ids,
         "selectPreprocessing": "extend",
     })
@@ -460,12 +460,26 @@ def olt_live_config(host_id, item_id):
         if available:
             groups.setdefault((address, port, community), []).append(definition)
         rows.append({"id": str(item["itemid"]), "label": item["name"],
-                     "units": item.get("units") or "", "available": available,
-                     "lastvalue": item.get("lastvalue") if int(item.get("lastclock") or 0) > 0 else None})
+                     "units": item.get("units") or "", "available": available})
     result = {"serial": serial.upper(), "rows": rows, "groups": groups}
     with _cache_lock:
         _olt_live_cache[cache_key] = (time.monotonic(), result)
     return result
+
+
+def olt_latest_values(host_id, item_ids):
+    """Read uncached Zabbix values for ONU items without direct SNMP access."""
+    if not item_ids:
+        return {}
+    items = zabbix_call("item.get", {
+        "output": ["itemid", "hostid", "status", "lastvalue", "lastclock"],
+        "hostids": [host_id], "itemids": item_ids,
+    })
+    return {str(item["itemid"]): item.get("lastvalue")
+            if int(item.get("lastclock") or 0) > 0 else None
+            for item in items if str(item.get("hostid")) == str(host_id)
+            and str(item.get("status")) == "0"
+            and str(item.get("itemid")) in item_ids}
 
 
 def clear_caches():

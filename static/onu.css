@@ -32,4 +32,5 @@ html[data-theme="dark"] .onu-state-up{color:#6add9c}html[data-theme="dark"] .onu
 .onu-live-value span{overflow-wrap:anywhere}
 .onu-live-value strong{white-space:nowrap;font-variant-numeric:tabular-nums}
 html[data-theme="dark"] .onu-live-value{border-color:#34495e}
+html[data-theme="dark"] #onu-live-status{color:#adbdcc}
 @media(max-width:540px){.onu-live-value{display:block}.onu-live-value strong{display:block;margin-top:5px}}

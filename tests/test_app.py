@@ -275,32 +275,41 @@ class AppTests(unittest.TestCase):
         hosts = [{"id": "10", "name": "OLT A"}]
         config = {"serial": "E067B3B3DD99", "groups": {},
                   "rows": [{"id": "57", "label": "OLT Status interface EPON0/1:16",
-                            "units": "", "available": False, "lastvalue": "1"},
+                            "units": "", "available": False},
                            {"id": "59", "label": "ONU Opitcal RX Level on interface EPON0/1:16",
-                            "units": "dBm", "available": False, "lastvalue": "-22.3"}]}
+                            "units": "dBm", "available": False}]}
         with (patch("routes_onu.olt_hosts", return_value=hosts),
               patch("routes_onu.olt_live_config", return_value=config),
+              patch("routes_onu.olt_latest_values", side_effect=[
+                  {"57": "1", "59": "-22.3"}, {"57": "2", "59": "-23.1"}]) as latest,
               patch("routes_onu.snapshot_for", new_callable=AsyncMock) as poll):
             response = self.client.get("/api/onu-ont/olts/10/items/57/live")
+            updated = self.client.get("/api/onu-ont/olts/10/items/57/live")
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json()["error"])
         self.assertEqual([(row["value"], row["source"]) for row in response.json()["items"]],
                          [("1", "zabbix"), ("-22.3", "zabbix")])
         self.assertEqual(response.json()["items"][0]["interface_state"], "up")
+        self.assertEqual([row["value"] for row in updated.json()["items"]], ["2", "-23.1"])
+        self.assertEqual(updated.json()["items"][0]["interface_state"], "down")
+        self.assertEqual(latest.call_count, 2)
+        self.assertEqual(latest.call_args.args, ("10", ["57", "59"]))
         poll.assert_not_awaited()
 
-    def test_onu_live_config_keeps_zabbix_value_without_snmp_oid(self):
+    def test_onu_live_reads_zabbix_value_without_snmp_oid(self):
         self.zabbix.clear_caches()
         name = "ONU Opitcal RX Level on interface EPON0/1:16 (E0 67 B3 B3 DD 99 )"
         level = {"itemid": "59", "hostid": "10", "name": name, "status": "0",
                  "type": "2", "snmp_oid": "", "units": "dBm", "value_type": "0",
                  "lastvalue": "-22.3", "lastclock": "1799999990"}
-        with (patch("zabbix_service.zabbix_call", return_value=[level]),
+        with (patch("zabbix_service.zabbix_call", return_value=[level]) as api,
               patch("zabbix_service.olt_items", return_value=([level], False))):
             config = self.zabbix.olt_live_config("10", "59")
+            values = self.zabbix.olt_latest_values("10", ["59"])
         self.assertEqual(config["groups"], {})
-        self.assertEqual(config["rows"][0]["lastvalue"], "-22.3")
         self.assertFalse(config["rows"][0]["available"])
+        self.assertEqual(values, {"59": "-22.3"})
+        self.assertEqual(api.call_args.args[1]["itemids"], ["59"])
         self.zabbix.clear_caches()
 
     def test_favorites_are_personal_and_recent_history_keeps_last_fifteen(self):

@@ -134,7 +134,7 @@
     const sources = new Set(data.items.map(item => item.source));
     liveStatus.textContent = data.error || (sources.has("zabbix")
       ? sources.has("snmp") ? "Текущие значения SNMP · последние значения Zabbix"
-        : "Последние значения Zabbix"
+        : "Последние значения Zabbix · проверка каждые 5 секунд"
       : "Текущие значения SNMP · обновление каждые 5 секунд");
     liveValues.replaceChildren();
     for (const item of data.items) {
