@@ -42,7 +42,7 @@ def normalize_device_search(value):
     return " ".join(part for part in re.split(r"[-_\s]+", folded) if part)
 
 
-def zabbix_call(method, params):
+def zabbix_call(method, params, timeout=8):
     url = setting("zabbix_url").strip()
     token = os.environ.get("ZABBIX_API_TOKEN", "")
     if not url or not token:
@@ -54,7 +54,7 @@ def zabbix_call(method, params):
         headers={"Content-Type": "application/json-rpc",
                  "Authorization": "Bearer " + token})
     try:
-        with urlrequest.urlopen(api_request, timeout=8) as response:
+        with urlrequest.urlopen(api_request, timeout=timeout) as response:
             answer = json.load(response)
     except (error.URLError, TimeoutError, ValueError) as exc:
         raise RuntimeError("Zabbix API недоступен: " + str(exc)) from exc
@@ -378,7 +378,7 @@ def olt_items(host_ids, query, limit=100):
                            "value_type", "units", "lastvalue", "lastclock"],
                 "hostids": host_ids, "filter": {"status": "0"},
                 "search": {"name": marker},
-            })
+            }, timeout=30)
             for item in items:
                 if is_olt_target_item(item.get("name", "")):
                     by_id[str(item["itemid"])] = item

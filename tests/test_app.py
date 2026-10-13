@@ -203,6 +203,8 @@ class AppTests(unittest.TestCase):
                           "ONU Opitcal RX Level"])
         self.assertTrue(all(call.args[1]["hostids"] == ["10"]
                             for call in api.call_args_list[1:]))
+        self.assertTrue(all(call.kwargs == {"timeout": 30}
+                            for call in api.call_args_list[1:]))
         self.zabbix.clear_caches()
 
     def test_onu_live_uses_each_items_oid_and_rejects_other_serial(self):

@@ -19,8 +19,17 @@
     timeZone: displayTimezone, hour: "2-digit", minute: "2-digit"
   });
   const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: displayTimezone, day: "2-digit", month: "2-digit",
+    timeZone: displayTimezone, day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit"
+  });
+  const dateFormat = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: displayTimezone, day: "2-digit", month: "2-digit"
+  });
+  const weekdayFormat = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: displayTimezone, weekday: "short"
+  });
+  const localHourFormat = new Intl.DateTimeFormat("en-GB", {
+    timeZone: displayTimezone, hour: "2-digit", hourCycle: "h23"
   });
   let historyUrl = null;
   let period = "1h";
@@ -56,7 +65,7 @@
     const secondary = data.secondary?.points || [];
     const right = data.secondary ? 46 : 12;
     const top = 15;
-    const bottom = 28;
+    const bottom = data.period === "1h" ? 28 : 43;
     const plotWidth = Math.max(1, width - left - right);
     const plotHeight = Math.max(1, height - top - bottom);
     const values = data.points.map(point => point.value);
@@ -107,14 +116,38 @@
           tick >= 10 ? tick.toFixed(0) : tick.toFixed(1), left + plotWidth + 5, yy + 4);
       }
     }
-    const tickCount = data.period === "1h" || width >= 500 ? 4 : 2;
-    const labelFormat = data.period === "1h" ? timeFormat : dateTimeFormat;
-    for (let i = 0; i <= tickCount; i++) {
-      const xx = left + i / tickCount * plotWidth;
+    const tickStep = {"1h": 900, "12h": 7200, "24h": 14400,
+      "2d": 21600, "14d": 3600}[data.period];
+    const ticks = [];
+    for (let stamp = Math.ceil(data.from / tickStep) * tickStep;
+      stamp <= data.to; stamp += tickStep) {
+      if (data.period !== "14d" || localHourFormat.format(new Date(stamp * 1000)) === "00") {
+        ticks.push(stamp);
+      }
+    }
+    const labelEvery = Math.max(1, Math.ceil(ticks.length /
+      Math.max(1, Math.floor(plotWidth / (data.period === "14d" ? 75 : 105)))));
+    for (const [index, stamp] of ticks.entries()) {
+      const xx = x(stamp);
+      ctx.strokeStyle = colors.grid;
+      ctx.lineWidth = 1;
+      ctx.setLineDash(data.period === "14d" ? [] : [3, 5]);
+      ctx.beginPath();
+      ctx.moveTo(xx, top);
+      ctx.lineTo(xx, top + plotHeight);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (index % labelEvery !== 0) continue;
+      const date = new Date(stamp * 1000);
       ctx.fillStyle = colors.text;
-      ctx.textAlign = i === 0 ? "left" : i === tickCount ? "right" : "center";
-      ctx.fillText(labelFormat.format(new Date((data.from + i / tickCount * (data.to - data.from)) * 1000)),
-        xx, height - 8);
+      ctx.textAlign = "center";
+      if (data.period === "1h") {
+        ctx.fillText(timeFormat.format(date), xx, height - 8);
+      } else {
+        ctx.fillText(dateFormat.format(date), xx, height - 22);
+        ctx.fillText(data.period === "14d" ? weekdayFormat.format(date)
+          : timeFormat.format(date), xx, height - 8);
+      }
     }
     function drawSeries(points, scale, color) {
       if (!points.length) return;
@@ -143,9 +176,12 @@
   function show(data) {
     latest = data;
     title.textContent = data.label;
+    const range = dateTimeFormat.format(new Date(data.from * 1000)) + " — "
+      + dateTimeFormat.format(new Date(data.to * 1000));
     status.textContent = data.points.length || data.secondary?.points.length
-      ? (data.aggregation === "hourly_average" ? "Почасовое среднее Zabbix" : "")
-      : "За период " + data.period + " данных в Zabbix нет.";
+      ? [data.aggregation === "hourly_average" ? "Почасовое среднее Zabbix" : "",
+        range].filter(Boolean).join(" · ")
+      : "За период " + range + " данных в Zabbix нет.";
     canvas.setAttribute("aria-label", "График " + data.label
       + (data.secondary ? " и ошибок в секунду" : "") + " за " + data.period);
     stats.replaceChildren();
