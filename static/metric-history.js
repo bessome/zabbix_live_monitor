@@ -63,9 +63,17 @@
     const low = values.length ? Math.min(...values) : 0;
     const high = values.length ? Math.max(...values) : 1;
     const padding = Math.max((high - low) * .12, Math.abs(high) * .02, .1);
-    const minY = data.units === "%" ? Math.max(0, low - padding) : low - padding;
-    const maxY = data.units === "%" ? Math.min(100, high + padding) : high + padding;
-    const tickPrecision = Math.max(1, Math.ceil(-Math.log10((maxY - minY) / 4)));
+    const rawMin = data.units === "%" && low >= 0 ? Math.max(0, low - padding) : low - padding;
+    const rawMax = data.units === "%" && high <= 100 ? Math.min(100, high + padding) : high + padding;
+    const roughStep = Math.max(0.1, (rawMax - rawMin) / 4);
+    const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+    const step = [1, 2, 5, 10].find(n => n * magnitude >= roughStep / (1 + 1e-9)) * magnitude;
+    const firstTick = Math.floor(rawMin / step + 1e-9);
+    const lastTick = Math.ceil(rawMax / step - 1e-9);
+    const minY = firstTick * step;
+    const maxY = lastTick * step;
+    const yTickCount = lastTick - firstTick;
+    const tickPrecision = Math.max(0, -Math.floor(Math.log10(step)));
     const errorHigh = secondary.length ? Math.max(...secondary.map(point => point.value)) : 0;
     const errorMax = Math.max(1, errorHigh * 1.1);
     const x = time => left + (time - data.from) / (data.to - data.from) * plotWidth;
@@ -81,8 +89,8 @@
       ctx.textAlign = "right";
       ctx.fillText("Ош/с", width - 3, 11);
     }
-    for (let i = 0; i <= 4; i++) {
-      const yy = top + i / 4 * plotHeight;
+    for (let i = 0; i <= yTickCount; i++) {
+      const yy = top + i / yTickCount * plotHeight;
       ctx.strokeStyle = colors.grid;
       ctx.beginPath();
       ctx.moveTo(left, yy);
@@ -90,11 +98,11 @@
       ctx.stroke();
       ctx.fillStyle = colors.text;
       ctx.textAlign = "right";
-      ctx.fillText((maxY - i / 4 * (maxY - minY)).toFixed(tickPrecision), left - 5, yy + 4);
+      ctx.fillText(((lastTick - i) * step).toFixed(tickPrecision), left - 5, yy + 4);
       if (data.secondary) {
         ctx.fillStyle = colors.error;
         ctx.textAlign = "left";
-        const tick = errorMax * (1 - i / 4);
+        const tick = errorMax * (1 - i / yTickCount);
         ctx.fillText(tick >= 1000 ? (tick / 1000).toFixed(1) + "k" :
           tick >= 10 ? tick.toFixed(0) : tick.toFixed(1), left + plotWidth + 5, yy + 4);
       }

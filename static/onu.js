@@ -222,16 +222,22 @@
     const low = values.length ? Math.min(...values) : 0;
     const high = values.length ? Math.max(...values) : 1;
     const padding = Math.max((high - low) * .12, Math.abs(high) * .02, .1);
-    const minY = low - padding;
-    const maxY = high + padding;
-    const tickPrecision = Math.max(1, Math.ceil(-Math.log10((maxY - minY) / 4)));
+    const roughStep = Math.max(0.1, (high - low + 2 * padding) / 4);
+    const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+    const step = [1, 2, 5, 10].find(n => n * magnitude >= roughStep / (1 + 1e-9)) * magnitude;
+    const firstTick = Math.floor((low - padding) / step + 1e-9);
+    const lastTick = Math.ceil((high + padding) / step - 1e-9);
+    const minY = firstTick * step;
+    const maxY = lastTick * step;
+    const yTickCount = lastTick - firstTick;
+    const tickPrecision = Math.max(0, -Math.floor(Math.log10(step)));
     const x = time => left + (time - data.from) / (data.to - data.from) * plotWidth;
     const y = value => top + (maxY - value) / (maxY - minY) * plotHeight;
     ctx.font = "11px system-ui, sans-serif";
     ctx.fillStyle = colors.text;
     ctx.fillText(data.units, left, 12);
-    for (let i = 0; i <= 4; i++) {
-      const yy = top + i / 4 * plotHeight;
+    for (let i = 0; i <= yTickCount; i++) {
+      const yy = top + i / yTickCount * plotHeight;
       ctx.strokeStyle = colors.grid;
       ctx.beginPath();
       ctx.moveTo(left, yy);
@@ -239,7 +245,7 @@
       ctx.stroke();
       ctx.fillStyle = colors.text;
       ctx.textAlign = "right";
-      ctx.fillText((maxY - i / 4 * (maxY - minY)).toFixed(tickPrecision), left - 5, yy + 4);
+      ctx.fillText(((lastTick - i) * step).toFixed(tickPrecision), left - 5, yy + 4);
     }
     const timeFormat = new Intl.DateTimeFormat("ru-RU", {
       timeZone: timezone, hour: "2-digit", minute: "2-digit",
