@@ -224,6 +224,7 @@
     const padding = Math.max((high - low) * .12, Math.abs(high) * .02, .1);
     const minY = low - padding;
     const maxY = high + padding;
+    const tickPrecision = Math.max(1, Math.ceil(-Math.log10((maxY - minY) / 4)));
     const x = time => left + (time - data.from) / (data.to - data.from) * plotWidth;
     const y = value => top + (maxY - value) / (maxY - minY) * plotHeight;
     ctx.font = "11px system-ui, sans-serif";
@@ -238,7 +239,7 @@
       ctx.stroke();
       ctx.fillStyle = colors.text;
       ctx.textAlign = "right";
-      ctx.fillText((maxY - i / 4 * (maxY - minY)).toFixed(1), left - 5, yy + 4);
+      ctx.fillText((maxY - i / 4 * (maxY - minY)).toFixed(tickPrecision), left - 5, yy + 4);
     }
     const timeFormat = new Intl.DateTimeFormat("ru-RU", {
       timeZone: timezone, hour: "2-digit", minute: "2-digit",

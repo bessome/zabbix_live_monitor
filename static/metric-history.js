@@ -65,6 +65,7 @@
     const padding = Math.max((high - low) * .12, Math.abs(high) * .02, .1);
     const minY = data.units === "%" ? Math.max(0, low - padding) : low - padding;
     const maxY = data.units === "%" ? Math.min(100, high + padding) : high + padding;
+    const tickPrecision = Math.max(1, Math.ceil(-Math.log10((maxY - minY) / 4)));
     const errorHigh = secondary.length ? Math.max(...secondary.map(point => point.value)) : 0;
     const errorMax = Math.max(1, errorHigh * 1.1);
     const x = time => left + (time - data.from) / (data.to - data.from) * plotWidth;
@@ -89,7 +90,7 @@
       ctx.stroke();
       ctx.fillStyle = colors.text;
       ctx.textAlign = "right";
-      ctx.fillText((maxY - i / 4 * (maxY - minY)).toFixed(1), left - 5, yy + 4);
+      ctx.fillText((maxY - i / 4 * (maxY - minY)).toFixed(tickPrecision), left - 5, yy + 4);
       if (data.secondary) {
         ctx.fillStyle = colors.error;
         ctx.textAlign = "left";
