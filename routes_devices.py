@@ -151,10 +151,10 @@ async def set_favorite(request: Request, category: str, host_id: str):
 
 @router.get("/api/devices/{category}")
 async def devices_api(request: Request, category: str, q: str = "",
-                       page: int = 1, per_page: int = 50):
+                       page: int = 1, per_page: int = 50, view: str = "list"):
     user = require_user(request, api=True)
     category_filter(category)
-    if page < 1 or per_page not in (25, 50, 100, 250):
+    if page < 1 or per_page not in (25, 50, 100, 250) or view not in ("list", "tree"):
         raise HTTPException(422, "Invalid pagination parameters")
     try:
         rows = await asyncio.to_thread(host_rows, category)
@@ -164,8 +164,15 @@ async def devices_api(request: Request, category: str, q: str = "",
     if query:
         rows = [row for row in rows if any(
             query in normalize_device_search(str(row[field]))
-            for field in ("name", "technical_name", "address"))]
+            for field in ("name", "technical_name", "address")) or
+            (view == "tree" and any(query in normalize_device_search(group)
+                                    for group in row.get("groups", [])))]
     total = len(rows)
+    if view == "tree":
+        favorite_ids = favorite_ids_for(user["id"])
+        return {"devices": [{**row, "favorite": row["id"] in favorite_ids}
+                            for row in rows],
+                "total": total, "updated_at": int(time.time())}
     pages = max(1, (total + per_page - 1) // per_page)
     page = min(page, pages)
     start = (page - 1) * per_page

@@ -88,6 +88,13 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.get("/static/style.css").status_code, 200)
         self.assertEqual(self.client.get("/static/view-mode.js").status_code, 200)
         self.assertEqual(self.client.get("/static/onu.css").status_code, 200)
+        self.login()
+        devices_page = self.client.get("/devices/VOIP")
+        self.assertEqual(devices_page.status_code, 200)
+        self.assertRegex(devices_page.text, r'href="/static/pagination\.css\?v=\d+"')
+        self.assertNotIn('href="http://', devices_page.text)
+        self.assertNotIn('src="http://', devices_page.text)
+        self.assertEqual(self.client.get("/static/pagination.css").status_code, 200)
 
     def test_onu_olt_item_search_and_history_are_scoped_to_group(self):
         self.assertEqual(self.client.get("/onu-ont", follow_redirects=False).status_code, 303)
@@ -593,6 +600,36 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/devices/VOIP?per_page=500").status_code, 422)
         self.assertEqual(self.client.get("/api/devices/VOIP?page=0").status_code, 422)
         self.assertIn('value="50" selected', self.client.get("/devices/VOIP").text)
+
+    def test_device_tree_uses_zabbix_groups_across_all_pages(self):
+        self.login()
+        host = {"hostid": "1", "host": "voip-1", "name": "Phone 1", "status": "0",
+                "interfaces": [], "groups": [{"groupid": "12", "name": "Pärnu/VOIP/floor_2"},
+                                             {"groupid": "13", "name": "Backup phones"}]}
+        with (patch.object(self.zabbix, "category_filter", return_value=("group", ["12"])),
+              patch.object(self.zabbix, "zabbix_call", return_value=[host]) as api):
+            self.zabbix._cache.pop("VOIP", None)
+            mapped = self.zabbix.host_rows("VOIP")
+            self.assertEqual(mapped[0]["groups"], ["Pärnu/VOIP/floor_2", "Backup phones"])
+            self.assertEqual(api.call_args.args[1]["selectGroups"], ["groupid", "name"])
+        devices = [{"id": str(i), "name": "Phone %s" % i,
+                    "technical_name": "phone-%s" % i, "address": "192.0.2.1",
+                    "groups": ["Pärnu/VOIP/floor_2"], "availability": "unknown"}
+                   for i in range(60)]
+        with (patch("routes_devices.host_rows", return_value=devices),
+              patch("routes_devices.device_descriptions") as descriptions):
+            response = self.client.get("/api/devices/VOIP?view=tree")
+            self.assertEqual((response.status_code, response.json()["total"],
+                              len(response.json()["devices"])), (200, 60, 60))
+            self.assertEqual(response.json()["devices"][0]["groups"],
+                             ["Pärnu/VOIP/floor_2"])
+            self.assertEqual(self.client.get("/api/devices/VOIP?view=tree&q=floor_2")
+                             .json()["total"], 60)
+            descriptions.assert_not_called()
+        page = self.client.get("/devices/VOIP").text
+        self.assertIn('data-device-view="tree"', page)
+        self.assertIn('id="device-tree"', page)
+        self.assertNotIn('data-device-view="tree"', self.client.get("/onu-ont").text)
 
     def test_device_search_treats_separators_equally(self):
         self.login()
