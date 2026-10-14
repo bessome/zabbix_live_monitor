@@ -706,6 +706,51 @@ class AppTests(unittest.TestCase):
             self.assertEqual(api.call_count, 1)
         self.assertEqual(self.zabbix.device_descriptions([]), {})
 
+    def test_modem_list_levels_selects_one_current_channel_per_host(self):
+        def item(item_id, host_id, name, value, clock="200", **extra):
+            return {"itemid": item_id, "hostid": host_id, "name": name,
+                    "lastvalue": value, "lastclock": clock, "status": "0",
+                    "value_type": "0", "units": "dBmV", **extra}
+        items = [
+            item("1", "1", "Upstream channel US1 Level", "45.2000", "100"),
+            item("2", "1", "Upstream channel US1 Level", "45.3000"),
+            item("3", "1", "Upstream channel US2 Level", "47.0"),
+            item("4", "1", "Downstream channel 3 447MHz Level", "-2.5"),
+            item("5", "1", "Downstream channel 1 435MHz Level", "-1.20"),
+            item("6", "1", "Downstream channel 1 435MHz SNR", "35"),
+            item("7", "1", "Upstream channel US Level", "90"),
+            item("12", "1", "Downstream channel Level", "30"),
+            item("8", "2", "Upstream channel US Level", "42.00"),
+            item("9", "2", "Downstream channel Level", "0.00"),
+            item("10", "2", "Downstream channel 1 435MHz Level", "NaN"),
+            item("11", "3", "Upstream channel US Level", "99"),
+        ]
+        with patch("zabbix_service.zabbix_call", return_value=items) as api:
+            self.assertEqual(self.zabbix.modem_list_levels(["1", "2"]), {
+                "1": {"us": {"value": "45.3", "units": "dBmV"},
+                      "ds": {"value": "-1.2", "units": "dBmV"}},
+                "2": {"us": {"value": "42", "units": "dBmV"},
+                      "ds": {"value": "0", "units": "dBmV"}},
+            })
+            self.assertEqual(api.call_args.args[0], "item.get")
+            self.assertEqual(api.call_args.args[1]["hostids"], ["1", "2"])
+            self.assertEqual(api.call_args.args[1]["search"], {"name": "Level"})
+        self.assertEqual(self.zabbix.modem_list_levels([]), {})
+
+    def test_modem_list_api_uses_zabbix_levels_instead_of_descriptions(self):
+        self.login()
+        modem = {"id": "42", "name": "Modem", "technical_name": "modem-42",
+                 "address": "192.0.2.42", "availability": "available"}
+        levels = {"42": {"us": {"value": "45.3", "units": "dBmV"}}}
+        with (patch("routes_devices.host_rows", return_value=[modem]),
+              patch("routes_devices.modem_list_levels", return_value=levels) as read_levels,
+              patch("routes_devices.device_descriptions") as descriptions):
+            response = self.client.get("/api/devices/Modems")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["devices"][0]["modem_levels"], levels["42"])
+            read_levels.assert_called_once_with(["42"])
+            descriptions.assert_not_called()
+
     def test_modem_channels_requires_login_and_reads_direct_snmp(self):
         path = "/api/devices/Modems/42/modem-channels"
         self.assertEqual(self.client.get(path).status_code, 401)

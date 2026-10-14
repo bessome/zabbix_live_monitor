@@ -19,6 +19,7 @@ from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_fo
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
                             snapshot_for as switch_snapshot_for, traffic_for)
 from zabbix_service import (category_filter, device_descriptions, host_rows,
+                             modem_list_levels,
                              modem_channel_definitions, modem_overview_definitions,
                              modem_restarts_count_24h, modem_restarts_item,
                              normalize_device_search, optical_power_definitions,
@@ -178,13 +179,19 @@ async def devices_api(request: Request, category: str, q: str = "",
     start = (page - 1) * per_page
     visible = rows[start:start + per_page]
     try:
-        descriptions = await asyncio.to_thread(
-            device_descriptions, [row["id"] for row in visible])
+        host_ids = [row["id"] for row in visible]
+        if category == "Modems":
+            modem_levels = await asyncio.to_thread(modem_list_levels, host_ids)
+            descriptions = {}
+        else:
+            modem_levels = {}
+            descriptions = await asyncio.to_thread(device_descriptions, host_ids)
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     favorite_ids = favorite_ids_for(user["id"])
     devices_with_description = [
         {**row, "device_description": descriptions.get(row["id"]),
+         "modem_levels": modem_levels.get(row["id"]) if category == "Modems" else None,
          "favorite": row["id"] in favorite_ids}
         for row in visible
     ]

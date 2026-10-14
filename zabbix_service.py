@@ -5,6 +5,7 @@ import os
 import re
 import threading
 import time
+from decimal import Decimal, InvalidOperation
 from urllib import error, request as urlrequest
 
 from fastapi import HTTPException
@@ -27,6 +28,8 @@ _OLT_ITEM_MARKERS = ("ONU OPT RX", "OLT Status interface", "ONU Optical RX",
                      "ONU Opitcal RX Level")
 _cache_lock = threading.Lock()
 _search_letters = str.maketrans({"ä": "a", "ö": "o", "õ": "o", "ü": "u"})
+_list_us_level = re.compile(r"^Upstream channel\s+US(\d*)\s+Level$", re.I)
+_list_ds_level = re.compile(r"^Downstream channel(?:\s+(\d+)\s+\S+MHz)?\s+Level$", re.I)
 
 def category_filter(category):
     if category not in CATEGORIES:
@@ -122,6 +125,48 @@ def device_descriptions(host_ids):
         if str(item.get("lastclock", "0")) != "0" and item.get("lastvalue"):
             descriptions[str(item["hostid"])] = item["lastvalue"]
     return descriptions
+
+
+def modem_list_levels(host_ids):
+    """Read one current US and DS level per visible modem from Zabbix."""
+    if not host_ids:
+        return {}
+    items = zabbix_call("item.get", {
+        "output": ["itemid", "hostid", "name", "status", "value_type",
+                   "units", "lastvalue", "lastclock"],
+        "hostids": host_ids,
+        "search": {"name": "Level"},
+    })
+    choices = {}
+    for item in items:
+        if (str(item.get("hostid")) not in host_ids
+                or str(item.get("status")) != "0"
+                or str(item.get("value_type")) not in ("0", "3")):
+            continue
+        us = _list_us_level.fullmatch(str(item.get("name", "")).strip())
+        ds = _list_ds_level.fullmatch(str(item.get("name", "")).strip())
+        if not us and not ds:
+            continue
+        try:
+            clock = int(item.get("lastclock") or 0)
+            value = Decimal(str(item["lastvalue"]))
+        except (KeyError, TypeError, ValueError, InvalidOperation):
+            continue
+        if clock <= 0 or not value.is_finite():
+            continue
+        match = us or ds
+        channel = int(match.group(1)) if match.group(1) else 9999
+        kind = "us" if us else "ds"
+        # Prefer a numbered channel over a generic item, then the lowest channel.
+        rank = (channel, -clock, str(item.get("itemid", "")))
+        key = (str(item["hostid"]), kind)
+        if key not in choices or rank < choices[key][0]:
+            choices[key] = (rank, {"value": format(value.normalize(), "f"),
+                                   "units": str(item.get("units") or "")})
+    result = {}
+    for (host_id, kind), (_, metric) in choices.items():
+        result.setdefault(host_id, {})[kind] = metric
+    return result
 
 
 def modem_channel_definitions(host_id):

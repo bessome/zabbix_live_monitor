@@ -87,6 +87,20 @@ function favoriteButton(device) {
   favorite.title = favorite.getAttribute("aria-label");
   return favorite;
 }
+function availabilityIndicator(value) {
+  const indicator = document.createElement("span");
+  const known = value === "available" || value === "unavailable";
+  const label = value === "available" ? "Доступен" : value === "unavailable" ? "Недоступен" : "Нет данных";
+  indicator.className = "availability-indicator " + (known ? value : "unknown");
+  if (known) {
+    indicator.setAttribute("role", "img");
+    indicator.setAttribute("aria-label", label);
+    indicator.title = label;
+  } else {
+    indicator.textContent = label;
+  }
+  return indicator;
+}
 function renderTree(devices) {
   const root = {children: new Map(), devices: []};
   for (const device of devices) {
@@ -142,10 +156,7 @@ function renderTree(devices) {
         const address = document.createElement("span");
         address.className = "device-tree-address";
         address.textContent = device.address;
-        const availability = document.createElement("span");
-        availability.className = device.availability;
-        availability.textContent = device.availability === "available" ? "Доступен" : device.availability === "unavailable" ? "Недоступен" : "Нет данных";
-        line.append(address, availability);
+        line.append(address, availabilityIndicator(device.availability));
         content.appendChild(line);
       }
       details.appendChild(content);
@@ -189,14 +200,21 @@ async function refresh() {
       nameCell.appendChild(nameRow);
       const description = document.createElement("small");
       description.className = "device-description";
-      description.textContent = "Описание: " + (device.device_description || "—");
+      if (category === "Modems") {
+        description.classList.add("modem-level-summary");
+        const levels = device.modem_levels || {};
+        const levelText = metric => metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a";
+        description.textContent = "US: " + levelText(levels.us) + " · DS: " + levelText(levels.ds);
+        description.title = description.textContent;
+      } else {
+        description.textContent = "Описание: " + (device.device_description || "—");
+      }
       nameCell.appendChild(description);
       tr.appendChild(nameCell);
       cell(tr, "Адрес", device.address);
       const state = document.createElement("td");
       state.dataset.label = "Доступность";
-      state.textContent = device.availability === "available" ? "Доступен" : device.availability === "unavailable" ? "Недоступен" : "Нет данных";
-      state.className = device.availability;
+      state.appendChild(availabilityIndicator(device.availability));
       tr.appendChild(state);
       rows.appendChild(tr);
     }
