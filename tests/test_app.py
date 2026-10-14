@@ -631,6 +631,35 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="device-tree"', page)
         self.assertNotIn('data-device-view="tree"', self.client.get("/onu-ont").text)
 
+    def test_tree_summaries_are_scoped_to_visible_devices(self):
+        path = "/api/devices/Modems/summaries?ids=42,42"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.login()
+        modem = {"id": "42"}
+        levels = {"42": {"us": {"value": "45.5", "units": "dBmV"}}}
+        with (patch("routes_devices.host_rows", return_value=[modem]),
+              patch("routes_devices.modem_list_levels", return_value=levels) as read_levels):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["summaries"],
+                             {"42": {"modem_levels": levels["42"]}})
+            read_levels.assert_called_once_with(["42"])
+            self.assertEqual(self.client.get(
+                "/api/devices/Modems/summaries?ids=99").status_code, 404)
+            self.assertEqual(read_levels.call_count, 1)
+        with (patch("routes_devices.host_rows", return_value=[modem]),
+              patch("routes_devices.device_descriptions",
+                    return_value={"42": "Office"}) as descriptions):
+            response = self.client.get("/api/devices/VOIP/summaries?ids=42")
+            self.assertEqual(response.json()["summaries"],
+                             {"42": {"device_description": "Office"}})
+            descriptions.assert_called_once_with(["42"])
+        self.assertEqual(self.client.get(
+            "/api/devices/VOIP/summaries?ids=").status_code, 422)
+        self.assertEqual(self.client.get("/api/devices/VOIP/summaries?ids="
+                                         + ",".join(str(i) for i in range(101))).status_code,
+                         422)
+
     def test_device_search_treats_separators_equally(self):
         self.login()
         devices = [
@@ -716,11 +745,11 @@ class AppTests(unittest.TestCase):
             item("2", "1", "Upstream channel US1 Level", "45.3000"),
             item("3", "1", "Upstream channel US2 Level", "47.0"),
             item("4", "1", "Downstream channel 3 447MHz Level", "-2.5"),
-            item("5", "1", "Downstream channel 1 435MHz Level", "-1.20"),
+            item("5", "1", "Downstream channel 1 435MHz Level", "-3.4000000000000004"),
             item("6", "1", "Downstream channel 1 435MHz SNR", "35"),
             item("7", "1", "Upstream channel US Level", "90"),
             item("12", "1", "Downstream channel Level", "30"),
-            item("8", "2", "Upstream channel US Level", "42.00"),
+            item("8", "2", "Upstream channel US Level", "42.126"),
             item("9", "2", "Downstream channel Level", "0.00"),
             item("10", "2", "Downstream channel 1 435MHz Level", "NaN"),
             item("11", "3", "Upstream channel US Level", "99"),
@@ -728,8 +757,8 @@ class AppTests(unittest.TestCase):
         with patch("zabbix_service.zabbix_call", return_value=items) as api:
             self.assertEqual(self.zabbix.modem_list_levels(["1", "2"]), {
                 "1": {"us": {"value": "45.3", "units": "dBmV"},
-                      "ds": {"value": "-1.2", "units": "dBmV"}},
-                "2": {"us": {"value": "42", "units": "dBmV"},
+                      "ds": {"value": "-3.4", "units": "dBmV"}},
+                "2": {"us": {"value": "42.13", "units": "dBmV"},
                       "ds": {"value": "0", "units": "dBmV"}},
             })
             self.assertEqual(api.call_args.args[0], "item.get")

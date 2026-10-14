@@ -9,7 +9,7 @@
 <div class="device-view-options" role="group" aria-label="Вид списка устройств"><button type="button" data-device-view="list" aria-pressed="true">Список</button><button type="button" data-device-view="tree" aria-pressed="false">Дерево</button></div>
 </div>
 <p id="status" aria-live="polite"></p>
-<div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th><th>Доступность</th></tr></thead>
+<div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
 <div class="pagination" aria-label="Навигация по страницам">
@@ -52,6 +52,7 @@ const pagination = document.querySelector("#device-list .pagination");
 const tree = document.getElementById("device-tree");
 const viewButtons = document.querySelectorAll("[data-device-view]");
 const viewStorageKey = "zabbix-device-view:" + category;
+const summaryCache = new Map();
 let view = "list";
 try { if (localStorage.getItem(viewStorageKey) === "tree") view = "tree"; } catch (_) {}
 const openGroups = new Set();
@@ -101,6 +102,72 @@ function availabilityIndicator(value) {
   }
   return indicator;
 }
+function updateDeviceSummary(description, device, summary) {
+  description.className = "device-description";
+  if (!summary) {
+    description.textContent = "Загрузка…";
+    return;
+  }
+  if (category === "Modems") {
+    description.classList.add("modem-level-summary");
+    const levels = summary.modem_levels || {};
+    const levelText = metric => metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a";
+    description.textContent = "US: " + levelText(levels.us) + " · DS: " + levelText(levels.ds);
+    description.title = description.textContent;
+  } else {
+    description.textContent = "Описание: " + (summary.device_description || "—");
+    description.removeAttribute("title");
+  }
+}
+function deviceRow(device) {
+  const tr = document.createElement("tr");
+  tr.dataset.hostId = device.id;
+  const nameCell = document.createElement("td");
+  const nameRow = document.createElement("div");
+  nameRow.className = "device-name-row";
+  nameRow.append(availabilityIndicator(device.availability), deviceLink(device), favoriteButton(device));
+  nameCell.appendChild(nameRow);
+  const description = document.createElement("small");
+  updateDeviceSummary(description, device,
+    "device_description" in device || "modem_levels" in device
+      ? device : summaryCache.get(String(device.id))?.summary);
+  nameCell.appendChild(description);
+  tr.appendChild(nameCell);
+  cell(tr, "Адрес", device.address);
+  return tr;
+}
+async function loadSummaries(devices, body) {
+  const now = Date.now();
+  const pending = devices.filter(device => {
+    const cached = summaryCache.get(String(device.id));
+    return !cached || now - cached.at > 14000;
+  });
+  for (let index = 0; index < pending.length; index += 100) {
+    const batch = pending.slice(index, index + 100);
+    const params = new URLSearchParams({ids: batch.map(device => device.id).join(",")});
+    try {
+      const response = await fetch("/api/devices/" + encodeURIComponent(category)
+        + "/summaries?" + params, {credentials: "same-origin"});
+      if (response.status === 401) { location.href = "/login"; return; }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Ошибка загрузки");
+      for (const device of batch) {
+        const summary = data.summaries[device.id];
+        if (!summary) continue;
+        summaryCache.set(String(device.id), {summary, at: Date.now()});
+        const row = [...body.rows].find(row => row.dataset.hostId === String(device.id));
+        if (row) updateDeviceSummary(row.querySelector(".device-description"), device, summary);
+      }
+    } catch (_) {
+      for (const device of batch) {
+        const row = [...body.rows].find(row => row.dataset.hostId === String(device.id));
+        if (row && !summaryCache.has(String(device.id))) {
+          row.querySelector(".device-description").textContent = "Данные недоступны";
+        }
+      }
+    }
+  }
+}
 function renderTree(devices) {
   const root = {children: new Map(), devices: []};
   for (const device of devices) {
@@ -134,9 +201,11 @@ function renderTree(devices) {
       details.className = "device-tree-group";
       details.open = Boolean(search.value.trim()) || openGroups.has(groupPath);
       details.addEventListener("toggle", () => {
-        if (search.value.trim()) return;
-        if (details.open) openGroups.add(groupPath);
-        else openGroups.delete(groupPath);
+        if (!search.value.trim()) {
+          if (details.open) openGroups.add(groupPath);
+          else openGroups.delete(groupPath);
+        }
+        if (details.open) details.loadSummaries();
       });
       const summary = document.createElement("summary");
       const title = document.createElement("span");
@@ -149,22 +218,28 @@ function renderTree(devices) {
       const content = document.createElement("div");
       content.className = "device-tree-children";
       content.appendChild(branch(child, groupPath));
-      for (const device of child.devices) {
-        const line = document.createElement("div");
-        line.className = "device-tree-device";
-        line.append(deviceLink(device), favoriteButton(device));
-        const address = document.createElement("span");
-        address.className = "device-tree-address";
-        address.textContent = device.address;
-        line.append(address, availabilityIndicator(device.availability));
-        content.appendChild(line);
+      let body;
+      if (child.devices.length) {
+        const table = document.createElement("table");
+        table.className = "device-table tree-device-table";
+        body = document.createElement("tbody");
+        for (const device of child.devices) body.appendChild(deviceRow(device));
+        table.appendChild(body);
+        content.appendChild(table);
       }
       details.appendChild(content);
+      let loading = false;
+      details.loadSummaries = () => {
+        if (!body || loading) return;
+        loading = true;
+        loadSummaries(child.devices, body).finally(() => { loading = false; });
+      };
       fragment.appendChild(details);
     }
     return fragment;
   }
   tree.replaceChildren(branch(root, ""));
+  tree.querySelectorAll(".device-tree-group[open]").forEach(group => group.loadSummaries());
 }
 function applyView() {
   tableWrap.hidden = view === "tree";
@@ -191,33 +266,7 @@ async function refresh() {
     currentPage = data.page;
     lastPage = data.pages;
     rows.replaceChildren();
-    for (const device of data.devices) {
-      const tr = document.createElement("tr");
-      const nameCell = document.createElement("td");
-      const nameRow = document.createElement("div");
-      nameRow.className = "device-name-row";
-      nameRow.append(deviceLink(device), favoriteButton(device));
-      nameCell.appendChild(nameRow);
-      const description = document.createElement("small");
-      description.className = "device-description";
-      if (category === "Modems") {
-        description.classList.add("modem-level-summary");
-        const levels = device.modem_levels || {};
-        const levelText = metric => metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a";
-        description.textContent = "US: " + levelText(levels.us) + " · DS: " + levelText(levels.ds);
-        description.title = description.textContent;
-      } else {
-        description.textContent = "Описание: " + (device.device_description || "—");
-      }
-      nameCell.appendChild(description);
-      tr.appendChild(nameCell);
-      cell(tr, "Адрес", device.address);
-      const state = document.createElement("td");
-      state.dataset.label = "Доступность";
-      state.appendChild(availabilityIndicator(device.availability));
-      tr.appendChild(state);
-      rows.appendChild(tr);
-    }
+    for (const device of data.devices) rows.appendChild(deviceRow(device));
     const from = data.total ? (data.page - 1) * data.per_page + 1 : 0;
     const to = data.total ? from + data.devices.length - 1 : 0;
     status.textContent = "Показано " + from + "–" + to + " из " + data.total;

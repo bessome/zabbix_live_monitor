@@ -200,6 +200,31 @@ async def devices_api(request: Request, category: str, q: str = "",
             "updated_at": int(time.time())}
 
 
+@router.get("/api/devices/{category}/summaries")
+async def device_summaries(request: Request, category: str, ids: str = ""):
+    require_user(request, api=True)
+    category_filter(category)
+    host_ids = list(dict.fromkeys(part.strip() for part in ids.split(",") if part.strip()))
+    if not host_ids or len(host_ids) > 100:
+        raise HTTPException(422, "Request 1–100 device IDs")
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        visible_ids = {row["id"] for row in rows}
+        if any(host_id not in visible_ids for host_id in host_ids):
+            raise HTTPException(404)
+        if category == "Modems":
+            levels = await asyncio.to_thread(modem_list_levels, host_ids)
+            summaries = {host_id: {"modem_levels": levels.get(host_id)}
+                         for host_id in host_ids}
+        else:
+            descriptions = await asyncio.to_thread(device_descriptions, host_ids)
+            summaries = {host_id: {"device_description": descriptions.get(host_id)}
+                         for host_id in host_ids}
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse({"summaries": summaries}, headers={"Cache-Control": "no-store"})
+
+
 @router.get("/devices/{category}/{host_id}")
 async def device_detail(request: Request, category: str, host_id: str):
     user = require_user(request)

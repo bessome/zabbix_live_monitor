@@ -161,7 +161,10 @@ def modem_list_levels(host_ids):
         rank = (channel, -clock, str(item.get("itemid", "")))
         key = (str(item["hostid"]), kind)
         if key not in choices or rank < choices[key][0]:
-            choices[key] = (rank, {"value": format(value.normalize(), "f"),
+            rounded = value.quantize(Decimal("0.01"))
+            if rounded == 0:
+                rounded = Decimal(0)
+            choices[key] = (rank, {"value": format(rounded.normalize(), "f"),
                                    "units": str(item.get("units") or "")})
     result = {}
     for (host_id, kind), (_, metric) in choices.items():
