@@ -74,7 +74,7 @@ def host_rows(category):
     hosts = zabbix_call("host.get", {
         "output": ["hostid", "host", "name", "status"],
         "selectInterfaces": ["ip", "dns", "useip", "main", "available", "type", "port"],
-        "selectGroups": ["groupid", "name"],
+        "selectHostGroups": ["groupid", "name"],
         "sortfield": "name", "sortorder": "ASC",
         "groupids" if mode == "group" else "templateids": ids})
     rows = []
@@ -101,7 +101,7 @@ def host_rows(category):
                        "interface_ip": primary.get("ip") or "",
                        "snmp_address": snmp_address, "snmp_port": snmp_port,
                       "enabled": host["status"] == "0", "availability": availability,
-                      "groups": [group["name"] for group in host.get("groups", [])
+                      "groups": [group["name"] for group in host.get("hostgroups", [])
                                  if group.get("name")]})
     with _cache_lock:
         _cache[category] = (time.monotonic(), rows)

@@ -604,14 +604,14 @@ class AppTests(unittest.TestCase):
     def test_device_tree_uses_zabbix_groups_across_all_pages(self):
         self.login()
         host = {"hostid": "1", "host": "voip-1", "name": "Phone 1", "status": "0",
-                "interfaces": [], "groups": [{"groupid": "12", "name": "Pärnu/VOIP/floor_2"},
-                                             {"groupid": "13", "name": "Backup phones"}]}
+                "interfaces": [], "hostgroups": [{"groupid": "12", "name": "Pärnu/VOIP/floor_2"},
+                                                 {"groupid": "13", "name": "Backup phones"}]}
         with (patch.object(self.zabbix, "category_filter", return_value=("group", ["12"])),
               patch.object(self.zabbix, "zabbix_call", return_value=[host]) as api):
             self.zabbix._cache.pop("VOIP", None)
             mapped = self.zabbix.host_rows("VOIP")
             self.assertEqual(mapped[0]["groups"], ["Pärnu/VOIP/floor_2", "Backup phones"])
-            self.assertEqual(api.call_args.args[1]["selectGroups"], ["groupid", "name"])
+            self.assertEqual(api.call_args.args[1]["selectHostGroups"], ["groupid", "name"])
         devices = [{"id": str(i), "name": "Phone %s" % i,
                     "technical_name": "phone-%s" % i, "address": "192.0.2.1",
                     "groups": ["Pärnu/VOIP/floor_2"], "availability": "unknown"}
