@@ -100,6 +100,18 @@ function renderTree(devices) {
       node.devices.push(device);
     }
   }
+  function prepareCounts(node) {
+    const descendants = new Set();
+    for (const child of node.children.values()) {
+      for (const id of prepareCounts(child)) descendants.add(id);
+    }
+    // A host assigned to both a parent group and its subgroup belongs in the deeper branch.
+    node.devices = node.devices.filter(device => !descendants.has(device.id));
+    node.deviceIds = descendants;
+    for (const device of node.devices) node.deviceIds.add(device.id);
+    return node.deviceIds;
+  }
+  prepareCounts(root);
   function branch(node, path) {
     const fragment = document.createDocumentFragment();
     for (const [name, child] of [...node.children].sort(([a], [b]) => a.localeCompare(b, "ru", {numeric: true}))) {
@@ -117,8 +129,7 @@ function renderTree(devices) {
       title.textContent = name;
       const count = document.createElement("span");
       count.className = "device-tree-count";
-      const descendants = (item) => item.devices.length + [...item.children.values()].reduce((sum, nested) => sum + descendants(nested), 0);
-      count.textContent = descendants(child);
+      count.textContent = child.deviceIds.size;
       summary.append(title, count);
       details.appendChild(summary);
       const content = document.createElement("div");
