@@ -165,11 +165,48 @@ def modem_list_levels(host_ids):
             if rounded == 0:
                 rounded = Decimal(0)
             choices[key] = (rank, {"value": format(rounded.normalize(), "f"),
-                                   "units": str(item.get("units") or "")})
+                                   "units": str(item.get("units") or ""),
+                                   "alert": value < (20 if kind == "us" else -15)
+                                   or value > (52 if kind == "us" else 15)})
     result = {}
     for (host_id, kind), (_, metric) in choices.items():
         result.setdefault(host_id, {})[kind] = metric
     return result
+
+
+def amplifier_list_optical_levels(host_ids):
+    """Read the current Optical input power item for each visible amplifier."""
+    if not host_ids:
+        return {}
+    items = zabbix_call("item.get", {
+        "output": ["itemid", "hostid", "name", "status", "value_type",
+                   "units", "lastvalue", "lastclock"],
+        "hostids": host_ids,
+        "filter": {"name": "Optical input power"},
+    })
+    choices = {}
+    for item in items:
+        host_id = str(item.get("hostid"))
+        if (host_id not in host_ids or str(item.get("status")) != "0"
+                or str(item.get("value_type")) not in ("0", "3")
+                or str(item.get("name", "")).strip().casefold() != "optical input power"):
+            continue
+        try:
+            clock = int(item.get("lastclock") or 0)
+            value = Decimal(str(item["lastvalue"]))
+        except (KeyError, TypeError, ValueError, InvalidOperation):
+            continue
+        if clock <= 0 or not value.is_finite():
+            continue
+        rank = (-clock, str(item.get("itemid", "")))
+        if host_id not in choices or rank < choices[host_id][0]:
+            rounded = value.quantize(Decimal("0.01"))
+            if rounded == 0:
+                rounded = Decimal(0)
+            choices[host_id] = (rank, {"value": format(rounded.normalize(), "f"),
+                                       "units": str(item.get("units") or ""),
+                                       "alert": value < Decimal("-3.4")})
+    return {host_id: metric for host_id, (_, metric) in choices.items()}
 
 
 def modem_channel_definitions(host_id):

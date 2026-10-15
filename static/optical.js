@@ -49,7 +49,7 @@
       number.classList.toggle("modem-value-changed", changed);
       previousValues.set(item.id, item.value);
       row.querySelector("strong").classList.toggle("optical-value-alert",
-        item.value != null && Number(item.value) < -3.3);
+        item.value != null && Number.isFinite(Number(item.value)) && Number(item.value) < -3.4);
     }
   }
 

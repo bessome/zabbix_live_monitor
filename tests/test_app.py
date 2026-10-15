@@ -752,17 +752,20 @@ class AppTests(unittest.TestCase):
             item("8", "2", "Upstream channel US Level", "42.126"),
             item("9", "2", "Downstream channel Level", "0.00"),
             item("10", "2", "Downstream channel 1 435MHz Level", "NaN"),
-            item("11", "3", "Upstream channel US Level", "99"),
+            item("11", "3", "Upstream channel US Level", "19.999"),
+            item("13", "3", "Downstream channel Level", "-15.001"),
         ]
         with patch("zabbix_service.zabbix_call", return_value=items) as api:
-            self.assertEqual(self.zabbix.modem_list_levels(["1", "2"]), {
-                "1": {"us": {"value": "45.3", "units": "dBmV"},
-                      "ds": {"value": "-3.4", "units": "dBmV"}},
-                "2": {"us": {"value": "42.13", "units": "dBmV"},
-                      "ds": {"value": "0", "units": "dBmV"}},
+            self.assertEqual(self.zabbix.modem_list_levels(["1", "2", "3"]), {
+                "1": {"us": {"value": "45.3", "units": "dBmV", "alert": False},
+                      "ds": {"value": "-3.4", "units": "dBmV", "alert": False}},
+                "2": {"us": {"value": "42.13", "units": "dBmV", "alert": False},
+                      "ds": {"value": "0", "units": "dBmV", "alert": False}},
+                "3": {"us": {"value": "20", "units": "dBmV", "alert": True},
+                      "ds": {"value": "-15", "units": "dBmV", "alert": True}},
             })
             self.assertEqual(api.call_args.args[0], "item.get")
-            self.assertEqual(api.call_args.args[1]["hostids"], ["1", "2"])
+            self.assertEqual(api.call_args.args[1]["hostids"], ["1", "2", "3"])
             self.assertEqual(api.call_args.args[1]["search"], {"name": "Level"})
         self.assertEqual(self.zabbix.modem_list_levels([]), {})
 
@@ -778,6 +781,45 @@ class AppTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["devices"][0]["modem_levels"], levels["42"])
             read_levels.assert_called_once_with(["42"])
+            descriptions.assert_not_called()
+
+    def test_amplifier_list_optical_levels_uses_current_zabbix_item(self):
+        def item(item_id, host_id, value, clock="200", **extra):
+            return {"itemid": item_id, "hostid": host_id, "name": "Optical input power",
+                    "lastvalue": value, "lastclock": clock, "status": "0",
+                    "value_type": "0", "units": "dBm", **extra}
+        items = [item("1", "42", "-3.41"), item("2", "42", "-3.2", "100"),
+                 item("3", "43", "-3.4"), item("4", "44", "bad"),
+                 item("5", "45", "-5", status="1"), item("6", "99", "-7"),
+                 item("7", "46", "-3.4001")]
+        with patch("zabbix_service.zabbix_call", return_value=items) as api:
+            self.assertEqual(self.zabbix.amplifier_list_optical_levels(["42", "43", "44", "45", "46"]),
+                             {"42": {"value": "-3.41", "units": "dBm", "alert": True},
+                              "43": {"value": "-3.4", "units": "dBm", "alert": False},
+                              "46": {"value": "-3.4", "units": "dBm", "alert": True}})
+            self.assertEqual(api.call_args.args[1]["filter"],
+                             {"name": "Optical input power"})
+        self.assertEqual(self.zabbix.amplifier_list_optical_levels([]), {})
+
+    def test_amplifier_list_and_detail_replace_description_with_optical_level(self):
+        self.login()
+        amplifier = {"id": "42", "name": "Amplifier", "technical_name": "amp-42",
+                     "address": "192.0.2.42", "availability": "available"}
+        levels = {"42": {"value": "-3.41", "units": "dBm"}}
+        with (patch("routes_devices.host_rows", return_value=[amplifier]),
+              patch("routes_devices.amplifier_list_optical_levels", return_value=levels) as read_levels,
+              patch("routes_devices.device_descriptions") as descriptions):
+            response = self.client.get("/api/devices/TV_Amplifires")
+            self.assertEqual(response.json()["devices"][0]["optical_level"], levels["42"])
+            summary = self.client.get("/api/devices/TV_Amplifires/summaries?ids=42")
+            self.assertEqual(summary.json()["summaries"], {"42": {"optical_level": levels["42"]}})
+            detail = self.client.get("/devices/TV_Amplifires/42")
+            self.assertIn("Optical input power</dt>", detail.text)
+            self.assertIn("-3.41 dBm", detail.text)
+            self.assertNotIn("Device description</dt>", detail.text)
+            self.assertIn('href="/static/ping.css?', detail.text)
+            self.assertIn('src="/static/optical.js?', detail.text)
+            self.assertEqual(read_levels.call_count, 3)
             descriptions.assert_not_called()
 
     def test_modem_channels_requires_login_and_reads_direct_snmp(self):
@@ -810,7 +852,7 @@ class AppTests(unittest.TestCase):
         definitions = [{"id": "81", "oid": "1.2.3", "label": "Optical input power",
                         "multiplier": "0.1", "units": "dBm", "value_type": "0"}]
         with (patch("routes_devices.host_rows", return_value=[device]),
-              patch("routes_devices.device_descriptions", return_value={}),
+              patch("routes_devices.amplifier_list_optical_levels", return_value={}),
               patch("routes_devices.optical_power_definitions", return_value=definitions),
               patch("routes_devices.snmp_community_for", return_value="public"),
               patch("routes_devices.snmp_snapshot_for", new_callable=AsyncMock,

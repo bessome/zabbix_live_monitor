@@ -18,7 +18,8 @@ from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_fo
                           uptime_for)
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
                             snapshot_for as switch_snapshot_for, traffic_for)
-from zabbix_service import (category_filter, device_descriptions, host_rows,
+from zabbix_service import (amplifier_list_optical_levels, category_filter,
+                             device_descriptions, host_rows,
                              modem_list_levels,
                              modem_channel_definitions, modem_overview_definitions,
                              modem_restarts_count_24h, modem_restarts_item,
@@ -182,9 +183,15 @@ async def devices_api(request: Request, category: str, q: str = "",
         host_ids = [row["id"] for row in visible]
         if category == "Modems":
             modem_levels = await asyncio.to_thread(modem_list_levels, host_ids)
+            optical_levels = {}
+            descriptions = {}
+        elif category == "TV_Amplifires":
+            modem_levels = {}
+            optical_levels = await asyncio.to_thread(amplifier_list_optical_levels, host_ids)
             descriptions = {}
         else:
             modem_levels = {}
+            optical_levels = {}
             descriptions = await asyncio.to_thread(device_descriptions, host_ids)
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
@@ -192,6 +199,7 @@ async def devices_api(request: Request, category: str, q: str = "",
     devices_with_description = [
         {**row, "device_description": descriptions.get(row["id"]),
          "modem_levels": modem_levels.get(row["id"]) if category == "Modems" else None,
+         "optical_level": optical_levels.get(row["id"]) if category == "TV_Amplifires" else None,
          "favorite": row["id"] in favorite_ids}
         for row in visible
     ]
@@ -216,6 +224,10 @@ async def device_summaries(request: Request, category: str, ids: str = ""):
             levels = await asyncio.to_thread(modem_list_levels, host_ids)
             summaries = {host_id: {"modem_levels": levels.get(host_id)}
                          for host_id in host_ids}
+        elif category == "TV_Amplifires":
+            levels = await asyncio.to_thread(amplifier_list_optical_levels, host_ids)
+            summaries = {host_id: {"optical_level": levels.get(host_id)}
+                         for host_id in host_ids}
         else:
             descriptions = await asyncio.to_thread(device_descriptions, host_ids)
             summaries = {host_id: {"device_description": descriptions.get(host_id)}
@@ -237,10 +249,16 @@ async def device_detail(request: Request, category: str, host_id: str):
     if device is None:
         raise HTTPException(404)
     try:
-        descriptions = await asyncio.to_thread(device_descriptions, [host_id])
+        if category == "TV_Amplifires":
+            optical_levels = await asyncio.to_thread(amplifier_list_optical_levels, [host_id])
+            descriptions = {}
+        else:
+            optical_levels = {}
+            descriptions = await asyncio.to_thread(device_descriptions, [host_id])
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
-    device = {**device, "device_description": descriptions.get(host_id)}
+    device = {**device, "device_description": descriptions.get(host_id),
+              "optical_level": optical_levels.get(host_id)}
     record_recent_device(user["id"], device, category)
     return render(request, "device.html", category=category, device=device,
                   favorite=host_id in favorite_ids_for(user["id"]),

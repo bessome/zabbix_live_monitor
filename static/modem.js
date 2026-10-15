@@ -89,10 +89,14 @@
       }
       const numericValue = item.value == null ? NaN : Number(item.value);
       const lowSnr = item.label.endsWith(" SNR") && numericValue < 30;
-      const highUs = item.label.startsWith("US") && numericValue > 52;
-      value.classList.toggle("modem-value-alert-blink", lowSnr);
-      value.classList.toggle("modem-value-alert", highUs);
-      value.title = lowSnr ? "SNR ниже 30" : highUs ? "US Level выше 52" : "";
+      const usOutOfRange = item.label.startsWith("US") && item.label.endsWith("Level")
+        && (numericValue < 20 || numericValue > 52);
+      const dsOutOfRange = item.label.startsWith("DS") && item.label.endsWith("Level")
+        && (numericValue < -15 || numericValue > 15);
+      const alert = Number.isFinite(numericValue) && (lowSnr || usOutOfRange || dsOutOfRange);
+      value.classList.toggle("modem-value-alert-blink", alert);
+      value.title = lowSnr ? "SNR ниже 30" : usOutOfRange ? "US Level вне диапазона 20…52"
+        : dsOutOfRange ? "DS Level вне диапазона −15…+15" : "";
     }
   }
 

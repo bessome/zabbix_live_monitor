@@ -104,6 +104,7 @@ function availabilityIndicator(value) {
 }
 function updateDeviceSummary(description, device, summary) {
   description.className = "device-description";
+  description.removeAttribute("title");
   if (!summary) {
     description.textContent = "Загрузка…";
     return;
@@ -112,11 +113,30 @@ function updateDeviceSummary(description, device, summary) {
     description.classList.add("modem-level-summary");
     const levels = summary.modem_levels || {};
     const levelText = metric => metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a";
-    description.textContent = "US: " + levelText(levels.us) + " · DS: " + levelText(levels.ds);
+    description.replaceChildren();
+    for (const [kind, label, min, max] of [["us", "US", 20, 52], ["ds", "DS", -15, 15]]) {
+      if (description.childNodes.length) description.append(" · ");
+      const metric = levels[kind];
+      const part = document.createElement("span");
+      part.textContent = label + ": " + levelText(metric);
+      const value = metric?.value == null ? NaN : Number(metric.value);
+      if (metric?.alert ?? (Number.isFinite(value) && (value < min || value > max))) {
+        part.className = "device-level-alert-blink";
+        part.title = label + " Level вне диапазона " + min + "…" + max;
+      }
+      description.appendChild(part);
+    }
     description.title = description.textContent;
+  } else if (category === "TV_Amplifires") {
+    description.classList.add("modem-level-summary");
+    const metric = summary.optical_level;
+    description.textContent = "Optical input power: "
+      + (metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a");
+    const value = metric?.value == null ? NaN : Number(metric.value);
+    if (metric?.alert ?? (Number.isFinite(value) && value < -3.4))
+      description.classList.add("device-level-alert");
   } else {
     description.textContent = "Описание: " + (summary.device_description || "—");
-    description.removeAttribute("title");
   }
 }
 function deviceRow(device) {
@@ -129,7 +149,7 @@ function deviceRow(device) {
   nameCell.appendChild(nameRow);
   const description = document.createElement("small");
   updateDeviceSummary(description, device,
-    "device_description" in device || "modem_levels" in device
+    "device_description" in device || "modem_levels" in device || "optical_level" in device
       ? device : summaryCache.get(String(device.id))?.summary);
   nameCell.appendChild(description);
   tr.appendChild(nameCell);
