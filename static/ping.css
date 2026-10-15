@@ -61,8 +61,8 @@
 .optical-channels .optical-row:focus-visible{outline:2px solid #176cad;outline-offset:2px}
 .optical-row>span{font-size:13px;font-weight:600}
 .optical-row strong{white-space:nowrap;font-size:18px;font-variant-numeric:tabular-nums}
-.optical-row .optical-value-alert{padding:2px 5px;border-radius:5px;background:#ffe5e2;color:#a32923;font-weight:800}
-@media(prefers-reduced-motion:reduce){.modem-row .modem-value-alert-blink{animation:none;background:#ffb8b0}}
+.optical-row .optical-value-alert{padding:2px 5px;border-radius:5px;background:#ffe5e2;color:#a32923;font-weight:800;animation:modem-alert-blink 1s ease-in-out infinite alternate}
+@media(prefers-reduced-motion:reduce){.modem-row .modem-value-alert-blink,.optical-row .optical-value-alert{animation:none;background:#ffb8b0}}
 @media(prefers-reduced-motion:reduce){.modem-number.modem-value-changed{animation:none;background:#e3a23355}}
 .snmp-clear{display:flex;align-items:center;gap:8px;font-weight:400}
 .snmp-clear input{width:20px;height:20px;margin:0;flex:none}

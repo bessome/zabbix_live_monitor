@@ -83,8 +83,8 @@ html[data-theme="dark"] .modem-row .modem-label-ds-level{color:#8bc9ff}
 html[data-theme="dark"] .modem-row .modem-label-ds-snr{color:#76dca2}
 html[data-theme="dark"] .optical-channels .optical-row{background:#203246;border-color:#40566a;color:#e6edf5}
 html[data-theme="dark"] .optical-channels .optical-row:hover{background:#29445e;border-color:#69b8f1}
-html[data-theme="dark"] .optical-row .optical-value-alert{background:#60313a;color:#ffaaa5}
-html[data-theme="dark"] .device-description.device-level-alert,
+html[data-theme="dark"] .optical-row .optical-value-alert{background:#60313a;color:#ffaaa5;animation-name:modem-alert-blink-dark}
+html[data-theme="dark"] .device-description.device-level-alert-blink,
 html[data-theme="dark"] .device-description .device-level-alert-blink{color:#ffd4d0}
 html[data-theme="dark"] .optical-panel>p{color:#adbdcc}
 html[data-theme="dark"] #switch-state,
@@ -114,4 +114,4 @@ html[data-theme="dark"] .favorite-toggle{background:#3a321d;border-color:#7d6731
 html[data-theme="dark"] .favorite-toggle:hover{background:#51401f}
 html[data-theme="dark"] .saved-device-list li{border-color:#34495e}
 html[data-theme="dark"] .saved-device-list a small{color:#adbdcc}
-@media(prefers-reduced-motion:reduce){html[data-theme="dark"] .modem-row .modem-value-alert-blink{animation:none;background:#933b45}}
+@media(prefers-reduced-motion:reduce){html[data-theme="dark"] .modem-row .modem-value-alert-blink,html[data-theme="dark"] .optical-row .optical-value-alert{animation:none;background:#933b45}}

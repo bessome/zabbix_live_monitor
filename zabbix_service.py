@@ -167,7 +167,7 @@ def modem_list_levels(host_ids):
             choices[key] = (rank, {"value": format(rounded.normalize(), "f"),
                                    "units": str(item.get("units") or ""),
                                    "alert": value < (20 if kind == "us" else -15)
-                                   or value > (52 if kind == "us" else 15)})
+                                   or value > (52 if kind == "us" else 18)})
     result = {}
     for (host_id, kind), (_, metric) in choices.items():
         result.setdefault(host_id, {})[kind] = metric

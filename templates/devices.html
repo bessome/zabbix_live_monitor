@@ -114,7 +114,7 @@ function updateDeviceSummary(description, device, summary) {
     const levels = summary.modem_levels || {};
     const levelText = metric => metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a";
     description.replaceChildren();
-    for (const [kind, label, min, max] of [["us", "US", 20, 52], ["ds", "DS", -15, 15]]) {
+    for (const [kind, label, min, max] of [["us", "US", 20, 52], ["ds", "DS", -15, 18]]) {
       if (description.childNodes.length) description.append(" · ");
       const metric = levels[kind];
       const part = document.createElement("span");
@@ -134,7 +134,7 @@ function updateDeviceSummary(description, device, summary) {
       + (metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a");
     const value = metric?.value == null ? NaN : Number(metric.value);
     if (metric?.alert ?? (Number.isFinite(value) && value < -3.4))
-      description.classList.add("device-level-alert");
+      description.classList.add("device-level-alert-blink");
   } else {
     description.textContent = "Описание: " + (summary.device_description || "—");
   }

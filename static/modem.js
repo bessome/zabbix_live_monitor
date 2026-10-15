@@ -92,11 +92,11 @@
       const usOutOfRange = item.label.startsWith("US") && item.label.endsWith("Level")
         && (numericValue < 20 || numericValue > 52);
       const dsOutOfRange = item.label.startsWith("DS") && item.label.endsWith("Level")
-        && (numericValue < -15 || numericValue > 15);
+        && (numericValue < -15 || numericValue > 18);
       const alert = Number.isFinite(numericValue) && (lowSnr || usOutOfRange || dsOutOfRange);
       value.classList.toggle("modem-value-alert-blink", alert);
       value.title = lowSnr ? "SNR ниже 30" : usOutOfRange ? "US Level вне диапазона 20…52"
-        : dsOutOfRange ? "DS Level вне диапазона −15…+15" : "";
+        : dsOutOfRange ? "DS Level вне диапазона −15…+18" : "";
     }
   }
 
