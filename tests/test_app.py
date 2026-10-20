@@ -921,6 +921,10 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.client.get("/static/switch.css").status_code, 200)
             self.assertIn('id="switch-traffic-down"', detail.text)
             self.assertIn('id="switch-traffic-up"', detail.text)
+            self.assertIn('id="switch-port-pvid"', detail.text)
+            self.assertIn('id="switch-port-macs"', detail.text)
+            self.assertNotRegex(detail.text, r'(?:src|href)="http://[^\"]*/static/')
+            self.assertEqual(self.client.get("/static/switch.js").status_code, 200)
             response = self.client.get("/api/devices/Switches/42/switch-ports")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["ports"][0]["state"], "fast")
@@ -929,6 +933,66 @@ class AppTests(unittest.TestCase):
                                ("vlan", "aux", "loop")))
             self.assertEqual(self.client.get(
                 "/api/devices/Modems/42/switch-ports").status_code, 404)
+
+    def test_switch_pvid_matches_exact_port_and_rejects_missing_or_ambiguous_data(self):
+        item = {"itemid": "1", "name": "Interface Gi1/0/8: PVID", "key_": "pvid[8]",
+                "lastclock": "100", "lastvalue": "42", "status": "0", "state": "0"}
+        select = self.zabbix.switch_port_pvid
+        self.assertEqual(select([item], 108, "Gi1/0/8"), 42)
+        self.assertIsNone(select([item], 108, "Gi1/0/80"))
+        self.assertIsNone(select([item, {**item, "itemid": "2"}], 108, "Gi1/0/8"))
+        for changes in ({"lastclock": "0"}, {"status": "1"}, {"state": "1"},
+                        {"lastvalue": "n/a"}, {"lastvalue": "4095"}):
+            self.assertIsNone(select([{**item, **changes}], 108, "Gi1/0/8"))
+        generic = {**item, "name": "PVID port", "snmp_oid": "1.3.6.1.2.1.17.7.1.4.5.1.1.3"}
+        self.assertEqual(select([generic], 108, "Gi1/0/8", {(3,): 108}), 42)
+        self.assertIsNone(select([generic], 3, "Gi1/0/3", {(3,): 108}))
+        with patch.object(self.zabbix, "zabbix_call", return_value=[item]) as call:
+            self.assertEqual(self.zabbix.switch_pvid_items("42"), [item])
+        self.assertEqual(call.call_args.args[1]["hostids"], ["42"])
+
+    def test_switch_port_details_checks_access_and_survives_source_errors(self):
+        path = "/api/devices/Switches/42/switch-ports/108/details"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.login()
+        device = {"id": "42", "snmp_address": "192.0.2.42", "snmp_port": "161"}
+        item = {"name": "Gi1/0/8 PVID", "lastvalue": "42", "lastclock": "100"}
+        addresses = [f"00:11:22:33:44:{index:02x}" for index in range(6)]
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.switch_snapshot_for", new_callable=AsyncMock,
+                    return_value={"ports": [{"index": 108, "name": "Gi1/0/8"}]}),
+              patch("routes_devices.switch_pvid_items", return_value=[item]) as pvid,
+              patch("routes_devices.mac_ports_for", new_callable=AsyncMock,
+                    return_value={"ports": {108: addresses}, "bridge_ports": {(3,): 108},
+                                  "truncated": False}) as macs):
+            with patch("routes_devices.require_user", return_value={"role": "read"}):
+                response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["pvid"], 42)
+            self.assertEqual(response.json()["macs"], addresses[:5])
+            self.assertTrue(response.json()["more_macs"])
+            self.assertEqual(macs.await_args.args, ("42", "192.0.2.42", "161", "public"))
+            for invalid in (path.replace("/108/", "/9/"), path.replace("/42/", "/99/"),
+                            path.replace("/Switches/", "/Modems/")):
+                self.assertEqual(self.client.get(invalid).status_code, 404)
+            self.assertEqual(macs.await_count, 1)
+            pvid.side_effect = RuntimeError("Zabbix unavailable")
+            data = self.client.get(path).json()
+            self.assertIsNone(data["pvid"])
+            self.assertEqual(data["macs"], addresses[:5])
+            pvid.side_effect = None
+            macs.side_effect = RuntimeError("SNMP timeout")
+            data = self.client.get(path).json()
+            self.assertEqual(data["pvid"], 42)
+            self.assertIsNone(data["macs"])
+            self.assertEqual(data["mac_error"], "SNMP timeout")
+            macs.side_effect = None
+            macs.return_value = {"ports": {}, "bridge_ports": {}, "truncated": False}
+            pvid.return_value = []
+            data = self.client.get(path).json()
+            self.assertIsNone(data["pvid"])
+            self.assertEqual(data["macs"], [])
+            self.assertFalse(data["more_macs"])
 
     def test_switch_port_traffic_checks_host_port_and_allows_read_role(self):
         path = "/api/devices/Switches/42/switch-ports/8/traffic"

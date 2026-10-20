@@ -31,6 +31,10 @@ TRAFFIC_OID = {
     "in_32": "1.3.6.1.2.1.2.2.1.10",
     "out_32": "1.3.6.1.2.1.2.2.1.16",
 }
+BRIDGE_OID = "1.3.6.1.2.1.17.1.4.1.2"
+FDB_OIDS = ("1.3.6.1.2.1.17.7.1.2.2.1.2", "1.3.6.1.2.1.17.4.3.1.2")
+MAX_FDB_ROWS = 20000
+_mac_entries = {}
 ETHERNET_TYPES = {6, 62, 69, 117}
 DEFAULT_EXCLUDED_NAMES = "Vlan|AUX|Loop"
 MAX_PORTS = 2048
@@ -182,6 +186,105 @@ class _Entry:
         self.last_seen = time.monotonic()
         self.updated = 0.0
         self.data = None
+
+
+async def _bridge_walk(engine, target, community, base, limit):
+    values = {}
+    count = 0
+    async for indication, status, _, bindings in bulk_walk_cmd(
+        engine, CommunityData(community, mpModel=1), target, ContextData(),
+        0, 25, ObjectType(ObjectIdentity(base)),
+        lexicographicMode=False, lookupMib=False, maxRows=limit,
+    ):
+        if indication or status:
+            raise RuntimeError("SNMP: " + str(indication or status.prettyPrint()))
+        for oid, value in bindings:
+            oid = oid.prettyPrint()
+            if isinstance(value, (NoSuchObject, NoSuchInstance)):
+                raise RuntimeError("Таблица MAC не поддерживается коммутатором.")
+            if not oid.startswith(base + ".") or isinstance(
+                value, (NoSuchObject, NoSuchInstance, EndOfMibView)
+            ):
+                continue
+            suffix = oid[len(base) + 1:].split(".")
+            if not all(part.isdecimal() for part in suffix):
+                continue
+            values[tuple(map(int, suffix))] = _number(value.prettyPrint())
+            count += 1
+            if count >= limit:
+                return values, True
+    return values, False
+
+
+def build_mac_ports(bridge, tables):
+    """Translate bridge ports to ifIndex and deduplicate MACs across VLANs."""
+    ports = {}
+    for table in tables:
+        for index, bridge_port in table.items():
+            if_index = bridge.get((bridge_port,))
+            octets = index[-6:]
+            if (not if_index or len(index) not in (6, 7)
+                    or any(value > 255 for value in octets)
+                    or not any(octets) or octets[0] & 1):
+                continue
+            mac = ":".join(f"{value:02x}" for value in octets)
+            addresses = ports.setdefault(if_index, set())
+            if len(addresses) < 6:
+                addresses.add(mac)
+    return {index: sorted(addresses) for index, addresses in ports.items()}
+
+
+async def poll_mac_ports(address, port, community):
+    if not validate_target(address) or not 1 <= int(port) <= 65535:
+        raise ValueError("Нет корректного адреса или порта SNMP-интерфейса.")
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        ip = None
+    transport = Udp6TransportTarget if ip and ip.version == 6 else UdpTransportTarget
+    try:
+        target = await transport.create((address, int(port)), timeout=3.0, retries=0)
+        with SnmpEngine() as engine:
+            bridge, _ = await _bridge_walk(engine, target, community, BRIDGE_OID, MAX_PORTS)
+            if not bridge:
+                raise RuntimeError("Таблица соответствия bridge port / ifIndex недоступна.")
+            outcomes = await asyncio.gather(*(
+                _bridge_walk(engine, target, community, base, MAX_FDB_ROWS)
+                for base in FDB_OIDS), return_exceptions=True)
+        tables = [outcome for outcome in outcomes if not isinstance(outcome, Exception)]
+        if not tables:
+            raise RuntimeError(str(outcomes[0]))
+        return {"ports": build_mac_ports(bridge, [table for table, _ in tables]),
+                "bridge_ports": bridge,
+                "truncated": any(limited for _, limited in tables)}
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("Не удалось прочитать MAC по SNMP: " + str(exc)) from exc
+
+
+async def mac_ports_for(host_id, address, port, community):
+    """Share bounded bridge/FDB walks across viewers and selected ports."""
+    key = (str(host_id), address, int(port), hashlib.sha256(community.encode()).digest())
+    with _entries_lock:
+        now = time.monotonic()
+        for old_key, old_entry in list(_mac_entries.items()):
+            if now - old_entry.last_seen > 60:
+                del _mac_entries[old_key]
+        entry = _mac_entries.get(key)
+        if entry is None:
+            if len(_mac_entries) >= MAX_ENTRIES:
+                raise RuntimeError("Слишком много активных SNMP-опросов.")
+            entry = _Entry()
+            _mac_entries[key] = entry
+        entry.last_seen = now
+    async with entry.lock:
+        if entry.data is not None and time.monotonic() - entry.updated < 10:
+            return entry.data
+        try:
+            entry.data = await asyncio.wait_for(poll_mac_ports(address, port, community), 15)
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError("Превышено время чтения MAC по SNMP.") from exc
+        entry.updated = time.monotonic()
+        return entry.data
 
 
 async def snapshot_for(host_id, address, port, community, excluded_names=()):

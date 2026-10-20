@@ -4,11 +4,62 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, OID, build_ports,
+                             BRIDGE_OID, FDB_OIDS, build_mac_ports, mac_ports_for,
+                             poll_mac_ports,
                              parse_excluded_names, poll_ports, snapshot_for,
                              traffic_for)
 
 
 class SwitchTests(unittest.TestCase):
+    def test_mac_ports_translate_bridge_indices_and_deduplicate_vlans(self):
+        bridge = {(3,): 108, (8,): 999}
+        table = {(10, 0, 17, 34, 51, 68, value): 3 for value in range(9)}
+        table[(20, 0, 17, 34, 51, 68, 0)] = 3
+        table[(10, 0, 17, 34, 51, 69, 0)] = 8
+        table[(10, 0, 17, 34, 51, 70, 0)] = 108  # ifIndex is not a bridge port.
+        table[(10, 1, 17, 34, 51, 68, 0)] = 3  # Multicast.
+        result = build_mac_ports(bridge, [table, {(0, 17, 34, 51, 68, 0): 3}])
+        self.assertEqual(len(result[108]), 6)
+        self.assertEqual(result[108][0], "00:11:22:33:44:00")
+        self.assertEqual(result[999], ["00:11:22:33:45:00"])
+
+    def test_mac_poll_falls_back_to_bridge_mib_and_shares_results(self):
+        async def walk(engine, target, community, base, limit):
+            if base == BRIDGE_OID:
+                return {(3,): 108}, False
+            if base == FDB_OIDS[0]:
+                raise RuntimeError("Q-BRIDGE-MIB unsupported")
+            return {(0, 17, 34, 51, 68, 85): 3}, False
+
+        with (patch("switch_monitor.UdpTransportTarget.create", new_callable=AsyncMock),
+              patch("switch_monitor.SnmpEngine", return_value=MagicMock()),
+              patch("switch_monitor._bridge_walk", side_effect=walk)):
+            result = asyncio.run(poll_mac_ports("192.0.2.1", 161, "public"))
+        self.assertEqual(result["ports"], {108: ["00:11:22:33:44:55"]})
+        with patch("switch_monitor.poll_mac_ports", new_callable=AsyncMock,
+                   return_value=result) as poll:
+            async def run():
+                first = await mac_ports_for("mac-cache", "192.0.2.1", 161, "public")
+                second = await mac_ports_for("mac-cache", "192.0.2.1", 161, "public")
+                return first, second
+            first, second = asyncio.run(run())
+        self.assertEqual(first, second)
+        self.assertEqual(poll.await_count, 1)
+
+    def test_mac_walk_decodes_vlan_indices_and_bounds_output(self):
+        from switch_monitor import _bridge_walk
+        from pysnmp.proto.rfc1902 import Integer, ObjectName
+
+        async def walk(*args, **kwargs):
+            yield None, 0, 0, [
+                (ObjectName(FDB_OIDS[0] + ".10.0.17.34.51.68.85"), Integer(3)),
+                (ObjectName(FDB_OIDS[0] + ".10.0.17.34.51.68.86"), Integer(4)),
+            ]
+        with patch("switch_monitor.bulk_walk_cmd", side_effect=walk):
+            values, limited = asyncio.run(_bridge_walk(None, None, "public", FDB_OIDS[0], 1))
+        self.assertEqual(values, {(10, 0, 17, 34, 51, 68, 85): 3})
+        self.assertTrue(limited)
+
     def test_if_mib_ports_link_states_and_speed_fallback(self):
         columns = {name: {} for name in OID}
         columns["ifOperStatus"] = {3: "2", 1: "1", 2: "1", 4: "1", 5: "1"}

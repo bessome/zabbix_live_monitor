@@ -28,6 +28,8 @@
 .switch-port-traffic{display:flex;gap:6px 12px;flex-wrap:wrap;justify-content:flex-end;margin:8px 0;font-size:12px;color:#536171;font-variant-numeric:tabular-nums}
 .switch-port-traffic span{white-space:nowrap}
 .switch-port-traffic strong{color:#172333}
+.switch-port-details p{margin:6px 0;overflow-wrap:anywhere}
+#switch-port-macs{font-family:monospace;white-space:pre-line}
 #switch-cable-status{min-height:20px;font-size:13px}
 #switch-cable-results th,#switch-cable-results td{padding:7px 5px;font-size:13px}
 #switch-cable-results[hidden]{display:none}

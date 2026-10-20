@@ -9,6 +9,8 @@
   const dialogStatus = document.getElementById("switch-cable-status");
   const trafficDown = document.getElementById("switch-traffic-down");
   const trafficUp = document.getElementById("switch-traffic-up");
+  const pvid = document.getElementById("switch-port-pvid");
+  const macs = document.getElementById("switch-port-macs");
   const results = document.getElementById("switch-cable-results");
   const pairs = document.getElementById("switch-cable-pairs");
   const start = document.getElementById("switch-cable-start");
@@ -25,6 +27,42 @@
   let cableCountdownTimer = null;
   let trafficTimer = null;
   let trafficController = null;
+  let detailsTimer = null;
+  let detailsController = null;
+
+  async function refreshDetails() {
+    if (!dialog.open || !selectedPort || detailsController) return;
+    const port = selectedPort;
+    const controller = new AbortController();
+    detailsController = controller;
+    try {
+      const response = await fetch(url + "/" + encodeURIComponent(port.index)
+        + "/details", {credentials: "same-origin", cache: "no-store", signal: controller.signal});
+      if (response.status === 401) { location.href = "/login"; return; }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.detail || "Данные порта недоступны");
+      if (dialog.open && selectedPort === port) {
+        pvid.textContent = data.pvid ?? "n/a";
+        pvid.title = data.pvid_error || "";
+        macs.textContent = data.macs == null ? "n/a"
+          : data.macs.length ? data.macs.join("\n") + (data.more_macs ? "\n…" : "")
+          : "Не найдены";
+        if (data.macs_truncated) macs.textContent += "\nСписок неполный";
+        macs.title = data.mac_error || "";
+      }
+    } catch (error) {
+      if (error.name !== "AbortError" && dialog.open && selectedPort === port) {
+        pvid.textContent = "n/a";
+        macs.textContent = "n/a";
+        pvid.title = macs.title = error.message;
+      }
+    } finally {
+      if (detailsController === controller) detailsController = null;
+      if (dialog.open && selectedPort === port) {
+        detailsTimer = setTimeout(refreshDetails, 15000);
+      }
+    }
+  }
 
   function stopCableCountdown() {
     clearInterval(cableCountdownTimer);
@@ -111,7 +149,11 @@
     results.hidden = true;
     trafficDown.textContent = "n/a";
     trafficUp.textContent = "n/a";
+    pvid.textContent = macs.textContent = "Загрузка…";
+    pvid.title = macs.title = "";
     dialog.showModal();
+    clearTimeout(detailsTimer);
+    refreshDetails();
     clearTimeout(trafficTimer);
     refreshTraffic();
   });
@@ -121,6 +163,12 @@
     stopCableCountdown();
     clearTimeout(trafficTimer);
     trafficTimer = null;
+    clearTimeout(detailsTimer);
+    detailsTimer = null;
+    if (detailsController) {
+      detailsController.abort();
+      detailsController = null;
+    }
     if (trafficController) {
       trafficController.abort();
       trafficController = null;

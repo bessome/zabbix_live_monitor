@@ -111,6 +111,54 @@ def host_rows(category):
     return rows
 
 
+def switch_pvid_items(host_id):
+    """Read PVID items only from the already authorized switch."""
+    return zabbix_call("item.get", {
+        "hostids": [host_id],
+        "output": ["itemid", "name", "key_", "snmp_oid", "lastvalue",
+                   "lastclock", "status", "state"],
+        "search": {"name": "pvid", "key_": "pvid"}, "searchByAny": True,
+    })
+
+
+def switch_port_pvid(items, if_index, interface_name, bridge_ports=None):
+    """Prefer an exact interface name; never guess a bridge port from ifIndex."""
+    name_pattern = re.compile(r"(?<![\w/.-])" + re.escape(interface_name)
+                              + r"(?![\w/.-])", re.I)
+    bridge_indices = {index[0] for index, value in (bridge_ports or {}).items()
+                      if value == if_index}
+    matches = []
+    for item in items:
+        name, key = item.get("name", ""), item.get("key_", "")
+        if "pvid" not in (name + " " + key).casefold():
+            continue
+        score = 0
+        if interface_name and any(name_pattern.search(text) for text in (name, key)):
+            score = 2
+        oid = item.get("snmp_oid", "").lstrip(".")
+        prefix = "1.3.6.1.2.1.17.7.1.4.5.1.1."
+        if oid.startswith(prefix) and oid[len(prefix):].isdecimal():
+            if int(oid[len(prefix):]) in bridge_indices:
+                score = max(score, 1)
+        if score:
+            matches.append((score, item))
+    if not matches:
+        return None
+    best = max(score for score, _ in matches)
+    selected = [item for score, item in matches if score == best]
+    if len(selected) != 1:
+        return None
+    item = selected[0]
+    if (str(item.get("status", "0")) != "0" or str(item.get("state", "0")) != "0"
+            or str(item.get("lastclock", "0")) == "0"):
+        return None
+    try:
+        value = int(item.get("lastvalue", ""))
+    except (TypeError, ValueError):
+        return None
+    return value if 1 <= value <= 4094 else None
+
+
 def device_descriptions(host_ids):
     """Read the latest Device description for the visible hosts in one API call."""
     if not host_ids:

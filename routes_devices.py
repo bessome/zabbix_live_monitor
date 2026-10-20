@@ -16,7 +16,7 @@ from cable_test import CableTestBusy, run_cable_test
 from ping_monitor import snapshot_for
 from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_for,
                           uptime_for)
-from switch_monitor import (DEFAULT_EXCLUDED_NAMES, parse_excluded_names,
+from switch_monitor import (DEFAULT_EXCLUDED_NAMES, mac_ports_for, parse_excluded_names,
                             snapshot_for as switch_snapshot_for, traffic_for)
 from zabbix_service import (amplifier_list_optical_levels, category_filter,
                              device_descriptions, host_rows,
@@ -24,7 +24,8 @@ from zabbix_service import (amplifier_list_optical_levels, category_filter,
                              modem_channel_definitions, modem_overview_definitions,
                              modem_restarts_count_24h, modem_restarts_item,
                              normalize_device_search, optical_power_definitions,
-                             ping_loss_definition, zabbix_call)
+                             ping_loss_definition, switch_pvid_items, switch_port_pvid,
+                             zabbix_call)
 
 router = APIRouter()
 HISTORY_PERIODS = {"1h": 3600, "12h": 43200, "24h": 86400,
@@ -402,6 +403,46 @@ async def switch_port_traffic(request: Request, category: str, host_id: str,
                                    device["snmp_port"], community)
     except (RuntimeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/switch-ports/{if_index}/details")
+async def switch_port_details(request: Request, category: str, host_id: str, if_index: int):
+    require_user(request, api=True)
+    if category != "Switches":
+        raise HTTPException(404)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        device = next((row for row in rows if row["id"] == host_id), None)
+        if device is None:
+            raise HTTPException(404)
+        community = snmp_community_for(category)
+        excluded_names = parse_excluded_names(
+            setting("switch_port_exclude", DEFAULT_EXCLUDED_NAMES))
+        snapshot = await switch_snapshot_for(host_id, device["snmp_address"],
+                                             device["snmp_port"], community, excluded_names)
+        selected = next((port for port in snapshot["ports"] if port["index"] == if_index), None)
+        if selected is None:
+            raise HTTPException(404)
+    except (RuntimeError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    items, macs = await asyncio.gather(
+        asyncio.to_thread(switch_pvid_items, host_id),
+        mac_ports_for(host_id, device["snmp_address"], device["snmp_port"], community),
+        return_exceptions=True)
+    result = {"pvid": None, "macs": None, "more_macs": False, "macs_truncated": False}
+    if isinstance(macs, Exception):
+        result["mac_error"] = str(macs)
+        bridge_ports = {}
+    else:
+        addresses = macs["ports"].get(if_index, [])
+        result.update(macs=addresses[:5], more_macs=len(addresses) > 5,
+                      macs_truncated=macs["truncated"])
+        bridge_ports = macs["bridge_ports"]
+    if isinstance(items, Exception):
+        result["pvid_error"] = str(items)
+    else:
+        result["pvid"] = switch_port_pvid(items, if_index, selected["name"], bridge_ports)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
