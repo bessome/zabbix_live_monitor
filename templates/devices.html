@@ -9,6 +9,7 @@
 <div class="device-view-options" role="group" aria-label="Вид списка устройств"><button type="button" data-device-view="list" aria-pressed="true">Список</button><button type="button" data-device-view="tree" aria-pressed="false">Дерево</button></div>
 </div>
 <p id="status" aria-live="polite"></p>
+<div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств для опроса каждые 5 секунд.</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button></div>
 <div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
@@ -63,6 +64,10 @@ const displayTime = new Intl.DateTimeFormat("en-GB", {
 let currentPage = 1;
 let lastPage = 1;
 let requestSequence = 0;
+const monitoredIds = new Set();
+const liveValues = new Map();
+let monitorInFlight = false;
+let monitorRevision = 0;
 const searchStorageKey = "zabbix-device-search:{{ current_user.id }}:" + category;
 try {
   const saved = JSON.parse(sessionStorage.getItem(searchStorageKey));
@@ -74,17 +79,121 @@ try {
     if (Array.isArray(saved.openGroups)) {
       saved.openGroups.filter(group => typeof group === "string").forEach(group => openGroups.add(group));
     }
+    if (Array.isArray(saved.monitoredIds)) {
+      saved.monitoredIds.filter(id => typeof id === "string").slice(0, 5).forEach(id => monitoredIds.add(id));
+    }
   }
 } catch (_) {}
 function saveSearch() {
   try {
     sessionStorage.setItem(searchStorageKey, JSON.stringify({
       query: search.value, page: currentPage, pageSize: pageSize.value,
-      view, openGroups: [...openGroups]
+      view, openGroups: [...openGroups], monitoredIds: [...monitoredIds]
     }));
   } catch (_) {}
 }
 window.addEventListener("pagehide", saveSearch);
+function monitorControls() {
+  document.getElementById("list-monitor-status").textContent = monitoredIds.size
+    ? "Опрос каждые 5 секунд · Выбрано: " + monitoredIds.size + "/5"
+    : "Выберите до 5 устройств для опроса каждые 5 секунд.";
+  document.getElementById("list-monitor-clear").hidden = !monitoredIds.size;
+  document.querySelectorAll(".device-monitor-select").forEach(input => {
+    input.checked = monitoredIds.has(input.dataset.hostId);
+    input.disabled = !input.checked && monitoredIds.size >= 5;
+  });
+}
+function selectMonitor(id, checked) {
+  if (checked && !monitoredIds.has(id) && monitoredIds.size >= 5) return;
+  if (checked) monitoredIds.add(id);
+  else { monitoredIds.delete(id); liveValues.delete(id); }
+  monitorRevision++;
+  saveSearch();
+  monitorControls();
+  if (checked) { paintLiveRows(); pollMonitored(); }
+  else refresh();
+}
+function paintLiveRow(row, pulse = false) {
+  const id = row.dataset.hostId;
+  if (!monitoredIds.has(id)) return;
+  const live = liveValues.get(id);
+  const indicator = availabilityIndicator(live?.availability || "unknown");
+  indicator.title = live?.error || (live ? "Пинг · " + displayTime.format(new Date(live.at)) : "Ожидание пинга…");
+  row.querySelector(".availability-indicator").replaceWith(indicator);
+  if (pulse && live?.pingUpdated) {
+    // Restart the animation even when the ping state has not changed.
+    void indicator.offsetWidth;
+    indicator.classList.add("monitor-pulse");
+  }
+  const description = row.querySelector(".device-description");
+  if (!["Modems", "TV_Amplifires"].includes(category)) return;
+  if (live?.summary) updateDeviceSummary(description, {id}, live.summary);
+  else if (live && ["Modems", "TV_Amplifires"].includes(category)) updateDeviceSummary(description, {id}, {});
+  else description.textContent = live ? "Данные недоступны" : "Ожидание обновления…";
+}
+function paintLiveRows(pulse = false) {
+  document.querySelectorAll("#device-list tr[data-host-id]").forEach(row => paintLiveRow(row, pulse));
+}
+function summaryFromSnmp(data) {
+  const items = data.items || [];
+  if (category === "TV_Amplifires") return {optical_level: items[0] || null};
+  const levels = {};
+  for (const kind of ["US", "DS"]) {
+    const candidates = items.filter(item => item.label?.startsWith(kind) && item.label.endsWith(" Level"));
+    const channel = item => Number(item.label.match(/^(?:US|DS)(\d+)/)?.[1] || 9999);
+    candidates.sort((a, b) => channel(a) - channel(b));
+    levels[kind.toLowerCase()] = candidates[0] || null;
+  }
+  return {modem_levels: levels};
+}
+async function pollMonitored() {
+  if (monitorInFlight || !monitoredIds.size || document.hidden) return;
+  monitorInFlight = true;
+  const revision = monitorRevision;
+  const ids = [...monitoredIds];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4500);
+  async function read(url) {
+    const response = await fetch(url, {credentials: "same-origin", cache: "no-store", signal: controller.signal});
+    if (response.status === 401) { location.href = "/login"; throw new Error("Требуется вход"); }
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || "Ошибка опроса");
+    return data;
+  }
+  const base = "/api/devices/" + encodeURIComponent(category);
+  try {
+    const metricPath = category === "Modems" ? "/modem-channels"
+      : category === "TV_Amplifires" ? "/optical-power" : null;
+    const results = await Promise.all(ids.map(async id => Promise.allSettled([
+      metricPath ? read(base + "/" + encodeURIComponent(id) + metricPath) : Promise.resolve(null),
+      read(base + "/" + encodeURIComponent(id) + "/ping")
+    ])));
+    if (revision !== monitorRevision) return;
+    ids.forEach((id, index) => {
+      const [metrics, ping] = results[index];
+      const data = ping.status === "fulfilled" ? ping.value : null;
+      liveValues.set(id, {
+        summary: metrics.status === "fulfilled" && metrics.value ? summaryFromSnmp(metrics.value) : null,
+        availability: data?.sent > 0 ? (data.current_ms == null ? "unavailable" : "available") : "unknown",
+        pingUpdated: Boolean(data), at: Date.now(),
+        error: ping.status === "rejected" ? "Ошибка пинга: " + ping.reason.message : ""
+      });
+    });
+    paintLiveRows(true);
+  } finally {
+    clearTimeout(timeout);
+    monitorInFlight = false;
+    if (revision !== monitorRevision) pollMonitored();
+  }
+}
+document.getElementById("list-monitor-clear").addEventListener("click", () => {
+  monitoredIds.clear();
+  liveValues.clear();
+  monitorRevision++;
+  saveSearch();
+  monitorControls();
+  refresh();
+});
 function cell(tr, label, value) {
   const td = document.createElement("td");
   td.dataset.label = label;
@@ -113,7 +222,7 @@ function favoriteButton(device) {
 function availabilityIndicator(value) {
   const indicator = document.createElement("span");
   const known = value === "available" || value === "unavailable";
-  const label = value === "available" ? "Доступен" : value === "unavailable" ? "Недоступен" : "Нет данных";
+  const label = value === "available" ? "Доступен" : value === "unavailable" ? "Недоступен" : "n/a";
   indicator.className = "availability-indicator " + (known ? value : "unknown");
   if (known) {
     indicator.setAttribute("role", "img");
@@ -134,7 +243,8 @@ function updateDeviceSummary(description, device, summary) {
   if (category === "Modems") {
     description.classList.add("modem-level-summary");
     const levels = summary.modem_levels || {};
-    const levelText = metric => metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a";
+    const levelText = metric => metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value))
+      ? metric.value + (metric.units ? " " + metric.units : "") : "n/a";
     description.replaceChildren();
     for (const [kind, label, min, max] of [["us", "US", 20, 52], ["ds", "DS", -15, 18]]) {
       if (description.childNodes.length) description.append(" · ");
@@ -153,7 +263,8 @@ function updateDeviceSummary(description, device, summary) {
     description.classList.add("modem-level-summary");
     const metric = summary.optical_level;
     description.textContent = "Optical input power: "
-      + (metric ? metric.value + (metric.units ? " " + metric.units : "") : "n/a");
+      + (metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value))
+        ? metric.value + (metric.units ? " " + metric.units : "") : "n/a");
     const value = metric?.value == null ? NaN : Number(metric.value);
     if (metric?.alert ?? (Number.isFinite(value) && value < -3.4))
       description.classList.add("device-level-alert-blink");
@@ -167,6 +278,16 @@ function deviceRow(device) {
   const nameCell = document.createElement("td");
   const nameRow = document.createElement("div");
   nameRow.className = "device-name-row";
+  const select = document.createElement("input");
+  select.type = "checkbox";
+  select.className = "device-monitor-select";
+  select.dataset.hostId = String(device.id);
+  select.checked = monitoredIds.has(String(device.id));
+  select.disabled = !select.checked && monitoredIds.size >= 5;
+  select.setAttribute("aria-label", "Опрос каждые 5 секунд: " + device.name);
+  select.title = "Опрос каждые 5 секунд (до 5 устройств)";
+  select.addEventListener("change", () => selectMonitor(String(device.id), select.checked));
+  nameRow.appendChild(select);
   nameRow.append(availabilityIndicator(device.availability), deviceLink(device), favoriteButton(device));
   nameCell.appendChild(nameRow);
   const description = document.createElement("small");
@@ -176,11 +297,13 @@ function deviceRow(device) {
   nameCell.appendChild(description);
   tr.appendChild(nameCell);
   cell(tr, "Адрес", device.address);
+  paintLiveRow(tr);
   return tr;
 }
 async function loadSummaries(devices, body) {
   const now = Date.now();
   const pending = devices.filter(device => {
+    if (monitoredIds.has(String(device.id))) return false;
     const cached = summaryCache.get(String(device.id));
     return !cached || now - cached.at > 14000;
   });
@@ -198,12 +321,12 @@ async function loadSummaries(devices, body) {
         if (!summary) continue;
         summaryCache.set(String(device.id), {summary, at: Date.now()});
         const row = [...body.rows].find(row => row.dataset.hostId === String(device.id));
-        if (row) updateDeviceSummary(row.querySelector(".device-description"), device, summary);
+        if (row && !monitoredIds.has(String(device.id))) updateDeviceSummary(row.querySelector(".device-description"), device, summary);
       }
     } catch (_) {
       for (const device of batch) {
         const row = [...body.rows].find(row => row.dataset.hostId === String(device.id));
-        if (row && !summaryCache.has(String(device.id))) {
+        if (row && !monitoredIds.has(String(device.id)) && !summaryCache.has(String(device.id))) {
           row.querySelector(".device-description").textContent = "Данные недоступны";
         }
       }
@@ -348,6 +471,9 @@ viewButtons.forEach(button => button.addEventListener("click", () => {
   refresh();
 }));
 applyView();
+monitorControls();
 refresh();
+pollMonitored();
+setInterval(pollMonitored, 5000);
 setInterval(refresh, 15000);
 </script>{% endblock %}

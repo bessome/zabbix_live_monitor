@@ -15,3 +15,10 @@ html[data-theme="dark"] .device-level-alert-blink{animation-name:device-level-bl
 html[data-theme="dark"] .device-view-options{border-color:#536374}html[data-theme="dark"] .device-view-options button{background:transparent;color:#d9e8f4}html[data-theme="dark"] .device-view-options button[aria-pressed="true"]{background:#2677b2;color:#fff}html[data-theme="dark"] .device-tree-group,html[data-theme="dark"] .device-tree,html[data-theme="dark"] .device-tree-device{border-color:#354558}html[data-theme="dark"] .device-tree-group summary:hover{background:#263e56}html[data-theme="dark"] .device-tree-count{background:#354c61;color:#d5e1eb}html[data-theme="dark"] .device-tree-address{color:#aab9c6}
 @media(max-width:720px){.device-view-options{grid-column:1/-1;justify-self:start;margin-bottom:0}.device-tree-group .device-tree-group{margin-left:6px}.device-tree-children{padding-left:2px}}
 .device-detail-description{white-space:pre-wrap}
+.list-monitor-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0 12px;font-size:13px;color:var(--muted,#687785)}
+.list-monitor-controls button{font-size:12px;padding:5px 9px}
+.device-name-row .device-monitor-select{width:17px;height:17px;min-width:17px;margin:0;flex:none;cursor:pointer;accent-color:#1681ca}
+.device-name-row .device-monitor-select:disabled{cursor:default;opacity:.45}
+.availability-indicator.monitor-pulse::before{animation:list-monitor-pulse 1s ease-out}
+@keyframes list-monitor-pulse{0%{transform:scale(1);box-shadow:0 0 0 0 #3498db99}40%{transform:scale(1.25);box-shadow:0 0 0 7px #3498db33}100%{transform:scale(1);box-shadow:0 0 0 10px #3498db00}}
+@media(prefers-reduced-motion:reduce){.availability-indicator.monitor-pulse::before{animation:none;outline:2px solid #3498db;outline-offset:3px}}
