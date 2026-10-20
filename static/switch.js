@@ -30,6 +30,43 @@
   let detailsTimer = null;
   let detailsController = null;
 
+  function renderMacs(data) {
+    macs.replaceChildren();
+    if (data.macs == null) { macs.textContent = "n/a"; return; }
+    if (!data.macs.length) { macs.textContent = "Не найдены"; return; }
+    const details = new Map((data.mac_details || []).map(item => [item.mac, item]));
+    for (const address of data.macs.slice(0, 5)) {
+      const entry = document.createElement("div");
+      entry.className = "switch-mac-entry";
+      const label = document.createElement("strong");
+      label.textContent = address;
+      entry.appendChild(label);
+      const info = details.get(address);
+      const vendor = document.createElement("small");
+      vendor.textContent = info?.vendor || ({local: "Локально назначенный MAC",
+        multicast: "Групповой MAC", unavailable: "База производителей недоступна"}[info?.kind]
+        || "Производитель неизвестен");
+      entry.appendChild(vendor);
+      if (info?.first_seen) {
+        const firstSeen = document.createElement("small");
+        firstSeen.textContent = "Префикс известен с " + info.first_seen;
+        firstSeen.title = "Самая ранняя запись в архивах; дата выпуска устройства неизвестна";
+        entry.appendChild(firstSeen);
+      }
+      macs.appendChild(entry);
+    }
+    if (data.more_macs) {
+      const more = document.createElement("div");
+      more.textContent = "…";
+      macs.appendChild(more);
+    }
+    if (data.macs_truncated) {
+      const truncated = document.createElement("small");
+      truncated.textContent = "Список неполный";
+      macs.appendChild(truncated);
+    }
+  }
+
   async function refreshDetails() {
     if (!dialog.open || !selectedPort || detailsController) return;
     const port = selectedPort;
@@ -44,10 +81,7 @@
       if (dialog.open && selectedPort === port) {
         pvid.textContent = data.pvid ?? "n/a";
         pvid.title = data.pvid_error || "";
-        macs.textContent = data.macs == null ? "n/a"
-          : data.macs.length ? data.macs.join("\n") + (data.more_macs ? "\n…" : "")
-          : "Не найдены";
-        if (data.macs_truncated) macs.textContent += "\nСписок неполный";
+        renderMacs(data);
         macs.title = data.mac_error || "";
       }
     } catch (error) {

@@ -13,6 +13,7 @@ from app_storage import (cmts_list, favorite_devices_for, favorite_ids_for,
                          snmp_write_community_for)
 from app_web import checked_form, render, require_user
 from cable_test import CableTestBusy, run_cable_test
+from mac_vendors import lookup_macs
 from ping_monitor import snapshot_for
 from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_for,
                           uptime_for)
@@ -438,6 +439,7 @@ async def switch_port_details(request: Request, category: str, host_id: str, if_
         addresses = macs["ports"].get(if_index, [])
         result.update(macs=addresses[:5], more_macs=len(addresses) > 5,
                       macs_truncated=macs["truncated"])
+        result["mac_details"] = await asyncio.to_thread(lookup_macs, addresses[:5])
         bridge_ports = macs["bridge_ports"]
     if isinstance(items, Exception):
         result["pvid_error"] = str(items)

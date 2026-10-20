@@ -964,13 +964,20 @@ class AppTests(unittest.TestCase):
               patch("routes_devices.switch_pvid_items", return_value=[item]) as pvid,
               patch("routes_devices.mac_ports_for", new_callable=AsyncMock,
                     return_value={"ports": {108: addresses}, "bridge_ports": {(3,): 108},
-                                  "truncated": False}) as macs):
+                                  "truncated": False}) as macs,
+              patch("routes_devices.lookup_macs", side_effect=lambda values: [
+                  {"mac": value, "vendor": "Example vendor", "first_seen": "2010-01-01",
+                   "kind": "known"} for value in values]) as vendors):
             with patch("routes_devices.require_user", return_value={"role": "read"}):
                 response = self.client.get(path)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["pvid"], 42)
             self.assertEqual(response.json()["macs"], addresses[:5])
             self.assertTrue(response.json()["more_macs"])
+            self.assertEqual(len(response.json()["mac_details"]), 5)
+            self.assertEqual(response.json()["mac_details"][0]["vendor"], "Example vendor")
+            self.assertEqual(response.json()["mac_details"][0]["first_seen"], "2010-01-01")
+            vendors.assert_called_once_with(addresses[:5])
             self.assertEqual(macs.await_args.args, ("42", "192.0.2.42", "161", "public"))
             for invalid in (path.replace("/108/", "/9/"), path.replace("/42/", "/99/"),
                             path.replace("/Switches/", "/Modems/")):
@@ -993,6 +1000,26 @@ class AppTests(unittest.TestCase):
             self.assertIsNone(data["pvid"])
             self.assertEqual(data["macs"], [])
             self.assertFalse(data["more_macs"])
+
+    def test_mac_database_settings_update_requires_admin_and_csrf(self):
+        path = "/settings/mac-database/update"
+        with patch("routes_settings.update_database", return_value=59000) as update:
+            self.assertEqual(self.client.post(path, follow_redirects=False).status_code, 303)
+            update.assert_not_called()
+            self.login()
+            token = self.token("/settings")
+            self.assertEqual(self.client.post(path).status_code, 400)
+            with patch("app_web.user_for", return_value={"role": "read"}):
+                self.assertEqual(self.client.post(path, data={"csrf_token": token}).status_code, 403)
+            update.assert_not_called()
+            response = self.client.post(path, data={"csrf_token": token})
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("База MAC обновлена. Префиксов: 59000.", response.text)
+            self.assertIn('action="/settings/mac-database/update"', response.text)
+            update.assert_called_once_with()
+            update.side_effect = RuntimeError("Предыдущая копия сохранена.")
+            response = self.client.post(path, data={"csrf_token": token})
+            self.assertIn("Предыдущая копия сохранена.", response.text)
 
     def test_switch_port_traffic_checks_host_port_and_allows_read_role(self):
         path = "/api/devices/Switches/42/switch-ports/8/traffic"

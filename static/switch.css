@@ -29,7 +29,9 @@
 .switch-port-traffic span{white-space:nowrap}
 .switch-port-traffic strong{color:#172333}
 .switch-port-details p{margin:6px 0;overflow-wrap:anywhere}
-#switch-port-macs{font-family:monospace;white-space:pre-line}
+.switch-mac-entry{margin:7px 0;overflow-wrap:anywhere}
+.switch-mac-entry strong{font-family:monospace}
+.switch-mac-entry small{display:block;line-height:1.4}
 #switch-cable-status{min-height:20px;font-size:13px}
 #switch-cable-results th,#switch-cable-results td{padding:7px 5px;font-size:13px}
 #switch-cable-results[hidden]{display:none}

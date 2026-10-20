@@ -16,6 +16,7 @@ from app_storage import (DEFAULT_ACTIVITY_RETENTION_DAYS, check_password,
                           purge_expired_activity, setting)
 from app_web import add_message, checked_form, render, require_admin
 from cmts_groups import apply_plan, build_plan
+from mac_vendors import database_status, update_database
 from switch_monitor import DEFAULT_EXCLUDED_NAMES, parse_excluded_names
 from zabbix_service import category_filter, clear_caches, zabbix_call, zabbix_catalog
 
@@ -148,6 +149,7 @@ def settings_page(request: Request):
     require_admin(request)
     filters = {category: category_filter(category) for category in CATEGORIES}
     return render(request, "settings.html", zabbix_url=setting("zabbix_url"),
+                   mac_database=database_status(),
                    filters=filters,
                    switch_port_exclude=setting("switch_port_exclude", DEFAULT_EXCLUDED_NAMES),
                    activity_retention_days=int(setting(
@@ -157,6 +159,19 @@ def settings_page(request: Request):
                    snmp_write_configured={category: bool(setting(
                        "snmp_write_community:" + category)) for category in CATEGORIES},
                    token_configured=bool(os.environ.get("ZABBIX_API_TOKEN")))
+
+
+@router.post("/settings/mac-database/update")
+async def update_mac_database(request: Request):
+    require_admin(request)
+    await checked_form(request)
+    try:
+        count = await asyncio.to_thread(update_database)
+    except RuntimeError as exc:
+        add_message(request, str(exc), "error")
+    else:
+        add_message(request, f"База MAC обновлена. Префиксов: {count}.")
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/settings/activity-retention")

@@ -3,6 +3,15 @@
 <section class="panel"><h2>Zabbix API</h2>
 <p>Токен: <strong>{{ "задан через ZABBIX_API_TOKEN" if token_configured else "не задан" }}</strong>. Секрет хранится вне базы данных.</p>
 <form method="post" action="/settings/check"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Проверить соединение</button></form></section>
+<section class="panel"><h2>База производителей MAC</h2>
+<p>Префиксов: <strong>{{ mac_database.count }}</strong>{% if mac_database.downloaded_at %} · Загружена: {{ mac_database.downloaded_at }} (UTC){% endif %}{% if mac_database.bundled %} · Встроенная копия{% endif %}.</p>
+{% if mac_database.error %}<p role="status">{{ mac_database.error }}</p>{% endif %}
+<p>Производитель и дата появления префикса определяются офлайн. «Префикс известен с» — самая ранняя запись в архивах, а не дата выпуска устройства или гарантированная дата регистрации IEEE.</p>
+<p>Источник: <a href="https://github.com/runZeroInc/mac-tracker" target="_blank" rel="noopener noreferrer">runZero mac-tracker</a>.</p>
+<form method="post" action="/settings/mac-database/update">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<p>Обновление загружает базу с GitHub. При ошибке предыдущая копия сохраняется.</p>
+<button type="submit">Обновить базу MAC</button></form></section>
 <section class="panel"><h2>Хранение журнала</h2>
 <form method="post" action="/settings/activity-retention">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
