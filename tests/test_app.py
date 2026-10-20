@@ -603,6 +603,26 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/devices/VOIP?page=0").status_code, 422)
         self.assertIn('value="50" selected', self.client.get("/devices/VOIP").text)
 
+    def test_device_selection_filter_ignores_query_and_limits_to_visible_hosts(self):
+        path = "/api/devices/VOIP"
+        self.assertEqual(self.client.get(path + "?ids=1").status_code, 401)
+        self.login()
+        devices = [{"id": str(i), "name": "Device %s" % i,
+                    "technical_name": "host-%s" % i, "address": "192.0.2.1"}
+                   for i in range(1, 61)]
+        with (patch("routes_devices.host_rows", return_value=devices),
+              patch("routes_devices.device_descriptions", return_value={})):
+            for view in ("list", "tree"):
+                result = self.client.get(path, params={
+                    "ids": "1,60,999", "q": "unrelated query", "view": view}).json()
+                self.assertEqual([row["id"] for row in result["devices"]], ["1", "60"])
+                self.assertEqual(result["total"], 2)
+                self.assertEqual(self.client.get(path, params={
+                    "ids": "", "view": view}).json()["devices"], [])
+            duplicate = self.client.get(path + "?ids=1,1").json()
+            self.assertEqual(duplicate["total"], 1)
+            self.assertEqual(self.client.get(path + "?ids=1,2,3,4,5,6").status_code, 422)
+
     def test_device_tree_uses_zabbix_groups_across_all_pages(self):
         self.login()
         host = {"hostid": "1", "host": "voip-1", "name": "Phone 1", "status": "0",

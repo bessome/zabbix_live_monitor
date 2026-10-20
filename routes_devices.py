@@ -153,17 +153,23 @@ async def set_favorite(request: Request, category: str, host_id: str):
 
 @router.get("/api/devices/{category}")
 async def devices_api(request: Request, category: str, q: str = "",
-                       page: int = 1, per_page: int = 50, view: str = "list"):
+                       page: int = 1, per_page: int = 50, view: str = "list",
+                       ids: str | None = None):
     user = require_user(request, api=True)
     category_filter(category)
     if page < 1 or per_page not in (25, 50, 100, 250) or view not in ("list", "tree"):
         raise HTTPException(422, "Invalid pagination parameters")
+    selected_ids = None if ids is None else set(part.strip() for part in ids.split(",") if part.strip())
+    if selected_ids is not None and len(selected_ids) > 5:
+        raise HTTPException(422, "Select up to 5 devices")
     try:
         rows = await asyncio.to_thread(host_rows, category)
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     query = normalize_device_search(q.strip()[:100])
-    if query:
+    if selected_ids is not None:
+        rows = [row for row in rows if row["id"] in selected_ids]
+    elif query:
         rows = [row for row in rows if any(
             query in normalize_device_search(str(row[field]))
             for field in ("name", "technical_name", "address")) or

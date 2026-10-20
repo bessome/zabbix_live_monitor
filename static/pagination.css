@@ -22,3 +22,5 @@ html[data-theme="dark"] .device-view-options{border-color:#536374}html[data-them
 .availability-indicator.monitor-pulse::before{animation:list-monitor-pulse 1s ease-out}
 @keyframes list-monitor-pulse{0%{transform:scale(1);box-shadow:0 0 0 0 #3498db99}40%{transform:scale(1.25);box-shadow:0 0 0 7px #3498db33}100%{transform:scale(1);box-shadow:0 0 0 10px #3498db00}}
 @media(prefers-reduced-motion:reduce){.availability-indicator.monitor-pulse::before{animation:none;outline:2px solid #3498db;outline-offset:3px}}
+.monitored-only-label{display:inline-flex;align-items:center;gap:6px;margin:0;cursor:pointer;font-size:13px}
+.monitored-only-label input{width:17px;height:17px;min-height:17px;margin:0;accent-color:#1681ca}

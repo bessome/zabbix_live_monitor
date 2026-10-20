@@ -76,6 +76,9 @@ html[data-theme="dark"] .view-mode-options button[aria-pressed="true"]{backgroun
   .device-toolbar input,.device-toolbar select{width:100%;min-width:0}
   .toolbar-label-full{display:none}
   .toolbar-label-short{display:inline}
+  #device-list #status,#device-list #list-monitor-status{display:none}
+  #device-list .list-monitor-controls{margin:0}
+  #device-list #list-monitor-clear{margin:8px 0 12px}
   .table-wrap{overflow:visible}
   .device-table,.device-table tbody,.device-table tr,.device-table td,
   .users-table,.users-table tbody,.users-table tr,.users-table td,

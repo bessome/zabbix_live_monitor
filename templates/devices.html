@@ -9,7 +9,7 @@
 <div class="device-view-options" role="group" aria-label="Вид списка устройств"><button type="button" data-device-view="list" aria-pressed="true">Список</button><button type="button" data-device-view="tree" aria-pressed="false">Дерево</button></div>
 </div>
 <p id="status" aria-live="polite"></p>
-<div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button></div>
+<div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button><label id="monitored-only-label" class="monitored-only-label" hidden><input id="monitored-only" type="checkbox">Опрашиваемые</label></div>
 <div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
@@ -42,6 +42,8 @@ const category = document.getElementById("device-list").dataset.category;
 const rows = document.getElementById("rows");
 const status = document.getElementById("status");
 const search = document.getElementById("search");
+const monitoredOnly = document.getElementById("monitored-only");
+monitoredOnly.checked = false;
 const pageSize = document.getElementById("page-size");
 const first = document.getElementById("first-page");
 const previous = document.getElementById("prev-page");
@@ -95,6 +97,7 @@ function monitorControls() {
     ? "Пинг: 1 с · SNMP: 5 с · Выбрано: " + monitoredIds.size + "/5"
     : "Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с";
   document.getElementById("list-monitor-clear").hidden = !monitoredIds.size;
+  document.getElementById("monitored-only-label").hidden = !monitoredIds.size;
   document.querySelectorAll(".device-monitor-select").forEach(input => {
     input.checked = monitoredIds.has(input.dataset.hostId);
     input.disabled = !input.checked && monitoredIds.size >= 5;
@@ -108,7 +111,11 @@ function selectMonitor(id, checked) {
   saveSearch();
   monitorControls();
   if (checked) { paintLiveRows(); pollMonitored(); }
-  else refresh();
+  else {
+    if (!monitoredIds.size) monitoredOnly.checked = false;
+    currentPage = 1;
+    refresh();
+  }
 }
 function paintLiveRow(row, pulse = false, pulseMetrics = false) {
   const id = row.dataset.hostId;
@@ -181,6 +188,12 @@ async function pollMonitorKind(kind) {
     ids.forEach((id, index) => {
       const result = results[index];
       const data = result.status === "fulfilled" ? result.value : null;
+      // The first snapshot starts the worker before its first ICMP probe finishes.
+      if (kind === "ping" && data?.sent === 0) {
+        const previous = liveValues.get(id);
+        if (previous) liveValues.set(id, {...previous, pingUpdated: false});
+        return;
+      }
       const update = kind === "metrics" ? {summary: data ? summaryFromSnmp(data) : null, metricsUpdated: Boolean(data)} : {
         availability: data?.sent > 0 ? (data.current_ms == null ? "unavailable" : "available") : "unknown",
         pingUpdated: Boolean(data), at: Date.now(),
@@ -199,6 +212,7 @@ async function pollMonitorKind(kind) {
 function resetMonitor() {
   monitoredIds.clear();
   liveValues.clear();
+  monitoredOnly.checked = false;
   monitorRevision++;
   Object.values(monitorRequests).forEach(state => state.controller?.abort());
   document.querySelectorAll(".monitor-pulse").forEach(indicator => indicator.classList.remove("monitor-pulse"));
@@ -207,6 +221,11 @@ function resetMonitor() {
 }
 document.getElementById("list-monitor-clear").addEventListener("click", () => {
   resetMonitor();
+  refresh();
+});
+monitoredOnly.addEventListener("change", () => {
+  currentPage = 1;
+  requestSequence++;
   refresh();
 });
 function cell(tr, label, value) {
@@ -433,6 +452,10 @@ async function refresh() {
   saveSearch();
   const sequence = ++requestSequence;
   const params = new URLSearchParams({q: search.value.trim(), page: String(currentPage), per_page: pageSize.value, view});
+  if (monitoredOnly.checked) {
+    params.set("q", "");
+    params.set("ids", [...monitoredIds].join(","));
+  }
   try {
     const response = await fetch("/api/devices/" + encodeURIComponent(category) + "?" + params.toString(), {credentials: "same-origin"});
     if (response.status === 401) { location.href = "/login"; return; }
@@ -471,7 +494,7 @@ last.addEventListener("click", () => goTo(lastPage));
 let timer;
 search.addEventListener("input", () => {
   currentPage = 1;
-  resetMonitor();
+  saveSearch();
   requestSequence++;
   clearTimeout(timer);
   timer = setTimeout(refresh, 250);

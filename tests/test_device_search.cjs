@@ -140,7 +140,7 @@ test('monitoring caps selection at five, polls ping each second and SNMP every f
   assert.equal(page.requests.length, 0);
 });
 
-test('new or cleared search cancels monitoring and ignores pending replies', async () => {
+test('new or cleared search preserves selected devices and pending polls', async () => {
   for (const query of ['', 'new modem']) {
     const storage = new Map();
     const page = loadPage(storage, 'Modems');
@@ -154,18 +154,48 @@ test('new or cleared search cancels monitoring and ignores pending replies', asy
     `, page.context);
     page.element('search').value = query;
     page.element('search').listeners.input();
-    assert.equal(vm.runInContext('monitoredIds.size', page.context), 0);
-    assert.equal(vm.runInContext('activeSignal.aborted', page.context), true);
-    assert.equal(vm.runInContext('metricSignal.aborted', page.context), true);
-    assert.equal(page.element('list-monitor-clear').hidden, true);
+    assert.equal(vm.runInContext('monitoredIds.size', page.context), 1);
+    assert.equal(vm.runInContext('activeSignal.aborted', page.context), false);
+    assert.equal(vm.runInContext('metricSignal.aborted', page.context), false);
+    assert.equal(page.element('list-monitor-clear').hidden, false);
     vm.runInContext(`pendingReplies.forEach(resolve => resolve({ok: true, json: async () => ({items: [], sent: 1, current_ms: 3})}))`, page.context);
     await flush();
-    assert.equal(vm.runInContext('liveValues.size', page.context), 0);
+    assert.equal(vm.runInContext('liveValues.size', page.context), 1);
     assert.equal(vm.runInContext('Object.values(monitorRequests).some(state => state.inFlight)', page.context), false);
     const saved = JSON.parse(storage.get('zabbix-device-search:1:Modems'));
     assert.equal(saved.query, query);
     assert.equal('monitoredIds' in saved, false);
   }
+});
+
+test('monitored-only filter requests selected IDs across searches and restores search when unchecked', async () => {
+  const page = loadPage(new Map(), 'Modems', '1', async () => ({ok: true,
+    json: async () => ({items: [], sent: 1, current_ms: 3})}));
+  await flush();
+  vm.runInContext('selectMonitor("1", true); selectMonitor("2", true)', page.context);
+  await flush();
+  page.element('search').value = 'unrelated device';
+  page.element('search').listeners.input();
+  assert.equal(vm.runInContext('monitoredIds.size', page.context), 2);
+  page.element('monitored-only').checked = true;
+  page.element('monitored-only').listeners.change();
+  await flush();
+  let params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
+  assert.equal(params.get('ids'), '1,2');
+  assert.equal(params.get('q'), '');
+  assert.equal(params.get('page'), '1');
+  assert.equal(page.element('monitored-only-label').hidden, false);
+  page.element('monitored-only').checked = false;
+  page.element('monitored-only').listeners.change();
+  await flush();
+  params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
+  assert.equal(params.has('ids'), false);
+  assert.equal(params.get('q'), 'unrelated device');
+  page.element('monitored-only').checked = true;
+  page.element('list-monitor-clear').listeners.click();
+  await flush();
+  assert.equal(page.element('monitored-only').checked, false);
+  assert.equal(page.element('monitored-only-label').hidden, true);
 });
 
 test('slow SNMP does not delay ping updates or trigger extra SNMP requests', async () => {
@@ -189,6 +219,30 @@ test('slow SNMP does not delay ping updates or trigger extra SNMP requests', asy
   await flush();
   assert.equal(vm.runInContext('liveValues.get("1").summary.modem_levels.us.value', page.context), '40');
   assert.equal(vm.runInContext('liveValues.get("1").availability', page.context), 'unavailable');
+});
+
+test('initial ping snapshot without completed probes preserves the existing state', async () => {
+  let snapshot = {sent: 0, current_ms: null};
+  const page = loadPage(new Map(), 'VOIP', '1', async () => ({ok: true, json: async () => snapshot}));
+  await flush();
+  vm.runInContext(`
+    let displayedState = 'available';
+    availabilityIndicator = state => ({state, classList: {add() {}}});
+    const testRow = {dataset: {hostId: '1'}, querySelector() {
+      return {replaceWith(indicator) { displayedState = indicator.state; }};
+    }};
+    document.querySelectorAll = selector => selector === '#device-list tr[data-host-id]' ? [testRow] : [];
+    selectMonitor('1', true);
+  `, page.context);
+  await flush();
+  assert.equal(vm.runInContext('displayedState', page.context), 'available');
+  assert.equal(vm.runInContext('liveValues.has("1")', page.context), false);
+  snapshot = {sent: 1, current_ms: null};
+  await vm.runInContext('pollMonitorKind("ping")', page.context);
+  assert.equal(vm.runInContext('displayedState', page.context), 'unavailable');
+  snapshot = {sent: 2, current_ms: 3};
+  await vm.runInContext('pollMonitorKind("ping")', page.context);
+  assert.equal(vm.runInContext('displayedState', page.context), 'available');
 });
 
 test('lost ping turns red and poll errors discard stale values', async () => {
