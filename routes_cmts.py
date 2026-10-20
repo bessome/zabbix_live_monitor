@@ -11,6 +11,7 @@ from cmts_monitor import normalize_mac, resolve_mac, search_cmts
 from docsis_modem import basic_channels
 from ping_monitor import snapshot_for
 from snmp_monitor import uptime_for
+from zabbix_service import host_rows
 
 router = APIRouter()
 _verified = {}
@@ -92,6 +93,21 @@ async def cmts_search(request: Request, q: str = "", cmts_id: int = 0):
     if len(rows) > 200:
         rows = rows[:200]
         truncated = True
+    if any(row.get("ip") for row in rows):
+        try:
+            hosts = await asyncio.to_thread(host_rows, "Modems")
+        except RuntimeError as exc:
+            errors.append({"cmts": "Zabbix", "error": str(exc)})
+        else:
+            names_by_ip = {}
+            for host in hosts:
+                name = host.get("name") or host.get("technical_name")
+                if name:
+                    for field in ("interface_ip", "snmp_address", "address"):
+                        if host.get(field):
+                            names_by_ip.setdefault(host[field], name)
+            rows = [{**row, "name": names_by_ip.get(row.get("ip"), "")}
+                    for row in rows]
     return JSONResponse({"results": rows, "errors": errors, "truncated": truncated},
                         headers={"Cache-Control": "no-store"})
 

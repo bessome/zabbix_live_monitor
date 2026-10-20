@@ -41,8 +41,9 @@
         const row = document.createElement("button");
         row.type = "button";
         row.className = "cmts-result";
-            const address = document.createElement("strong");
-        address.textContent = (modem.ip || "IP неизвестен") + " · " + modem.mac;
+        const address = document.createElement("strong");
+        address.textContent = (modem.name ? modem.name + " · " : "")
+          + modem.mac + " — " + (modem.ip || "IP неизвестен");
         const cmts = document.createElement("small");
         cmts.textContent = modem.cmts_name;
         row.append(address, cmts);

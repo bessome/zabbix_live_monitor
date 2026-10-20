@@ -1634,6 +1634,43 @@ class AppTests(unittest.TestCase):
             "new_password_confirm": "test-admin-password"})
 
 
+    def test_cmts_search_resolves_zabbix_names_and_keeps_unmatched_modems(self):
+        self.login()
+        cmts = {"id": 1, "name": "Test CMTS"}
+        modems = [
+            {"cmts_id": 1, "cmts_name": "Test CMTS", "mac": mac,
+             "mac_compact": mac, "ip": ip}
+            for mac, ip in (("001122334455", "192.0.2.1"),
+                            ("001122334466", "192.0.2.2"),
+                            ("001122334477", None))]
+        for field in ("interface_ip", "snmp_address", "address"):
+            with (self.subTest(field=field),
+                  patch("routes_cmts.cmts_list", return_value=[cmts]),
+                  patch("routes_cmts.cmts_for", return_value=cmts),
+                  patch("routes_cmts.search_cmts", new_callable=AsyncMock,
+                        return_value=(modems, False)),
+                  patch("routes_cmts.host_rows", return_value=[
+                      {"name": "Named modem", field: "192.0.2.1"},
+                      {"name": "Different modem", "address": "192.0.2.10"}
+                  ]) as hosts):
+                response = self.client.get("/api/cmts/search", params={"q": "001122"})
+            self.assertEqual(response.status_code, 200)
+            rows = response.json()["results"]
+            self.assertEqual([row["name"] for row in rows], ["Named modem", "", ""])
+            self.assertEqual([{key: row[key] for key in modem}
+                              for row, modem in zip(rows, modems)], modems)
+            hosts.assert_called_once_with("Modems")
+        with (patch("routes_cmts.cmts_list", return_value=[cmts]),
+              patch("routes_cmts.cmts_for", return_value=cmts),
+              patch("routes_cmts.search_cmts", new_callable=AsyncMock,
+                    return_value=(modems, False)),
+              patch("routes_cmts.host_rows", side_effect=RuntimeError("Zabbix unavailable"))):
+            response = self.client.get("/api/cmts/search", params={"q": "001122"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], modems)
+        self.assertEqual(response.json()["errors"], [
+            {"cmts": "Zabbix", "error": "Zabbix unavailable"}])
+
     def test_cmts_settings_search_and_discovered_card(self):
         self.login()
         csrf = self.token("/settings/cmts")
@@ -1664,8 +1701,9 @@ class AppTests(unittest.TestCase):
         modem = {"cmts_id": cmts_id, "cmts_name": "Test CMTS",
                  "mac": "cc:35:40:e8:ee:64", "mac_compact": "cc3540e8ee64",
                  "ip": "10.19.0.223"}
-        with patch("routes_cmts.search_cmts", new_callable=AsyncMock,
-                   return_value=([modem], False)) as lookup:
+        with (patch("routes_cmts.search_cmts", new_callable=AsyncMock,
+                    return_value=([modem], False)) as lookup,
+              patch("routes_cmts.host_rows", return_value=[])):
             response = self.client.get("/api/cmts/search", params={
                 "q": "CC35.40E8.EE64", "cmts_id": cmts_id})
         self.assertEqual(response.status_code, 200)
