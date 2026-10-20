@@ -63,6 +63,28 @@ const displayTime = new Intl.DateTimeFormat("en-GB", {
 let currentPage = 1;
 let lastPage = 1;
 let requestSequence = 0;
+const searchStorageKey = "zabbix-device-search:{{ current_user.id }}:" + category;
+try {
+  const saved = JSON.parse(sessionStorage.getItem(searchStorageKey));
+  if (saved && typeof saved === "object") {
+    if (typeof saved.query === "string") search.value = saved.query;
+    if (["25", "50", "100", "250"].includes(saved.pageSize)) pageSize.value = saved.pageSize;
+    if (Number.isSafeInteger(saved.page) && saved.page > 0) currentPage = saved.page;
+    if (["list", "tree"].includes(saved.view)) view = saved.view;
+    if (Array.isArray(saved.openGroups)) {
+      saved.openGroups.filter(group => typeof group === "string").forEach(group => openGroups.add(group));
+    }
+  }
+} catch (_) {}
+function saveSearch() {
+  try {
+    sessionStorage.setItem(searchStorageKey, JSON.stringify({
+      query: search.value, page: currentPage, pageSize: pageSize.value,
+      view, openGroups: [...openGroups]
+    }));
+  } catch (_) {}
+}
+window.addEventListener("pagehide", saveSearch);
 function cell(tr, label, value) {
   const td = document.createElement("td");
   td.dataset.label = label;
@@ -224,6 +246,7 @@ function renderTree(devices) {
         if (!search.value.trim()) {
           if (details.open) openGroups.add(groupPath);
           else openGroups.delete(groupPath);
+          saveSearch();
         }
         if (details.open) details.loadSummaries();
       });
@@ -269,6 +292,7 @@ function applyView() {
   viewButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.deviceView === view)));
 }
 async function refresh() {
+  saveSearch();
   const sequence = ++requestSequence;
   const params = new URLSearchParams({q: search.value.trim(), page: String(currentPage), per_page: pageSize.value, view});
   try {
@@ -284,6 +308,7 @@ async function refresh() {
       return;
     }
     currentPage = data.page;
+    saveSearch();
     lastPage = data.pages;
     rows.replaceChildren();
     for (const device of data.devices) rows.appendChild(deviceRow(device));
@@ -308,6 +333,7 @@ last.addEventListener("click", () => goTo(lastPage));
 let timer;
 search.addEventListener("input", () => {
   currentPage = 1;
+  saveSearch();
   requestSequence++;
   clearTimeout(timer);
   timer = setTimeout(refresh, 250);

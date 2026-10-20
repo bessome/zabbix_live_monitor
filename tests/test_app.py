@@ -506,6 +506,8 @@ class AppTests(unittest.TestCase):
                              "SIP gateway, floor 2")
             detail = self.client.get("/devices/VOIP/42")
             self.assertEqual(detail.status_code, 200)
+            self.assertRegex(detail.text, r'href="/static/style\.css\?v=\d+"')
+            self.assertNotRegex(detail.text, r'(?:src|href)="https?://[^"\s]+/static/')
             self.assertIn("SIP gateway, floor 2", detail.text)
             self.assertIn('class="device-web-link" href="http://192.0.2.42" '
                           'target="_blank" rel="noopener noreferrer"', detail.text)
