@@ -68,6 +68,7 @@ const monitoredIds = new Set();
 const liveValues = new Map();
 let monitorInFlight = false;
 let monitorRevision = 0;
+let monitorController = null;
 const searchStorageKey = "zabbix-device-search:{{ current_user.id }}:" + category;
 try {
   const saved = JSON.parse(sessionStorage.getItem(searchStorageKey));
@@ -79,16 +80,13 @@ try {
     if (Array.isArray(saved.openGroups)) {
       saved.openGroups.filter(group => typeof group === "string").forEach(group => openGroups.add(group));
     }
-    if (Array.isArray(saved.monitoredIds)) {
-      saved.monitoredIds.filter(id => typeof id === "string").slice(0, 5).forEach(id => monitoredIds.add(id));
-    }
   }
 } catch (_) {}
 function saveSearch() {
   try {
     sessionStorage.setItem(searchStorageKey, JSON.stringify({
       query: search.value, page: currentPage, pageSize: pageSize.value,
-      view, openGroups: [...openGroups], monitoredIds: [...monitoredIds]
+      view, openGroups: [...openGroups]
     }));
   } catch (_) {}
 }
@@ -117,19 +115,18 @@ function paintLiveRow(row, pulse = false) {
   const id = row.dataset.hostId;
   if (!monitoredIds.has(id)) return;
   const live = liveValues.get(id);
-  const indicator = availabilityIndicator(live?.availability || "unknown");
-  indicator.title = live?.error || (live ? "Пинг · " + displayTime.format(new Date(live.at)) : "Ожидание пинга…");
+  if (!live) return;
+  const indicator = availabilityIndicator(live.availability || "unknown");
+  indicator.title = live.error || "Пинг · " + displayTime.format(new Date(live.at));
   row.querySelector(".availability-indicator").replaceWith(indicator);
-  if (pulse && live?.pingUpdated) {
+  if (pulse && live.pingUpdated) {
     // Restart the animation even when the ping state has not changed.
     void indicator.offsetWidth;
     indicator.classList.add("monitor-pulse");
   }
   const description = row.querySelector(".device-description");
   if (!["Modems", "TV_Amplifires"].includes(category)) return;
-  if (live?.summary) updateDeviceSummary(description, {id}, live.summary);
-  else if (live && ["Modems", "TV_Amplifires"].includes(category)) updateDeviceSummary(description, {id}, {});
-  else description.textContent = live ? "Данные недоступны" : "Ожидание обновления…";
+  updateDeviceSummary(description, {id}, live.summary || {});
 }
 function paintLiveRows(pulse = false) {
   document.querySelectorAll("#device-list tr[data-host-id]").forEach(row => paintLiveRow(row, pulse));
@@ -152,6 +149,7 @@ async function pollMonitored() {
   const revision = monitorRevision;
   const ids = [...monitoredIds];
   const controller = new AbortController();
+  monitorController = controller;
   const timeout = setTimeout(() => controller.abort(), 4500);
   async function read(url) {
     const response = await fetch(url, {credentials: "same-origin", cache: "no-store", signal: controller.signal});
@@ -182,16 +180,22 @@ async function pollMonitored() {
     paintLiveRows(true);
   } finally {
     clearTimeout(timeout);
+    monitorController = null;
     monitorInFlight = false;
     if (revision !== monitorRevision) pollMonitored();
   }
 }
-document.getElementById("list-monitor-clear").addEventListener("click", () => {
+function resetMonitor() {
   monitoredIds.clear();
   liveValues.clear();
   monitorRevision++;
+  monitorController?.abort();
+  document.querySelectorAll(".monitor-pulse").forEach(indicator => indicator.classList.remove("monitor-pulse"));
   saveSearch();
   monitorControls();
+}
+document.getElementById("list-monitor-clear").addEventListener("click", () => {
+  resetMonitor();
   refresh();
 });
 function cell(tr, label, value) {
@@ -456,7 +460,7 @@ last.addEventListener("click", () => goTo(lastPage));
 let timer;
 search.addEventListener("input", () => {
   currentPage = 1;
-  saveSearch();
+  resetMonitor();
   requestSequence++;
   clearTimeout(timer);
   timer = setTimeout(refresh, 250);
