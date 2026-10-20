@@ -103,7 +103,7 @@ test('invalid or unavailable session storage does not prevent loading devices', 
   assert.equal(page.requests.length, 1);
 });
 
-test('monitoring caps selection at five, polls every five seconds and resets on page reload', async () => {
+test('monitoring caps selection at five, polls ping each second and SNMP every five seconds', async () => {
   const storage = new Map();
   const reply = async url => ({ok: true, json: async () => url.endsWith('/modem-channels')
     ? {items: [{id: '10', label: 'US1 Level', value: '40', units: 'dBmV'}]}
@@ -121,6 +121,7 @@ test('monitoring caps selection at five, polls every five seconds and resets on 
   assert.ok(interval);
   page.requests.length = 0;
   interval.handler();
+  page.intervals.find(item => item.ms === 1000).handler();
   await flush();
   assert.equal(page.requests.filter(url => url.endsWith('/ping')).length, 5);
   assert.equal(page.requests.filter(url => url.endsWith('/modem-channels')).length, 5);
@@ -148,21 +149,46 @@ test('new or cleared search cancels monitoring and ignores pending replies', asy
       const pendingReplies = [];
       fetch = () => new Promise(resolve => pendingReplies.push(resolve));
       selectMonitor('1', true);
-      var activeSignal = monitorController.signal;
+      var activeSignal = monitorRequests.ping.controller.signal;
+      var metricSignal = monitorRequests.metrics.controller.signal;
     `, page.context);
     page.element('search').value = query;
     page.element('search').listeners.input();
     assert.equal(vm.runInContext('monitoredIds.size', page.context), 0);
     assert.equal(vm.runInContext('activeSignal.aborted', page.context), true);
+    assert.equal(vm.runInContext('metricSignal.aborted', page.context), true);
     assert.equal(page.element('list-monitor-clear').hidden, true);
     vm.runInContext(`pendingReplies.forEach(resolve => resolve({ok: true, json: async () => ({items: [], sent: 1, current_ms: 3})}))`, page.context);
     await flush();
     assert.equal(vm.runInContext('liveValues.size', page.context), 0);
-    assert.equal(vm.runInContext('monitorInFlight', page.context), false);
+    assert.equal(vm.runInContext('Object.values(monitorRequests).some(state => state.inFlight)', page.context), false);
     const saved = JSON.parse(storage.get('zabbix-device-search:1:Modems'));
     assert.equal(saved.query, query);
     assert.equal('monitoredIds' in saved, false);
   }
+});
+
+test('slow SNMP does not delay ping updates or trigger extra SNMP requests', async () => {
+  let finishSnmp;
+  let pingMs = 3;
+  const page = loadPage(new Map(), 'Modems', '1', url => {
+    if (url.endsWith('/modem-channels')) return new Promise(resolve => { finishSnmp = resolve; });
+    return Promise.resolve({ok: true, json: async () => ({sent: 1, current_ms: pingMs})});
+  });
+  await flush();
+  vm.runInContext('selectMonitor("1", true)', page.context);
+  await flush();
+  assert.equal(vm.runInContext('liveValues.get("1").availability', page.context), 'available');
+  assert.equal(vm.runInContext('"summary" in liveValues.get("1")', page.context), false);
+  pingMs = null;
+  await page.intervals.find(item => item.ms === 1000).handler();
+  assert.equal(vm.runInContext('liveValues.get("1").availability', page.context), 'unavailable');
+  assert.equal(page.requests.filter(url => url.endsWith('/modem-channels')).length, 1);
+  assert.equal(page.requests.filter(url => url.endsWith('/ping')).length, 2);
+  finishSnmp({ok: true, json: async () => ({items: [{label: 'US1 Level', value: '40'}]})});
+  await flush();
+  assert.equal(vm.runInContext('liveValues.get("1").summary.modem_levels.us.value', page.context), '40');
+  assert.equal(vm.runInContext('liveValues.get("1").availability', page.context), 'unavailable');
 });
 
 test('lost ping turns red and poll errors discard stale values', async () => {
@@ -242,6 +268,34 @@ test('state indicator pulses only after a successful poll', async () => {
   vm.runInContext(`pulsed = false; liveValues.set('1', {availability: 'unknown', at: Date.now(), pingUpdated: false}); paintLiveRow(testRow, true)`, page.context);
   assert.equal(vm.runInContext('painted.state', page.context), 'unknown');
   assert.equal(vm.runInContext('pulsed', page.context), false);
+});
+
+test('parameters blink on each successful SNMP reply, independently of ping and alert styling', async () => {
+  const page = loadPage(new Map(), 'Modems');
+  await flush();
+  vm.runInContext(`
+    monitoredIds.add('1');
+    let flashes = 0;
+    let renders = 0;
+    updateDeviceSummary = () => { renders++; };
+    const description = {animate() { flashes++; return {cancel() {}}; }};
+    const testRow = {dataset: {hostId: '1'}, querySelector() { return description; }};
+    liveValues.set('1', {summary: {modem_levels: {us: {value: '40'}}}, metricsUpdated: true});
+    paintLiveRow(testRow, false, true);
+    paintLiveRow(testRow);
+  `, page.context);
+  assert.equal(vm.runInContext('flashes', page.context), 1);
+  assert.equal(vm.runInContext('renders', page.context), 1);
+  vm.runInContext(`
+    liveValues.set('1', {summary: {modem_levels: {us: {value: '40'}}}, metricsUpdated: true});
+    paintLiveRow(testRow, false, true);
+  `, page.context);
+  assert.equal(vm.runInContext('flashes', page.context), 2);
+  vm.runInContext(`
+    liveValues.set('1', {summary: null, metricsUpdated: false});
+    paintLiveRow(testRow, false, true);
+  `, page.context);
+  assert.equal(vm.runInContext('flashes', page.context), 2);
 });
 
 test('missing, empty and invalid SNMP values render as n/a without units', async () => {

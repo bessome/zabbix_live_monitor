@@ -9,7 +9,7 @@
 <div class="device-view-options" role="group" aria-label="Вид списка устройств"><button type="button" data-device-view="list" aria-pressed="true">Список</button><button type="button" data-device-view="tree" aria-pressed="false">Дерево</button></div>
 </div>
 <p id="status" aria-live="polite"></p>
-<div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств для опроса каждые 5 секунд.</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button></div>
+<div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button></div>
 <div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
@@ -66,9 +66,8 @@ let lastPage = 1;
 let requestSequence = 0;
 const monitoredIds = new Set();
 const liveValues = new Map();
-let monitorInFlight = false;
+const monitorRequests = {ping: {inFlight: false, controller: null}, metrics: {inFlight: false, controller: null}};
 let monitorRevision = 0;
-let monitorController = null;
 const searchStorageKey = "zabbix-device-search:{{ current_user.id }}:" + category;
 try {
   const saved = JSON.parse(sessionStorage.getItem(searchStorageKey));
@@ -93,8 +92,8 @@ function saveSearch() {
 window.addEventListener("pagehide", saveSearch);
 function monitorControls() {
   document.getElementById("list-monitor-status").textContent = monitoredIds.size
-    ? "Опрос каждые 5 секунд · Выбрано: " + monitoredIds.size + "/5"
-    : "Выберите до 5 устройств для опроса каждые 5 секунд.";
+    ? "Пинг: 1 с · SNMP: 5 с · Выбрано: " + monitoredIds.size + "/5"
+    : "Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с";
   document.getElementById("list-monitor-clear").hidden = !monitoredIds.size;
   document.querySelectorAll(".device-monitor-select").forEach(input => {
     input.checked = monitoredIds.has(input.dataset.hostId);
@@ -111,25 +110,34 @@ function selectMonitor(id, checked) {
   if (checked) { paintLiveRows(); pollMonitored(); }
   else refresh();
 }
-function paintLiveRow(row, pulse = false) {
+function paintLiveRow(row, pulse = false, pulseMetrics = false) {
   const id = row.dataset.hostId;
   if (!monitoredIds.has(id)) return;
   const live = liveValues.get(id);
   if (!live) return;
-  const indicator = availabilityIndicator(live.availability || "unknown");
-  indicator.title = live.error || "Пинг · " + displayTime.format(new Date(live.at));
-  row.querySelector(".availability-indicator").replaceWith(indicator);
-  if (pulse && live.pingUpdated) {
-    // Restart the animation even when the ping state has not changed.
-    void indicator.offsetWidth;
-    indicator.classList.add("monitor-pulse");
+  if ("availability" in live) {
+    const indicator = availabilityIndicator(live.availability || "unknown");
+    indicator.title = live.error || "Пинг · " + displayTime.format(new Date(live.at));
+    row.querySelector(".availability-indicator").replaceWith(indicator);
+    if (pulse && live.pingUpdated) {
+      // Restart the animation even when the ping state has not changed.
+      void indicator.offsetWidth;
+      indicator.classList.add("monitor-pulse");
+    }
   }
   const description = row.querySelector(".device-description");
   if (!["Modems", "TV_Amplifires"].includes(category)) return;
-  updateDeviceSummary(description, {id}, live.summary || {});
+  if ("summary" in live && row.liveSummary !== live.summary) {
+    updateDeviceSummary(description, {id}, live.summary || {});
+    row.liveSummary = live.summary;
+  }
+  if (pulseMetrics && live.metricsUpdated && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    row.liveSummaryAnimation?.cancel();
+    row.liveSummaryAnimation = description.animate([{opacity: 0.3}, {opacity: 1}], {duration: 650, easing: "ease-out"});
+  }
 }
-function paintLiveRows(pulse = false) {
-  document.querySelectorAll("#device-list tr[data-host-id]").forEach(row => paintLiveRow(row, pulse));
+function paintLiveRows(pulse = false, pulseMetrics = false) {
+  document.querySelectorAll("#device-list tr[data-host-id]").forEach(row => paintLiveRow(row, pulse, pulseMetrics));
 }
 function summaryFromSnmp(data) {
   const items = data.items || [];
@@ -143,13 +151,20 @@ function summaryFromSnmp(data) {
   }
   return {modem_levels: levels};
 }
-async function pollMonitored() {
-  if (monitorInFlight || !monitoredIds.size || document.hidden) return;
-  monitorInFlight = true;
+function pollMonitored() {
+  return Promise.all([pollMonitorKind("ping"), pollMonitorKind("metrics")]);
+}
+async function pollMonitorKind(kind) {
+  const state = monitorRequests[kind];
+  if (state.inFlight || !monitoredIds.size || document.hidden) return;
+  const metricPath = category === "Modems" ? "/modem-channels"
+    : category === "TV_Amplifires" ? "/optical-power" : null;
+  if (kind === "metrics" && !metricPath) return;
+  state.inFlight = true;
   const revision = monitorRevision;
   const ids = [...monitoredIds];
   const controller = new AbortController();
-  monitorController = controller;
+  state.controller = controller;
   const timeout = setTimeout(() => controller.abort(), 4500);
   async function read(url) {
     const response = await fetch(url, {credentials: "same-origin", cache: "no-store", signal: controller.signal});
@@ -160,36 +175,32 @@ async function pollMonitored() {
   }
   const base = "/api/devices/" + encodeURIComponent(category);
   try {
-    const metricPath = category === "Modems" ? "/modem-channels"
-      : category === "TV_Amplifires" ? "/optical-power" : null;
-    const results = await Promise.all(ids.map(async id => Promise.allSettled([
-      metricPath ? read(base + "/" + encodeURIComponent(id) + metricPath) : Promise.resolve(null),
-      read(base + "/" + encodeURIComponent(id) + "/ping")
-    ])));
+    const results = await Promise.allSettled(ids.map(id =>
+      read(base + "/" + encodeURIComponent(id) + (kind === "ping" ? "/ping" : metricPath))));
     if (revision !== monitorRevision) return;
     ids.forEach((id, index) => {
-      const [metrics, ping] = results[index];
-      const data = ping.status === "fulfilled" ? ping.value : null;
-      liveValues.set(id, {
-        summary: metrics.status === "fulfilled" && metrics.value ? summaryFromSnmp(metrics.value) : null,
+      const result = results[index];
+      const data = result.status === "fulfilled" ? result.value : null;
+      const update = kind === "metrics" ? {summary: data ? summaryFromSnmp(data) : null, metricsUpdated: Boolean(data)} : {
         availability: data?.sent > 0 ? (data.current_ms == null ? "unavailable" : "available") : "unknown",
         pingUpdated: Boolean(data), at: Date.now(),
-        error: ping.status === "rejected" ? "Ошибка пинга: " + ping.reason.message : ""
-      });
+        error: result.status === "rejected" ? "Ошибка пинга: " + result.reason.message : ""
+      };
+      liveValues.set(id, {...liveValues.get(id), ...update});
     });
-    paintLiveRows(true);
+    paintLiveRows(kind === "ping", kind === "metrics");
   } finally {
     clearTimeout(timeout);
-    monitorController = null;
-    monitorInFlight = false;
-    if (revision !== monitorRevision) pollMonitored();
+    state.controller = null;
+    state.inFlight = false;
+    if (revision !== monitorRevision) pollMonitorKind(kind);
   }
 }
 function resetMonitor() {
   monitoredIds.clear();
   liveValues.clear();
   monitorRevision++;
-  monitorController?.abort();
+  Object.values(monitorRequests).forEach(state => state.controller?.abort());
   document.querySelectorAll(".monitor-pulse").forEach(indicator => indicator.classList.remove("monitor-pulse"));
   saveSearch();
   monitorControls();
@@ -288,8 +299,8 @@ function deviceRow(device) {
   select.dataset.hostId = String(device.id);
   select.checked = monitoredIds.has(String(device.id));
   select.disabled = !select.checked && monitoredIds.size >= 5;
-  select.setAttribute("aria-label", "Опрос каждые 5 секунд: " + device.name);
-  select.title = "Опрос каждые 5 секунд (до 5 устройств)";
+  select.setAttribute("aria-label", "Мониторинг: " + device.name);
+  select.title = "Пинг: 1 с · SNMP: 5 с (до 5 устройств)";
   select.addEventListener("change", () => selectMonitor(String(device.id), select.checked));
   nameRow.appendChild(select);
   nameRow.append(availabilityIndicator(device.availability), deviceLink(device), favoriteButton(device));
@@ -478,6 +489,7 @@ applyView();
 monitorControls();
 refresh();
 pollMonitored();
-setInterval(pollMonitored, 5000);
+setInterval(() => pollMonitorKind("ping"), 1000);
+setInterval(() => pollMonitorKind("metrics"), 5000);
 setInterval(refresh, 15000);
 </script>{% endblock %}
