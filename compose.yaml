@@ -9,6 +9,8 @@ services:
         https_proxy: ${https_proxy:-}
     restart: unless-stopped
     init: true
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "512"
     env_file:
       - .env
     environment:
