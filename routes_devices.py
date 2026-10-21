@@ -7,13 +7,14 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app_storage import (cmts_list, favorite_devices_for, favorite_ids_for,
+from app_storage import (cmts_for, cmts_list, favorite_devices_for, favorite_ids_for,
                          recent_devices_for, record_recent_device, remove_favorite,
                          save_favorite, setting, snmp_community_for,
                          snmp_write_community_for)
 from app_web import checked_form, render, require_user
 from cable_test import CableTestBusy, run_cable_test
 from mac_vendors import lookup_macs
+from modem_status import status_for as modem_status_for
 from ping_monitor import snapshot_for
 from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_for,
                           uptime_for)
@@ -32,6 +33,23 @@ router = APIRouter()
 HISTORY_PERIODS = {"1h": 3600, "12h": 43200, "24h": 86400,
                    "2d": 172800, "14d": 1209600}
 HISTORY_PAGE_SIZE = 50000
+
+
+@router.get("/api/devices/{category}/{host_id}/modem-status")
+async def modem_status(request: Request, category: str, host_id: str):
+    require_user(request, api=True)
+    if category != "Modems":
+        raise HTTPException(404)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        device = next((row for row in rows if row["id"] == host_id), None)
+        if device is None:
+            raise HTTPException(404)
+        configs = [cmts_for(row["id"]) for row in cmts_list()]
+        result = await modem_status_for([row for row in configs if row], device=device)
+    except (RuntimeError, ValueError) as exc:
+        result = {"status": None, "error": str(exc)}
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
 def device_http_url(device):

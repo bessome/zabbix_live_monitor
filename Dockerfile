@@ -1,10 +1,10 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates iputils-ping \
+    && apt-get install -y --no-install-recommends ca-certificates iputils-ping rsh-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -19,7 +19,7 @@ RUN groupadd --gid 10001 monitor \
 COPY main.py app_config.py app_storage.py app_web.py zabbix_service.py \
      routes_account.py routes_devices.py routes_settings.py \
      ping_monitor.py snmp_monitor.py switch_monitor.py cable_test.py mac_vendors.py \
-     cmts_monitor.py cmts_groups.py docsis_modem.py routes_cmts.py routes_onu.py ./
+     cmts_monitor.py cmts_groups.py cmts_cli.py modem_status.py docsis_modem.py routes_cmts.py routes_onu.py ./
 COPY templates ./templates
 COPY static ./static
 COPY data ./data

@@ -11,6 +11,8 @@
 <body><main class="discovered-card">
 <div class="discovered-title"><div><h1>{{ modem.ip or 'IP неизвестен' }}</h1><p>{{ modem.mac }} · {{ modem.cmts_name }}</p></div>
 {% if modem.ip %}<a href="http://{{ modem.ip }}" target="_blank" rel="noopener noreferrer" title="Открыть интерфейс модема">↗</a>{% endif %}</div>
+<p class="modem-mac-status" data-modem-status-url="/api/cmts/{{ modem.cmts_id }}/modems/{{ modem.mac_compact }}/modem-status" aria-live="polite">Статус модема: <strong>Загрузка…</strong></p>
+<script src="/static/modem-status.js?v={{ asset_version }}" defer></script>
 {% if modem.ip %}
 <section class="panel ping-panel" id="ping-monitor" data-api-base="/api/cmts/{{ modem.cmts_id }}/modems/{{ modem.mac_compact }}">
 <div class="ping-heading"><h2>Пинг устройства</h2><span id="ping-state" class="ping-state">Ожидание…</span></div>

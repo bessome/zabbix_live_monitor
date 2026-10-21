@@ -78,6 +78,9 @@ html[data-theme="dark"] .ping-legend{color:#adbdcc}
 html[data-theme="dark"] .ping-line{background:#69b8f1}
 html[data-theme="dark"] .ping-loss-mark{background:#ff7770}
 html[data-theme="dark"] .modem-group{color:#aabccc}
+html[data-theme="dark"] .modem-mac-status[data-state="online"] strong{color:#76dca2}
+html[data-theme="dark"] .modem-mac-status[data-state="warning"] strong{color:#ffd17b}
+html[data-theme="dark"] .modem-mac-status[data-state="offline"] strong{color:#ff8e8e}
 html[data-theme="dark"] .modem-row .modem-label-us{color:#ff8e8e}
 html[data-theme="dark"] .modem-row .modem-label-ds-level{color:#8bc9ff}
 html[data-theme="dark"] .modem-row .modem-label-ds-snr{color:#76dca2}

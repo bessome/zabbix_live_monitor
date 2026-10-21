@@ -27,6 +27,11 @@
 .device-monitor-grid>.panel{min-width:0;margin:18px 0}
 .modem-panel>p{color:#5d6976;margin:0 0 12px}
 .modem-state{font-size:13px}
+.modem-mac-status{font-size:14px;overflow-wrap:anywhere}
+.modem-mac-status strong{font-family:Consolas,monospace}
+.modem-mac-status[data-state="online"] strong{color:#167344}
+.modem-mac-status[data-state="warning"] strong{color:#8a5700}
+.modem-mac-status[data-state="offline"] strong{color:#bf3030}
 .modem-state:empty{display:none}
 .modem-channels{max-height:510px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
 .modem-group{margin:12px 0 4px;color:#536171;font-size:13px;text-transform:uppercase;letter-spacing:.04em}

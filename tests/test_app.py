@@ -852,6 +852,54 @@ class AppTests(unittest.TestCase):
             self.assertEqual(read_levels.call_count, 4)
             descriptions.assert_not_called()
 
+    def test_modem_status_is_authorized_and_assets_are_relative(self):
+        path = "/api/devices/Modems/42/modem-status"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.assertEqual(self.client.get("/api/cmts/1/modems/cc3540e608b1/modem-status").status_code, 401)
+        self.login()
+        device = {"id": "42", "name": "Modem", "technical_name": "cc3540e608b1",
+                  "address": "192.0.2.42", "snmp_address": "192.0.2.42", "snmp_port": "161"}
+        cmts = {"id": 1, "community": "private-test"}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.cmts_list", return_value=[{"id": 1}]),
+              patch("routes_devices.cmts_for", return_value=cmts),
+              patch("routes_devices.device_descriptions", return_value={}),
+              patch("routes_devices.modem_status_for", AsyncMock(return_value={"status": "p-online"})) as poll):
+            response = self.client.get(path)
+            self.assertEqual(response.json()["status"], "p-online")
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            self.assertEqual(poll.await_args.kwargs["device"], device)
+            self.assertNotIn("private-test", response.text)
+            self.assertEqual(self.client.get(path.replace("42", "99")).status_code, 404)
+            self.assertEqual(self.client.get(path.replace("Modems", "VOIP")).status_code, 404)
+            self.assertEqual(poll.await_count, 1)
+            page = self.client.get("/devices/Modems/42")
+            self.assertIn('data-modem-status-url="' + path + '"', page.text)
+            self.assertRegex(page.text, r'src="/static/modem-status\.js\?v=\d+"')
+            self.assertNotIn('src="http://', page.text)
+        self.assertEqual(self.client.get("/static/modem-status.js").status_code, 200)
+
+    def test_discovered_status_does_not_depend_on_modem_ip_or_verified_cache(self):
+        self.login()
+        path = "/api/cmts/1/modems/cc3540e608b1/modem-status"
+        with (patch("routes_cmts.cmts_for", return_value={"id": 1}),
+              patch("routes_cmts.modem_status_for", AsyncMock(return_value={"status": "init(d)"})) as poll,
+              patch("routes_cmts.verified_modem", AsyncMock()) as verify):
+            result = self.client.get(path)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json()["status"], "init(d)")
+            verify.assert_not_awaited()
+            self.assertEqual(poll.await_args.kwargs["mac"], "cc3540e608b1")
+            self.assertEqual(self.client.get(path.replace("cc3540e608b1", "ab")).status_code, 422)
+        modem = {"cmts_id": 1, "cmts_name": "CMTS", "mac": "cc:35:40:e6:08:b1",
+                 "mac_compact": "cc3540e608b1", "ip": None}
+        with patch("routes_cmts.verified_modem", AsyncMock(return_value=modem)):
+            page = self.client.get("/cmts/1/modems/cc3540e608b1")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('data-modem-status-url="' + path + '"', page.text)
+        self.assertRegex(page.text, r'src="/static/modem-status\.js\?v=\d+"')
+        self.assertNotIn('src="http://', page.text)
+
     def test_modem_channels_requires_login_and_reads_direct_snmp(self):
         path = "/api/devices/Modems/42/modem-channels"
         self.assertEqual(self.client.get(path).status_code, 401)

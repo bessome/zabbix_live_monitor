@@ -9,6 +9,7 @@ from app_storage import cmts_for, cmts_list, snmp_community_for
 from app_web import render, require_user
 from cmts_monitor import normalize_mac, resolve_mac, search_cmts
 from docsis_modem import basic_channels
+from modem_status import status_for as modem_status_for
 from ping_monitor import snapshot_for
 from snmp_monitor import uptime_for
 from zabbix_service import host_rows
@@ -18,6 +19,26 @@ _verified = {}
 _verify_lock = asyncio.Lock()
 VERIFY_SECONDS = 30
 _search_limit = asyncio.Semaphore(4)
+
+
+@router.get("/api/cmts/{cmts_id}/modems/{mac}/modem-status")
+async def discovered_status(request: Request, cmts_id: int, mac: str):
+    require_user(request, api=True)
+    try:
+        compact = normalize_mac(mac)
+        if len(compact) != 12:
+            raise ValueError("Нужен полный MAC модема.")
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    try:
+        cmts = cmts_for(cmts_id)
+        if cmts is None:
+            raise HTTPException(404)
+        # Do not require a reachable modem IP: init/offline still have CMTS state.
+        result = await modem_status_for([cmts], mac=compact)
+    except (RuntimeError, ValueError) as exc:
+        result = {"status": None, "error": str(exc)}
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
 async def verified_modem(cmts_id, mac):
