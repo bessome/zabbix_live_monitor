@@ -1,5 +1,12 @@
 # Project guidance for code changes
 
+## Numeric values and charts
+
+- Apply this display rule to every existing and new numeric measurement throughout the app: at most two decimal places, with trailing fractional zeros removed (`-19.400000000000002` → `-19.4`, `12.00` → `12`, `1.236` → `1.24`). Display rounded negative zero as `0`.
+- Use the same formatting for lists, device cards, live readings, chart axes, tooltips, legends, overlays, and latest/min/max/average summaries. Keep units visible and preserve integer counters and status labels. Missing or non-finite readings must retain the appropriate `n/a` or `—` state, never become zero.
+- Round only for presentation. Preserve source values and precision for history, chart coordinates, rate calculations, aggregation, and alarm threshold comparisons. Do not round identifiers, MAC/IP addresses, dates, or timestamps as measurements.
+- When modifying a measurement or chart, apply the existing display formatter consistently to its current and historical views. Consult `.codex/skills/zabbix-device-metrics/SKILL.md` for the device-metrics workflow and formatting checks.
+
 ## HTTPS and page assets
 
 - Production traffic reaches Caddy over HTTPS; Caddy connects to FastAPI/Uvicorn over HTTP inside the Compose network. Do not assume `request.url.scheme` inside the app is the browser's scheme.
