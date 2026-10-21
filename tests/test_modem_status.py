@@ -89,7 +89,8 @@ class ModemStatusTests(unittest.IsolatedAsyncioTestCase):
             next(iter(status._entries.values())).updated -= 5
             failed = await status.status_for([CMTS], mac=MAC)
         self.assertIsNone(failed["status"])
-        self.assertEqual(failed["error"], "timeout")
+        self.assertEqual(failed["error"], "CMTS 192.0.2.1: timeout")
+        self.assertEqual(failed["cmts_ip"], "192.0.2.1")
         self.assertEqual(read.await_count, 2)
 
     async def test_missing_or_ambiguous_modem_is_not_offline(self):
@@ -165,6 +166,9 @@ class ModemStatusTests(unittest.IsolatedAsyncioTestCase):
                     entry.updated -= 5
                 result = await status.status_for([CMTS], mac=MAC)
                 self.assertEqual(result["status"], expected)
+                if expected is None:
+                    self.assertEqual(result["error"], "CMTS 192.0.2.1: RSH timeout")
+                    self.assertEqual(result["cmts_ip"], "192.0.2.1")
             self.assertEqual(cli.await_count, 4)
             snmp.assert_not_awaited()
 

@@ -279,5 +279,12 @@ async def status_for(configs, device=None, mac=None):
         except (RuntimeError, OSError, ValueError, asyncio.TimeoutError) as exc:
             entry.data = {"status": None, "error": str(exc) or "Таймаут CMTS.",
                           "updated_at": int(time.time())}
+        if entry.data.get("status") is None:
+            targets = [entry.location[0]] if entry.location else configs
+            addresses_text = ", ".join(str(cmts["address"]) for cmts in targets)
+            if addresses_text:
+                entry.data["error"] = ("CMTS " + addresses_text + ": "
+                                       + (entry.data.get("error") or "Статус недоступен."))
+                entry.data["cmts_ip"] = entry.location[0]["address"] if entry.location else None
         entry.updated = started
         return entry.data

@@ -70,6 +70,12 @@ class CliTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(RuntimeError):
                     await cmts_cli.read_status(CMTS, MAC)
 
+    async def test_local_client_error_is_shown_without_claiming_cmts_rejected_it(self):
+        process = self.process(b"rcmd: socket: Permission denied\n", 1)
+        with patch.object(cmts_cli.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)):
+            with self.assertRaisesRegex(RuntimeError, "RSH.*1.*rcmd: socket: Permission denied"):
+                await cmts_cli.read_status(CMTS, MAC)
+
 
 if __name__ == "__main__":
     unittest.main()

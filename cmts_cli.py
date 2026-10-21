@@ -72,7 +72,12 @@ async def read_status(cmts, mac, user=""):
 
         output = await asyncio.wait_for(receive(), TIMEOUT)
         if process.returncode:
-            raise RuntimeError("CMTS отклонила RSH-запрос. Проверьте доступ и CMTS_RSH_USER.")
+            diagnostic = output.decode("utf-8", "replace")
+            diagnostic = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", diagnostic)
+            diagnostic = " ".join("".join(char for char in diagnostic
+                                          if char.isprintable() or char.isspace()).split())[:500]
+            message = f"RSH завершился с кодом {process.returncode}."
+            raise RuntimeError(message + (" " + diagnostic if diagnostic else " Нет текста ошибки."))
         return parse_status(output.decode("utf-8", "replace"), compact)
     except asyncio.TimeoutError as exc:
         raise RuntimeError("Таймаут чтения MAC State через RSH.") from exc
