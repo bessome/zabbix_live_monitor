@@ -54,6 +54,12 @@
     return td;
   }
 
+  function displayValue(value) {
+    const number = typeof value === "number" ||
+      (typeof value === "string" && value.trim() !== "") ? Number(value) : NaN;
+    return Number.isFinite(number) ? String(Number(number.toFixed(2))) : String(value);
+  }
+
   function showItems(data) {
     rows.replaceChildren();
     for (const item of data.items) {
@@ -77,7 +83,7 @@
       const stateLabel = item.interface_state === "up" ? "Up" :
         item.interface_state === "down" ? "Down" : null;
       const value = cell(tr, "Значение", item.value === null ? "—" :
-        (stateLabel ? stateLabel + " (" + item.value + ")" : String(item.value))
+        (stateLabel ? stateLabel + " (" + item.value + ")" : displayValue(item.value))
         + (item.units ? " " + item.units : ""));
       value.className = "onu-value" + (item.interface_state ?
         " onu-state-" + item.interface_state : "");
@@ -147,7 +153,7 @@
         item.interface_state === "down" ? "Down" : null;
       value.textContent = item.value === null ? "n/a" :
         state ? state + " (" + item.value + ")" :
-          String(item.value) + (item.units ? " " + item.units : "");
+          displayValue(item.value) + (item.units ? " " + item.units : "");
       if (item.interface_state) value.className = "onu-state-" + item.interface_state;
       row.append(label, value);
       liveValues.appendChild(row);
@@ -288,7 +294,7 @@
         const span = document.createElement("span");
         const state = interfaceStatus && value === 1 ? "Up (1)" :
           interfaceStatus && value === 2 ? "Down (2)" : null;
-        span.textContent = label + ": " + (state || Number(value.toFixed(2)) + unit);
+        span.textContent = label + ": " + (state || displayValue(value) + unit);
         stats.appendChild(span);
       }
     }
