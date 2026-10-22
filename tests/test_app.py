@@ -889,6 +889,15 @@ class AppTests(unittest.TestCase):
                 self.assertEqual(self.client.get(path).status_code, 405)
             reset.assert_awaited_once_with("192.0.2.42", "1161", "reset-test-secret")
             discovered_reset.assert_awaited_once_with("192.0.2.43", 161, "reset-test-secret")
+            with closing(self.storage.connect()) as con:
+                logs = con.execute("SELECT * FROM modem_reboot_log ORDER BY id DESC LIMIT 2").fetchall()
+            self.assertEqual([row["username"] for row in logs], ["Admin", "Admin"])
+            self.assertEqual([row["outcome"] for row in logs], ["accepted", "accepted"])
+            self.assertEqual([row["address"] for row in logs], ["192.0.2.43", "192.0.2.42"])
+            journal = self.client.get("/settings/modem-reboots")
+            self.assertEqual(journal.status_code, 200)
+            self.assertIn("Команда подтверждена", journal.text)
+            self.assertNotIn("reset-test-secret", journal.text)
             resolve.assert_awaited_once_with({"id": 1}, "cc3540e608b1")
             self.assertEqual(self.client.post(paths[0].replace("42", "99"), data={"csrf_token": csrf}).status_code, 404)
             resolve.return_value = {**modem, "ip": None}
@@ -920,6 +929,7 @@ class AppTests(unittest.TestCase):
                 page = self.client.get("/cmts/1/modems/cc3540e608b1")
                 self.assertEqual('data-modem-reboot-url=' in page.text, role == "execute")
                 self.assertEqual(self.client.post(setting_path, data={"csrf_token": csrf}).status_code, 403)
+                self.assertEqual(self.client.get("/settings/modem-reboots").status_code, 403)
                 resolve.return_value = modem
         self.client.post("/logout", data={"csrf_token": csrf})
         self.login()

@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}Журнал перезагрузок · Zabbix Live Monitoring{% endblock %}
+{% block content %}
+<h1>Журнал перезагрузок модемов</h1>
+<p>Всего записей: {{ total }}. Время: {{ display_timezone }}.</p>
+<p>Подтверждение команды не означает завершения перезагрузки. При неизвестном результате проверьте пинг и статус модема.</p>
+<section class="panel"><div class="table-wrap"><table class="activity-table">
+<thead><tr><th>Время</th><th>Пользователь</th><th>Модем</th><th>Адрес SNMP</th><th>Источник</th><th>Результат</th></tr></thead>
+<tbody>{% for entry in events %}<tr>
+<td data-label="Время">{{ entry.occurred_local }}</td>
+<td data-label="Пользователь">{{ entry.username }}</td>
+<td data-label="Модем">{{ entry.device }}</td>
+<td data-label="Адрес SNMP">{{ entry.address }} : {{ entry.port }}</td>
+<td data-label="Источник">{{ entry.source }}</td>
+<td data-label="Результат">{{ {'pending': 'Попытка начата, ответ не записан', 'accepted': 'Команда подтверждена', 'unknown': 'Результат неизвестен', 'blocked': 'Повторная команда заблокирована', 'invalid': 'Некорректный адрес или порт', 'rejected': 'Команда отклонена'} .get(entry.outcome, entry.outcome) }}</td>
+</tr>{% else %}<tr><td colspan="6">Записей пока нет.</td></tr>{% endfor %}</tbody>
+</table></div>
+{% if pages > 1 %}<nav class="activity-pagination" aria-label="Страницы журнала">
+{% if page > 1 %}<a href="?page={{ page - 1 }}">← Назад</a>{% endif %}
+<span>Страница {{ page }} из {{ pages }}</span>
+{% if page < pages %}<a href="?page={{ page + 1 }}">Далее →</a>{% endif %}
+</nav>{% endif %}</section>
+{% endblock %}

@@ -75,6 +75,16 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS activity_log_recent ON activity_log(id DESC);
             CREATE INDEX IF NOT EXISTS activity_log_expiry ON activity_log(occurred_at);
+            CREATE TABLE IF NOT EXISTS modem_reboot_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                occurred_at INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                device TEXT NOT NULL,
+                address TEXT NOT NULL,
+                port INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                outcome TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS favorites (
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 host_id TEXT NOT NULL,
@@ -127,6 +137,23 @@ def purge_expired_activity(con):
     if days:
         con.execute("DELETE FROM activity_log WHERE occurred_at < ?",
                     (int(time.time()) - days * 86400,))
+
+
+def begin_modem_reboot(user, device, address, port, source):
+    # Commit before sending: an interrupted process must leave an audit record.
+    with closing(connect()) as con:
+        cursor = con.execute(
+            "INSERT INTO modem_reboot_log(occurred_at,username,device,address,port,source,outcome) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (int(time.time()), user["username"], device, address, int(port), source, "pending"))
+        con.commit()
+        return cursor.lastrowid
+
+
+def finish_modem_reboot(log_id, outcome):
+    with closing(connect()) as con:
+        con.execute("UPDATE modem_reboot_log SET outcome=? WHERE id=?", (outcome, log_id))
+        con.commit()
 
 
 def record_activity(user, event, section, path):

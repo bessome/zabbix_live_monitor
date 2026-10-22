@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import modem_reboot as reboot
@@ -54,3 +55,26 @@ class ModemRebootTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await reboot.reboot_modem("bad;address", 161, "private")
         self.send.assert_not_awaited()
+
+    async def test_audit_is_committed_before_command_and_retains_unknown_result(self):
+        begin, finish = MagicMock(return_value=17), MagicMock()
+        with patch.dict("sys.modules", {"app_storage": SimpleNamespace(
+                begin_modem_reboot=begin, finish_modem_reboot=finish)}):
+            async def send(address, port, community):
+                begin.assert_called_once_with({"username": "Operator"}, "Modem", "192.0.2.42", 161, "CMTS 1")
+                finish.assert_not_called()
+                return {"outcome": "unknown"}
+            await reboot.logged_reboot({"username": "Operator"}, "Modem", "192.0.2.42", 161,
+                                       "secret", "CMTS 1", send)
+            finish.assert_called_once_with(17, "unknown")
+
+    async def test_audit_records_failure_without_secret_or_exception_text(self):
+        for error, outcome in [(reboot.RebootBusy(), "blocked"), (RuntimeError("secret"), "rejected"),
+                               (OSError("secret"), "unknown")]:
+            finish = MagicMock()
+            with patch.dict("sys.modules", {"app_storage": SimpleNamespace(
+                    begin_modem_reboot=MagicMock(return_value=18), finish_modem_reboot=finish)}):
+                with self.assertRaises(type(error)):
+                    await reboot.logged_reboot({"username": "Operator"}, "Modem", "192.0.2.42", 161,
+                                               "secret", "CMTS 1", AsyncMock(side_effect=error))
+                finish.assert_called_once_with(18, outcome)

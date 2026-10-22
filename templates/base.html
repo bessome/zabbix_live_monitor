@@ -23,6 +23,7 @@
 <a href="/settings/cmts" class="{% if request.url.path == '/settings/cmts' %}active{% endif %}">CMTS</a>
 <a href="/settings/users" class="{% if request.url.path == '/settings/users' %}active{% endif %}" aria-current="{{ 'page' if request.url.path == '/settings/users' else 'false' }}">Пользователи</a>
 <a href="/settings/activity" class="{% if request.url.path == '/settings/activity' %}active{% endif %}" aria-current="{{ 'page' if request.url.path == '/settings/activity' else 'false' }}">Журнал посещений</a>
+<a href="/settings/modem-reboots">Журнал перезагрузок</a>
 {% endif %}
 <a href="/profile" class="{% if request.url.path == '/profile' %}active{% endif %}" aria-current="{{ 'page' if request.url.path == '/profile' else 'false' }}">Мои настройки</a>
 <div class="view-mode-options" role="group" aria-label="Режим отображения"><span>Режим отображения</span><button type="button" data-view-mode="mobile" aria-pressed="false">Мобильный</button><button type="button" data-view-mode="desktop" aria-pressed="false">Настольный</button></div>

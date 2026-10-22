@@ -22,6 +22,27 @@ class RebootBusy(Exception):
     """A reset was already attempted for this SNMP endpoint recently."""
 
 
+async def logged_reboot(user, device, address, port, community, source, send):
+    from app_storage import begin_modem_reboot, finish_modem_reboot
+    log_id = begin_modem_reboot(user, device, address, port, source)
+    try:
+        result = await send(address, port, community)
+    except RebootBusy:
+        finish_modem_reboot(log_id, "blocked")
+        raise
+    except ValueError:
+        finish_modem_reboot(log_id, "invalid")
+        raise
+    except RuntimeError:
+        finish_modem_reboot(log_id, "rejected")
+        raise
+    except Exception:
+        finish_modem_reboot(log_id, "unknown")
+        raise
+    finish_modem_reboot(log_id, result["outcome"])
+    return result
+
+
 async def reboot_modem(address, port, community):
     if not validate_target(address) or not 1 <= int(port) <= 65535:
         raise ValueError("Нет корректного адреса или порта модема.")

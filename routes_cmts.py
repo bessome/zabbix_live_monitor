@@ -10,7 +10,7 @@ from app_web import checked_form, render, require_user
 from cmts_monitor import normalize_mac, resolve_mac, search_cmts
 from docsis_modem import basic_channels
 from modem_status import status_for as modem_status_for
-from modem_reboot import RebootBusy, reboot_modem
+from modem_reboot import RebootBusy, logged_reboot, reboot_modem
 from ping_monitor import snapshot_for
 from snmp_monitor import uptime_for
 from zabbix_service import host_rows
@@ -41,7 +41,9 @@ async def discovered_reboot(request: Request, cmts_id: int, mac: str):
             raise HTTPException(404, "Модем не найден на CMTS.")
         if not modem["ip"]:
             raise ValueError("IP модема неизвестен; перезагрузка недоступна.")
-        result = await reboot_modem(modem["ip"], 161, snmp_write_community_for("Modems"))
+        result = await logged_reboot(user, modem.get("mac") or compact, modem["ip"], 161,
+                                     snmp_write_community_for("Modems"),
+                                     "CMTS " + str(cmts_id), reboot_modem)
     except RebootBusy as exc:
         return JSONResponse({"error": str(exc)}, status_code=409)
     except ValueError as exc:

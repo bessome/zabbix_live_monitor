@@ -29,9 +29,11 @@
 .modem-state{font-size:13px}
 .modem-mac-status{font-size:14px;overflow-wrap:anywhere}
 .modem-mac-status strong{font-family:Consolas,monospace}
-.modem-reboot{margin:0 0 14px}
-.modem-reboot-button{padding:7px 12px;min-height:36px}
-.modem-reboot-message{font-size:13px;overflow-wrap:anywhere}
+.modem-status-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin:0 0 14px}
+.modem-status-row .modem-mac-status{margin:0}
+.modem-reboot{display:contents}
+.modem-reboot-button{padding:4px 9px;min-height:28px;font-size:12px;white-space:nowrap}
+.modem-reboot-message{flex-basis:100%;margin:0;font-size:13px;overflow-wrap:anywhere}
 .modem-reboot-message:empty{display:none}
 .modem-mac-status[data-state="online"] strong{color:#167344}
 .modem-mac-status[data-state="warning"] strong{color:#8a5700}

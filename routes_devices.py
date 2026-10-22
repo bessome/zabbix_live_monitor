@@ -14,7 +14,7 @@ from app_storage import (cmts_for, cmts_list, favorite_devices_for, favorite_ids
 from app_web import checked_form, render, require_user
 from cable_test import CableTestBusy, run_cable_test
 from mac_vendors import lookup_macs
-from modem_reboot import RebootBusy, reboot_modem
+from modem_reboot import RebootBusy, logged_reboot, reboot_modem
 from modem_status import status_for as modem_status_for
 from ping_monitor import snapshot_for
 from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_for,
@@ -49,8 +49,10 @@ async def device_modem_reboot(request: Request, category: str, host_id: str):
         device = next((row for row in rows if row["id"] == host_id), None)
         if device is None:
             raise HTTPException(404)
-        result = await reboot_modem(device["snmp_address"], device["snmp_port"],
-                                    snmp_write_community_for("Modems"))
+        result = await logged_reboot(user, device.get("name") or host_id,
+                                     device["snmp_address"], device["snmp_port"],
+                                     snmp_write_community_for("Modems"),
+                                     "Zabbix host " + host_id, reboot_modem)
     except RebootBusy as exc:
         return JSONResponse({"error": str(exc)}, status_code=409)
     except ValueError as exc:

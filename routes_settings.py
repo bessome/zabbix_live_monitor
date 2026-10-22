@@ -328,6 +328,20 @@ def users_page(request: Request):
                   missing_email_count=sum(not user["email"] for user in users))
 
 
+@router.get("/settings/modem-reboots")
+def modem_reboots_page(request: Request, page: int = 1):
+    require_admin(request)
+    with closing(connect()) as con:
+        total = con.execute("SELECT COUNT(*) FROM modem_reboot_log").fetchone()[0]
+        pages = max(1, (total + 199) // 200)
+        page = min(max(1, page), pages)
+        rows = con.execute("SELECT * FROM modem_reboot_log ORDER BY id DESC LIMIT 200 OFFSET ?",
+                           ((page - 1) * 200,)).fetchall()
+    events = [{**dict(row), "occurred_local": format_display_timestamp(row["occurred_at"])}
+              for row in rows]
+    return render(request, "modem_reboots.html", events=events, page=page, pages=pages, total=total)
+
+
 @router.get("/settings/activity")
 def activity_page(request: Request, page: int = 1, username: str = ""):
     require_admin(request)
