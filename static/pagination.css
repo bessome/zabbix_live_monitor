@@ -39,6 +39,11 @@ html[data-theme="dark"] .device-metric-table .device-description,
 html[data-theme="dark"] .device-metric-table td a{color:inherit}
 @media(prefers-reduced-motion:reduce){.device-metric-table .device-metric-cell[data-metric-state="critical"]{animation:none}}
 @media(max-width:720px){
+  .device-metric-table tbody tr{display:grid;grid-template-columns:repeat(var(--metric-columns,1),minmax(0,1fr));gap:4px}
+  .device-metric-table tbody td:first-child,.device-metric-table td.device-text-cell{grid-column:1/-1}
+  .device-metric-table td.device-metric-cell:not(.device-text-cell){display:flex;align-items:center;justify-content:space-between;gap:4px;min-width:0;width:auto;padding:5px 4px;font-size:12px;white-space:nowrap}
+  .device-metric-table td.device-metric-cell:not(.device-text-cell)::before{content:attr(data-mobile-label);font-size:12px}
+  .device-metric-table .device-metric-cell:not(.device-text-cell) .device-description{font-size:12px;white-space:nowrap;overflow-wrap:normal}
   .device-metric-table td{padding:7px 2px}
   .device-table.device-metric-table td[data-label]{grid-template-columns:max-content minmax(0,1fr);column-gap:14px}
   .device-metric-table td:not(:first-child)::before{color:inherit;white-space:nowrap}

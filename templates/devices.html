@@ -313,6 +313,7 @@ function updateRowSummary(row, device, summary) {
 function deviceRow(device) {
   const tr = document.createElement("tr");
   tr.dataset.hostId = device.id;
+  tr.setAttribute("style", "--metric-columns: " + (metricColumns.filter(column => !column.text).length || 1));
   const nameCell = document.createElement("td");
   const nameRow = document.createElement("div");
   nameRow.className = "device-name-row";
@@ -334,6 +335,7 @@ function deviceRow(device) {
     const metricCell = document.createElement("td");
     metricCell.className = "device-metric-cell" + (column.text ? " device-text-cell" : "");
     metricCell.dataset.label = column.label;
+    metricCell.dataset.mobileLabel = column.key === "us" ? "US" : column.key === "ds" ? "DS" : column.label;
     const value = document.createElement("span");
     metricCell.appendChild(value);
     tr.metricCells.set(column.key, {cell: metricCell, value});
