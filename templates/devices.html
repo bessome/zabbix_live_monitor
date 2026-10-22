@@ -6,11 +6,12 @@
 <div class="device-toolbar">
 <label><span class="toolbar-label-full">Поиск устройства</span><span class="toolbar-label-short">Поиск</span><input id="search" type="search" placeholder="Имя, техническое имя или адрес" autocomplete="off"></label>
 <label id="page-size-label"><span class="toolbar-label-full">Строк на странице</span><span class="toolbar-label-short">Строк</span><select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="250">250</option></select></label>
+{% if category == 'TV_Amplifires' %}<label>Сортировка<select id="amplifier-sort"><option value="name:asc">Имя: А → Я</option><option value="name:desc">Имя: Я → А</option><option value="level:asc">Уровень: по возрастанию</option><option value="level:desc">Уровень: по убыванию</option></select></label>{% endif %}
 <div class="device-view-options" role="group" aria-label="Вид списка устройств"><button type="button" data-device-view="list" aria-pressed="true">Список</button><button type="button" data-device-view="tree" aria-pressed="false">Дерево</button></div>
 </div>
 <p id="status" aria-live="polite"></p>
 <div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button><label id="monitored-only-label" class="monitored-only-label" hidden><input id="monitored-only" type="checkbox">Опрашиваемые</label></div>
-<div class="table-wrap"><table class="device-table"><thead><tr><th>Устройство</th><th>Адрес</th></tr></thead>
+<div class="table-wrap"><table class="device-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Оптический уровень</button></th>{% else %}<th>Устройство</th><th>Адрес</th>{% endif %}</tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
 <div class="pagination" aria-label="Навигация по страницам">
@@ -57,6 +58,7 @@ const viewButtons = document.querySelectorAll("[data-device-view]");
 const viewStorageKey = "zabbix-device-view:" + category;
 const summaryCache = new Map();
 let view = "list";
+let amplifierSort = "name:asc";
 try { if (localStorage.getItem(viewStorageKey) === "tree") view = "tree"; } catch (_) {}
 const openGroups = new Set();
 const displayTime = new Intl.DateTimeFormat("en-GB", {
@@ -74,6 +76,7 @@ const searchStorageKey = "zabbix-device-search:{{ current_user.id }}:" + categor
 try {
   const saved = JSON.parse(sessionStorage.getItem(searchStorageKey));
   if (saved && typeof saved === "object") {
+    if (["name:asc", "name:desc", "level:asc", "level:desc"].includes(saved.amplifierSort)) amplifierSort = saved.amplifierSort;
     if (typeof saved.query === "string") search.value = saved.query;
     if (["25", "50", "100", "250"].includes(saved.pageSize)) pageSize.value = saved.pageSize;
     if (Number.isSafeInteger(saved.page) && saved.page > 0) currentPage = saved.page;
@@ -87,7 +90,7 @@ function saveSearch() {
   try {
     sessionStorage.setItem(searchStorageKey, JSON.stringify({
       query: search.value, page: currentPage, pageSize: pageSize.value,
-      view, openGroups: [...openGroups]
+      view, openGroups: [...openGroups], amplifierSort
     }));
   } catch (_) {}
 }
@@ -296,12 +299,14 @@ function updateDeviceSummary(description, device, summary) {
   } else if (category === "TV_Amplifires") {
     description.classList.add("modem-level-summary");
     const metric = summary.optical_level;
-    description.textContent = "Optical input power: "
-      + (metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value))
-        ? metric.value + (metric.units ? " " + metric.units : "") : "n/a");
+    description.textContent = (metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value))
+        ? Number(Number(metric.value).toFixed(2)).toString() + (metric.units ? " " + metric.units : "") : "n/a");
     const value = metric?.value == null ? NaN : Number(metric.value);
-    if (metric?.alert ?? (Number.isFinite(value) && value < -3.4))
+    const alert = metric?.alert ?? (Number.isFinite(value) && value < -3.4);
+    if (alert)
       description.classList.add("device-level-alert-blink");
+    if (description.amplifierRow) description.amplifierRow.dataset.levelState =
+      metric?.value != null && metric.value !== "" && Number.isFinite(value) ? (alert ? "critical" : "normal") : "unknown";
   } else {
     description.textContent = "Описание: " + (summary.device_description || "—");
   }
@@ -324,13 +329,25 @@ function deviceRow(device) {
   nameRow.appendChild(select);
   nameRow.append(availabilityIndicator(device.availability), deviceLink(device), favoriteButton(device));
   nameCell.appendChild(nameRow);
+  if (category === "TV_Amplifires" && !String(device.name).includes(String(device.address))) {
+    const address = document.createElement("small");
+    address.className = "amplifier-address";
+    address.textContent = device.address;
+    nameCell.appendChild(address);
+  }
   const description = document.createElement("small");
+  if (category === "TV_Amplifires") description.amplifierRow = tr;
   updateDeviceSummary(description, device,
     "device_description" in device || "modem_levels" in device || "optical_level" in device
       ? device : summaryCache.get(String(device.id))?.summary);
-  nameCell.appendChild(description);
+  if (category !== "TV_Amplifires") nameCell.appendChild(description);
   tr.appendChild(nameCell);
-  cell(tr, "Адрес", device.address);
+  if (category === "TV_Amplifires") {
+    const levelCell = document.createElement("td");
+    levelCell.dataset.label = "Оптический уровень";
+    levelCell.appendChild(description);
+    tr.appendChild(levelCell);
+  } else cell(tr, "Адрес", device.address);
   paintLiveRow(tr);
   return tr;
 }
@@ -422,6 +439,7 @@ function renderTree(devices) {
       if (child.devices.length) {
         const table = document.createElement("table");
         table.className = "device-table tree-device-table";
+        if (category === "TV_Amplifires") table.classList.add("amplifier-table");
         body = document.createElement("tbody");
         for (const device of child.devices) body.appendChild(deviceRow(device));
         table.appendChild(body);
@@ -452,6 +470,11 @@ async function refresh() {
   saveSearch();
   const sequence = ++requestSequence;
   const params = new URLSearchParams({q: search.value.trim(), page: String(currentPage), per_page: pageSize.value, view});
+  if (category === "TV_Amplifires") {
+    const [by, direction] = amplifierSort.split(":");
+    params.set("sort_by", by);
+    params.set("sort_dir", direction);
+  }
   if (monitoredOnly.checked) {
     params.set("q", "");
     params.set("ids", [...monitoredIds].join(","));
@@ -487,6 +510,25 @@ async function refresh() {
   }
 }
 function goTo(page) { currentPage = page; refresh(); }
+function setAmplifierSort(value) {
+  amplifierSort = value;
+  document.getElementById("amplifier-sort").value = value;
+  document.querySelectorAll("[data-amplifier-sort]").forEach(button => {
+    const [by, direction] = value.split(":");
+    button.closest("th").setAttribute("aria-sort", button.dataset.amplifierSort === by
+      ? (direction === "asc" ? "ascending" : "descending") : "none");
+  });
+  currentPage = 1;
+  refresh();
+}
+if (category === "TV_Amplifires") {
+  document.getElementById("amplifier-sort").value = amplifierSort;
+  document.getElementById("amplifier-sort").addEventListener("change", event => setAmplifierSort(event.target.value));
+  document.querySelectorAll("[data-amplifier-sort]").forEach(button => button.addEventListener("click", () => {
+    const by = button.dataset.amplifierSort;
+    setAmplifierSort(by + (amplifierSort === by + ":asc" ? ":desc" : ":asc"));
+  }));
+}
 first.addEventListener("click", () => goTo(1));
 previous.addEventListener("click", () => goTo(currentPage - 1));
 next.addEventListener("click", () => goTo(currentPage + 1));

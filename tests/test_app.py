@@ -868,6 +868,46 @@ class AppTests(unittest.TestCase):
             self.assertEqual(read_levels.call_count, 4)
             self.assertEqual(descriptions.call_count, 2)
 
+    def test_amplifier_sorting_uses_raw_levels_before_pagination(self):
+        self.login()
+        devices = [{"id": str(i), "name": f"Amplifier {i:02}", "technical_name": f"amp-{i}",
+                    "address": f"192.0.2.{i}"} for i in range(1, 31)]
+        levels = {str(i): {"value": str(-i), "raw_value": str(-i), "units": "dBm"}
+                  for i in range(1, 29)}
+        # Same presentation value, different raw values: sorting must retain precision.
+        levels["1"] = {"value": "-3.4", "raw_value": "-3.4002", "units": "dBm"}
+        levels["2"] = {"value": "-3.4", "raw_value": "-3.4001", "units": "dBm"}
+        levels["29"] = {"value": "NaN", "raw_value": "NaN"}
+        path = "/api/devices/TV_Amplifires?sort_by=level&per_page=25"
+        with (patch("routes_devices.host_rows", return_value=devices),
+              patch("routes_devices.amplifier_list_optical_levels", return_value=levels) as read):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            first = response.json()["devices"]
+            self.assertEqual(first[0]["id"], "28")
+            read.assert_called_once_with([row["id"] for row in devices], include_raw=True)
+            second = self.client.get(path + "&page=2").json()["devices"]
+            ordered = [row["id"] for row in first + second]
+            self.assertLess(ordered.index("1"), ordered.index("2"))
+            self.assertEqual(ordered[-2:], ["29", "30"])
+            desc = self.client.get(path + "&sort_dir=desc&view=tree").json()["devices"]
+            self.assertEqual(desc[0]["id"], "3")
+            self.assertEqual([row["id"] for row in desc[-2:]], ["29", "30"])
+            names = self.client.get("/api/devices/TV_Amplifires?sort_by=name&sort_dir=desc").json()["devices"]
+            self.assertEqual(names[0]["name"], "Amplifier 30")
+            self.assertEqual(self.client.get(path + "&sort_dir=invalid").status_code, 422)
+            self.assertEqual(self.client.get("/api/devices/Modems?sort_by=level").status_code, 422)
+        page = self.client.get("/devices/TV_Amplifires")
+        self.assertIn('id="amplifier-sort"', page.text)
+        self.assertIn('data-amplifier-sort="level"', page.text)
+
+    def test_amplifier_sort_source_retains_raw_precision(self):
+        item = {"itemid": "1", "hostid": "42", "name": "Optical input power", "status": "0",
+                "value_type": "0", "units": "dBm", "lastclock": "200", "lastvalue": "-3.40001"}
+        with patch("zabbix_service.zabbix_call", return_value=[item]):
+            metric = self.zabbix.amplifier_list_optical_levels(["42"], include_raw=True)["42"]
+        self.assertEqual(metric, {"value": "-3.4", "raw_value": "-3.40001", "units": "dBm", "alert": True})
+
     def test_modem_reboot_permissions_targets_and_settings(self):
         paths = ["/api/devices/Modems/42/modem-reboot",
                  "/api/cmts/1/modems/cc3540e608b1/modem-reboot"]

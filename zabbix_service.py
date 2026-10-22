@@ -222,7 +222,7 @@ def modem_list_levels(host_ids):
     return result
 
 
-def amplifier_list_optical_levels(host_ids):
+def amplifier_list_optical_levels(host_ids, *, include_raw=False):
     """Read the current Optical input power item for each visible amplifier."""
     if not host_ids:
         return {}
@@ -251,9 +251,12 @@ def amplifier_list_optical_levels(host_ids):
             rounded = value.quantize(Decimal("0.01"))
             if rounded == 0:
                 rounded = Decimal(0)
-            choices[host_id] = (rank, {"value": format(rounded.normalize(), "f"),
-                                       "units": str(item.get("units") or ""),
-                                       "alert": value < Decimal("-3.4")})
+            metric = {"value": format(rounded.normalize(), "f"),
+                      "units": str(item.get("units") or ""),
+                      "alert": value < Decimal("-3.4")}
+            if include_raw:
+                metric["raw_value"] = str(value)
+            choices[host_id] = (rank, metric)
     return {host_id: metric for host_id, (_, metric) in choices.items()}
 
 

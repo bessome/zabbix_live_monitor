@@ -3,6 +3,7 @@ import asyncio
 import ipaddress
 import math
 import time
+from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -201,9 +202,13 @@ async def set_favorite(request: Request, category: str, host_id: str):
 @router.get("/api/devices/{category}")
 async def devices_api(request: Request, category: str, q: str = "",
                        page: int = 1, per_page: int = 50, view: str = "list",
-                       ids: str | None = None):
+                       ids: str | None = None, sort_by: str = "name", sort_dir: str = "asc"):
     user = require_user(request, api=True)
     category_filter(category)
+    if sort_by not in ("name", "level") or sort_dir not in ("asc", "desc"):
+        raise HTTPException(422, "Invalid sort parameters")
+    if sort_by == "level" and category != "TV_Amplifires":
+        raise HTTPException(422, "Level sorting is available for amplifiers")
     if page < 1 or per_page not in (25, 50, 100, 250) or view not in ("list", "tree"):
         raise HTTPException(422, "Invalid pagination parameters")
     selected_ids = None if ids is None else set(part.strip() for part in ids.split(",") if part.strip())
@@ -222,10 +227,33 @@ async def devices_api(request: Request, category: str, q: str = "",
             for field in ("name", "technical_name", "address")) or
             (view == "tree" and any(query in normalize_device_search(group)
                                     for group in row.get("groups", [])))]
+    all_optical_levels = None
+    if category == "TV_Amplifires":
+        rows = sorted(rows, key=lambda row: (normalize_device_search(row["name"]), row["id"]),
+                      reverse=sort_by == "name" and sort_dir == "desc")
+        if sort_by == "level":
+            try:
+                all_optical_levels = await asyncio.to_thread(
+                    amplifier_list_optical_levels, [row["id"] for row in rows], include_raw=True)
+            except RuntimeError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=503)
+            values = {}
+            for host_id, metric in all_optical_levels.items():
+                try:
+                    value = Decimal(str(metric.get("raw_value", metric.get("value"))))
+                except InvalidOperation:
+                    continue
+                if value.is_finite():
+                    values[host_id] = value
+            rows = (sorted((row for row in rows if row["id"] in values),
+                           key=lambda row: values[row["id"]], reverse=sort_dir == "desc")
+                    + [row for row in rows if row["id"] not in values])
     total = len(rows)
     if view == "tree":
         favorite_ids = favorite_ids_for(user["id"])
-        return {"devices": [{**row, "favorite": row["id"] in favorite_ids}
+        return {"devices": [{**row, "favorite": row["id"] in favorite_ids,
+                             **({"optical_level": all_optical_levels.get(row["id"])}
+                                if all_optical_levels is not None else {})}
                             for row in rows],
                 "total": total, "updated_at": int(time.time())}
     pages = max(1, (total + per_page - 1) // per_page)
@@ -240,7 +268,8 @@ async def devices_api(request: Request, category: str, q: str = "",
             descriptions = {}
         elif category == "TV_Amplifires":
             modem_levels = {}
-            optical_levels = await asyncio.to_thread(amplifier_list_optical_levels, host_ids)
+            optical_levels = (all_optical_levels if all_optical_levels is not None else
+                              await asyncio.to_thread(amplifier_list_optical_levels, host_ids))
             descriptions = {}
         else:
             modem_levels = {}

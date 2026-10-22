@@ -46,6 +46,38 @@ function loadPage(storage, category = 'VOIP', user = '1', reply = null) {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+test('amplifier sort applies to the whole API query and survives navigation', async () => {
+  const storage = new Map();
+  const page = loadPage(storage, 'TV_Amplifires');
+  await flush();
+  page.element('amplifier-sort').listeners.change({target: {value: 'level:desc'}});
+  await flush();
+  let params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
+  assert.equal(params.get('sort_by'), 'level');
+  assert.equal(params.get('sort_dir'), 'desc');
+  assert.equal(params.get('page'), '1');
+  const restored = loadPage(storage, 'TV_Amplifires');
+  params = new URL(restored.requests[0], 'https://example.test').searchParams;
+  assert.equal(params.get('sort_by'), 'level');
+  assert.equal(params.get('sort_dir'), 'desc');
+});
+
+test('amplifier level column rounds presentation and keeps missing values neutral', async () => {
+  const page = loadPage(new Map(), 'TV_Amplifires');
+  await flush();
+  vm.runInContext(`
+    const level = {classList: {add() {}}, removeAttribute() {}, amplifierRow: {dataset: {}}};
+  `, page.context);
+  for (const [value, text, state] of [[-2.90001, '-2.9 dBm', 'normal'],
+    [-3.40001, '-3.4 dBm', 'critical'], [-0.00001, '0 dBm', 'normal'],
+    [null, 'n/a', 'unknown'], ['', 'n/a', 'unknown'], ['Infinity', 'n/a', 'unknown']]) {
+    page.context.testValue = value;
+    vm.runInContext(`updateDeviceSummary(level, {}, {optical_level: {value: testValue, units: 'dBm'}})`, page.context);
+    assert.equal(vm.runInContext('level.textContent', page.context), text);
+    assert.equal(vm.runInContext('level.amplifierRow.dataset.levelState', page.context), state);
+  }
+});
+
 test('returning from monitoring restores the query, page and page size', async () => {
   const storage = new Map();
   const original = loadPage(storage);
@@ -373,7 +405,7 @@ test('missing, empty and invalid SNMP values render as n/a without units', async
       const rendered = vm.runInContext(category === 'Modems'
         ? 'description.childNodes.map(child => typeof child === "string" ? child : child.textContent).join("")'
         : 'description.textContent', page.context);
-      assert.equal(rendered, category === 'Modems' ? 'US: n/a · DS: n/a' : 'Optical input power: n/a');
+      assert.equal(rendered, category === 'Modems' ? 'US: n/a · DS: n/a' : 'n/a');
     }
   }
 });
