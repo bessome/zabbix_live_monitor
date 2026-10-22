@@ -19,10 +19,11 @@
       const data = await response.json();
       if (!response.ok || !data.status) throw new Error(data.error || "Статус недоступен");
       value.textContent = data.status;
+      const state = data.status.replace(/^#/, "");
       root.title = data.cmts ? "CMTS: " + data.cmts : "";
-      root.dataset.state = data.status === "offline" || data.status === "shutdown" ? "offline"
-        : data.status.startsWith("p-") || data.status.includes("(d)")
-          || !data.status.includes("online") ? "warning" : "online";
+      root.dataset.state = state === "offline" || state === "shutdown" ? "offline"
+        : state.startsWith("p-") || state.includes("(d)")
+          || !state.includes("online") ? "warning" : "online";
     } catch (error) {
       value.textContent = "n/a";
       root.dataset.state = "unknown";

@@ -26,6 +26,14 @@ class CliTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RuntimeError):
                 cmts_cli.parse_status(output, MAC)
 
+    def test_hash_marker_in_live_cmts_output_is_preserved(self):
+        output = ("D MAC Address IP Address I/F MAC Prim RxPwr Timing Num I State\n"
+                  "2cab.a41c.6944 10.19.1.123 C5/1/1/UB #w-online 56 0.00 1331 1 N\n")
+        self.assertEqual(cmts_cli.parse_status(output, "2caba41c6944"), "#w-online")
+        for state in ("#p-online", "#online(d)", "#offline", "#init(o)"):
+            self.assertEqual(cmts_cli.parse_status(output.replace("#w-online", state),
+                                                  "2caba41c6944"), state)
+
     async def test_single_channel_request_has_real_local_identity_and_no_callback(self):
         reader, writer = self.connection(b"\0" + b"0025.2e52.d8a6 10.190.0.177 C8/0/4/UB p-online 53")
         with (patch.object(cmts_cli, "_connect", AsyncMock(return_value=(reader, writer))) as connect,
