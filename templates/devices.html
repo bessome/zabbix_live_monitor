@@ -258,7 +258,8 @@ function amplifierModelDescription(description) {
   const value = String(description || "").trim();
   const normalized = value.toLowerCase().replace(/\s+/g, " ");
   for (const [marker, model] of [["lambda pro 71", "Vector L PRO 71"], ["ecm01", "Vector B PRO 51"],
-    ["v4.7", "OPR-2108G"], ["v6.2.3", "ASCENT AON1110"]]) {
+    ["v4.7", "OPR-2108G"], ["v6.2.3", "ASCENT AON1110"], ["v6.2.4", "ASCENT AON1110"],
+    ["v5.2.4", "ASCENT AON1110"]]) {
     if (normalized.includes(marker)) return model;
   }
   return value;

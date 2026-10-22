@@ -569,6 +569,8 @@ test('amplifier model names come from Device description and stay after live SNM
   for (const [description, model] of [
     ['Lambda PRO 71 firmware 1.0', 'Vector L PRO 71'], ['SNMP ECM01 unit', 'Vector B PRO 51'],
     ['Firmware V4.7', 'OPR-2108G'], ['FW V6.2.3', 'ASCENT AON1110'],
+    ['FW V6.2.4', 'ASCENT AON1110'], ['fw v6.2.4', 'ASCENT AON1110'],
+    ['FW V5.2.4', 'ASCENT AON1110'], ['fw v5.2.4', 'ASCENT AON1110'],
     ['lambda  pro 71', 'Vector L PRO 71'], ['Other model', 'Other model'], ['', ''], [null, '']]) {
     page.context.sourceDescription = description;
     vm.runInContext('updateRowSummary(metricRow, namedDevice, {device_description: sourceDescription})', page.context);
