@@ -74,7 +74,7 @@ class AppTests(unittest.TestCase):
         self.assertNotIn("settings-menu", nav)
         self.assertNotIn(">Главная</a>", nav)
         links = re.findall(r'href="/devices/([^"]+)"', nav)
-        self.assertEqual(links, ["TV_Amplifires", "EDFA", "Switches", "Modems", "VOIP", "Routers"])
+        self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "EDFA", "VOIP", "Routers"])
         self.assertIn('href="/onu-ont"', nav)
 
     def test_static_assets_use_origin_relative_urls(self):
