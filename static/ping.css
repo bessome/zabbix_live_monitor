@@ -34,6 +34,7 @@
 .modem-status-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin:0 0 14px}
 .modem-status-row .modem-mac-status{margin:0}
 .modem-reboot{display:contents}
+.modem-reboot-actions{display:inline-flex;align-items:center;gap:8px;flex-wrap:nowrap}
 .modem-reboot-button{padding:4px 9px;min-height:28px;font-size:12px;white-space:nowrap}
 .modem-reboot-message{flex-basis:100%;margin:0;font-size:13px;overflow-wrap:anywhere}
 .modem-reboot-message:empty{display:none}
@@ -120,6 +121,7 @@ html[data-theme="dark"] .victor-dialog #victor-status{color:#555}
   .device-monitor-grid>.panel{grid-column:auto;grid-row:auto}
 }
 @media(max-width:720px){
+  .modem-status-row .modem-mac-status{flex-basis:100%}
   .device-monitor-grid{gap:0}
   .device-monitor-grid>.panel{margin:8px 0;padding:10px}
   .ping-heading{align-items:center;gap:8px}

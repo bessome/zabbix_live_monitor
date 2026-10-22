@@ -11,7 +11,7 @@
 </div>
 <p id="status" aria-live="polite"></p>
 <div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button><label id="monitored-only-label" class="monitored-only-label" hidden><input id="monitored-only" type="checkbox">Опрашиваемые</label></div>
-<div class="table-wrap"><table class="device-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Оптический уровень</button></th>{% else %}<th>Устройство</th>{% endif %}<th class="device-favorite-cell" aria-label="Избранное" title="Избранное">☆</th></tr></thead>
+<div class="table-wrap"><table class="device-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Опт. уровень</button></th>{% else %}<th>Устройство</th>{% endif %}<th class="device-favorite-cell" aria-label="Избранное" title="Избранное">☆</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
 <div class="pagination" aria-label="Навигация по страницам">
@@ -332,7 +332,7 @@ function deviceRow(device) {
   tr.appendChild(nameCell);
   if (category === "TV_Amplifires") {
     const levelCell = document.createElement("td");
-    levelCell.dataset.label = "Оптический уровень";
+    levelCell.dataset.label = "Опт. уровень";
     levelCell.appendChild(description);
     tr.appendChild(levelCell);
   }
@@ -435,7 +435,7 @@ function renderTree(devices) {
           table.classList.add("amplifier-table");
           const head = document.createElement("thead");
           const heading = document.createElement("tr");
-          for (const [by, label] of [["name", "Имя / адрес"], ["level", "Оптический уровень"]]) {
+          for (const [by, label] of [["name", "Имя / адрес"], ["level", "Опт. уровень"]]) {
             const cell = document.createElement("th");
             const button = document.createElement("button");
             button.type = "button";
