@@ -1,6 +1,7 @@
 {% if current_user.role in ('admin', 'execute') %}
 <div class="modem-reboot" data-modem-reboot-url="{{ modem_reboot_url }}" data-device-label="{{ modem_reboot_label }}" data-csrf-token="{{ csrf_token }}">
-<button type="button" class="modem-reboot-button">Перезагрузить модем</button>
+<button type="button" class="modem-reboot-button" data-reboot-method="snmp" title="Перезагрузка по SNMP">Перезагрузить модем</button>
+<button type="button" class="modem-reboot-button" data-reboot-method="cmts" title="Резервная перезагрузка через CMTS, если SNMP не помогает">Через CMTS</button>
 <p class="modem-reboot-message" role="status" aria-live="polite"></p>
 </div>
 <script src="/static/modem-reboot.js?v={{ asset_version }}" defer></script>

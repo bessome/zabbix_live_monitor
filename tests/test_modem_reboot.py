@@ -7,6 +7,23 @@ import modem_reboot as reboot
 
 
 class ModemRebootTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cmts_reset_uses_audit_and_shares_modem_cooldown(self):
+        cmts = {"address": "192.0.2.1", "name": "CMTS"}
+        begin, finish = MagicMock(return_value=19), MagicMock()
+        with (patch.dict("sys.modules", {"app_storage": SimpleNamespace(
+                  begin_modem_reboot=begin, finish_modem_reboot=finish)}),
+              patch("cmts_cli.configuration", return_value=(True, "maksim")),
+              patch("modem_status.locate_for_reset", AsyncMock(return_value=(cmts, "001122334455", "192.0.2.42"))),
+              patch("cmts_cli.reset_modem", AsyncMock(return_value={"outcome": "accepted"})) as reset):
+            await reboot.reboot_via_cmts({"username": "Operator"}, [cmts], device={"name": "Modem"})
+            reset.assert_awaited_once_with(cmts, "192.0.2.42", "maksim")
+            begin.assert_called_once_with({"username": "Operator"}, "Modem / 192.0.2.42",
+                                          "192.0.2.1", 514, "RSH / CMTS CMTS")
+            finish.assert_called_once_with(19, "accepted")
+            with self.assertRaises(reboot.RebootBusy):
+                await reboot.reboot_modem("192.0.2.42", 161, "private")
+            self.send.assert_not_awaited()
+
     def setUp(self):
         reboot._recent.clear()
         self.transport = patch.object(reboot.UdpTransportTarget, "create", AsyncMock())

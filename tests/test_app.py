@@ -992,6 +992,36 @@ class AppTests(unittest.TestCase):
         self.client.post(setting_path, data={"csrf_token": self.token("/settings/cmts"), "clear_community": "1"})
         self.assertEqual(self.storage.snmp_write_community_for("Modems"), "private")
 
+    def test_cmts_reboot_is_explicit_authorized_and_scoped(self):
+        paths = ["/api/devices/Modems/42/modem-reboot", "/api/cmts/1/modems/cc3540e608b1/modem-reboot"]
+        self.login()
+        csrf = self.token("/profile")
+        cmts = {"id": 1, "name": "CMTS", "address": "192.0.2.1"}
+        device = {"id": "42", "name": "Modem", "snmp_address": "192.0.2.42", "snmp_port": "161"}
+        result = {"outcome": "unknown", "message": "Unknown"}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.cmts_list", return_value=[{"id": 1}]),
+              patch("routes_devices.cmts_for", return_value=cmts),
+              patch("routes_cmts.cmts_for", return_value=cmts),
+              patch("routes_devices.reboot_via_cmts", AsyncMock(return_value=result)) as reset,
+              patch("routes_cmts.reboot_via_cmts", AsyncMock(return_value=result)) as discovered,
+              patch("routes_devices.reboot_modem", AsyncMock()) as snmp,
+              patch("routes_cmts.resolve_mac", AsyncMock()) as resolve):
+            for path in paths:
+                self.assertEqual(self.client.post(path, data={"method": "cmts"}).status_code, 400)
+                response = self.client.post(path, data={"csrf_token": csrf, "method": "cmts",
+                                                       "address": "198.51.100.1", "command": "reload"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["outcome"], "unknown")
+            self.assertEqual(reset.await_args.args[1], [cmts])
+            self.assertEqual(reset.await_args.kwargs["device"], device)
+            self.assertEqual(discovered.await_args.kwargs["mac"], "cc3540e608b1")
+            resolve.assert_not_awaited()
+            snmp.assert_not_awaited()
+            self.assertEqual(self.client.post(paths[0], data={"csrf_token": csrf, "method": "reload"}).status_code, 422)
+            self.assertEqual(self.client.post(paths[0].replace("42", "99"),
+                                             data={"csrf_token": csrf, "method": "cmts"}).status_code, 404)
+
     def test_modem_status_is_authorized_and_assets_are_relative(self):
         path = "/api/devices/Modems/42/modem-status"
         self.assertEqual(self.client.get(path).status_code, 401)

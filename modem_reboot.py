@@ -43,14 +43,7 @@ async def logged_reboot(user, device, address, port, community, source, send):
     return result
 
 
-async def reboot_modem(address, port, community):
-    if not validate_target(address) or not 1 <= int(port) <= 65535:
-        raise ValueError("Нет корректного адреса или порта модема.")
-    try:
-        ip = ipaddress.ip_address(address)
-    except ValueError:
-        ip = None
-    address = str(ip) if ip else address
+def claim_reset(address, port):
     key = (address, int(port))
     now = time.monotonic()
     with _lock:
@@ -60,6 +53,35 @@ async def reboot_modem(address, port, community):
         if key in _recent:
             raise RebootBusy("Команда уже отправлялась. Повторите через 30 секунд.")
         _recent[key] = now
+
+
+async def reboot_via_cmts(user, configs, device=None, mac=None):
+    from cmts_cli import configuration, reset_modem
+    from modem_status import locate_for_reset
+    enabled, cli_user = configuration()
+    if not enabled:
+        raise ValueError("Перезагрузка через CMTS требует CMTS_STATUS_RSH=1.")
+    cmts, compact, ip = await locate_for_reset(configs, device=device, mac=mac)
+
+    async def send(address, port, community):
+        # Share the modem cooldown with SNMP, even though RSH targets the CMTS.
+        claim_reset(ip, (device or {}).get("snmp_port", 161))
+        return await reset_modem(cmts, ip, cli_user)
+
+    label = ((device or {}).get("name") or compact) + " / " + ip
+    return await logged_reboot(user, label, cmts["address"], 514, "",
+                               "RSH / CMTS " + cmts["name"], send)
+
+
+async def reboot_modem(address, port, community):
+    if not validate_target(address) or not 1 <= int(port) <= 65535:
+        raise ValueError("Нет корректного адреса или порта модема.")
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        ip = None
+    address = str(ip) if ip else address
+    claim_reset(address, port)
 
     transport = Udp6TransportTarget if ip and ip.version == 6 else UdpTransportTarget
     target = await transport.create((address, int(port)), timeout=3.0, retries=0)

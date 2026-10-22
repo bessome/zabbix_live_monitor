@@ -3,7 +3,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from pysnmp.proto.rfc1902 import OctetString
+from pysnmp.proto.rfc1902 import IpAddress, OctetString
 from pysnmp.proto.rfc1905 import NoSuchInstance, NoSuchObject
 
 import modem_status as status
@@ -17,6 +17,25 @@ LOCATION = (CMTS, "2703362", MAC)
 
 
 class ModemStatusTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reset_location_rechecks_mac_and_ip(self):
+        with (patch.object(status, "_locate_one", AsyncMock(return_value=LOCATION)),
+              patch.object(status, "_target", AsyncMock()),
+              patch.object(status, "_get", AsyncMock(return_value=[MAC_VALUE, IpAddress("10.190.1.127")])) as get):
+            result = await status.locate_for_reset([CMTS], device={"address": "10.190.1.127"})
+            self.assertEqual(result, (CMTS, MAC, "10.190.1.127"))
+            get.return_value = [MAC_VALUE, IpAddress("10.190.1.128")]
+            with self.assertRaisesRegex(RuntimeError, "изменился"):
+                await status.locate_for_reset([CMTS], device={"address": "10.190.1.127"})
+            get.return_value = [OctetString(hexValue="001122334455"), IpAddress("10.190.1.127")]
+            with self.assertRaisesRegex(RuntimeError, "изменился"):
+                await status.locate_for_reset([CMTS], mac=MAC)
+
+    async def test_reset_refuses_ambiguous_or_unavailable_cmts(self):
+        for outcomes in ([LOCATION, LOCATION], [LOCATION, RuntimeError("unreachable")], [None, None]):
+            with patch.object(status, "_locate_one", AsyncMock(side_effect=outcomes)):
+                with self.assertRaises(RuntimeError):
+                    await status.locate_for_reset([CMTS, CMTS], mac=MAC)
+
     def setUp(self):
         status._entries.clear()
         status._catalogs.clear()

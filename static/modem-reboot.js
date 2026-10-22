@@ -1,14 +1,16 @@
 (() => {
   for (const root of document.querySelectorAll("[data-modem-reboot-url]")) {
-    const button = root.querySelector("button");
+    const buttons = [...root.querySelectorAll("button[data-reboot-method]")];
     const message = root.querySelector("[role=status]");
-    button.addEventListener("click", async () => {
+    for (const button of buttons) button.addEventListener("click", async () => {
       if (button.disabled || !confirm("Перезагрузить модем " + root.dataset.deviceLabel
+        + (button.dataset.rebootMethod === "cmts" ? " через CMTS" : " по SNMP")
         + "? Связь ненадолго прервётся.")) return;
-      button.disabled = true;
+      buttons.forEach(item => { item.disabled = true; });
       message.textContent = "Отправка команды…";
       const form = new FormData();
       form.set("csrf_token", root.dataset.csrfToken);
+      form.set("method", button.dataset.rebootMethod);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 45000);
       try {
@@ -26,10 +28,9 @@
         message.textContent = "Нет ответа сервера. Результат перезагрузки неизвестен; проверьте пинг и статус.";
       } finally {
         clearTimeout(timer);
-        button.title = "Повторная команда будет доступна через 30 секунд.";
+        buttons.forEach(item => { item.title = "Повторная команда будет доступна через 30 секунд."; });
         setTimeout(() => {
-          button.disabled = false;
-          button.title = "";
+          buttons.forEach(item => { item.disabled = false; item.title = ""; });
         }, 30000);
       }
     });

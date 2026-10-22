@@ -10,7 +10,7 @@ from app_web import checked_form, render, require_user
 from cmts_monitor import normalize_mac, resolve_mac, search_cmts
 from docsis_modem import basic_channels
 from modem_status import status_for as modem_status_for
-from modem_reboot import RebootBusy, logged_reboot, reboot_modem
+from modem_reboot import RebootBusy, logged_reboot, reboot_modem, reboot_via_cmts
 from ping_monitor import snapshot_for
 from snmp_monitor import uptime_for
 from zabbix_service import host_rows
@@ -27,7 +27,10 @@ async def discovered_reboot(request: Request, cmts_id: int, mac: str):
     user = require_user(request, api=True)
     if user["role"] not in ("execute", "admin"):
         raise HTTPException(403)
-    await checked_form(request)
+    form = await checked_form(request)
+    method = str(form.get("method", "snmp"))
+    if method not in ("snmp", "cmts"):
+        raise HTTPException(422, "Неизвестный способ перезагрузки.")
     # Resolve again for a write: do not reset an IP from the 30-second read cache.
     try:
         compact = normalize_mac(mac)
@@ -36,6 +39,9 @@ async def discovered_reboot(request: Request, cmts_id: int, mac: str):
         cmts = cmts_for(cmts_id)
         if cmts is None:
             raise HTTPException(404)
+        if method == "cmts":
+            result = await reboot_via_cmts(user, [cmts], mac=compact)
+            return JSONResponse(result, headers={"Cache-Control": "no-store"})
         modem = await resolve_mac(cmts, compact)
         if modem is None:
             raise HTTPException(404, "Модем не найден на CMTS.")
@@ -43,12 +49,12 @@ async def discovered_reboot(request: Request, cmts_id: int, mac: str):
             raise ValueError("IP модема неизвестен; перезагрузка недоступна.")
         result = await logged_reboot(user, modem.get("mac") or compact, modem["ip"], 161,
                                      snmp_write_community_for("Modems"),
-                                     "CMTS " + str(cmts_id), reboot_modem)
+                                     "SNMP / CMTS " + str(cmts_id), reboot_modem)
     except RebootBusy as exc:
         return JSONResponse({"error": str(exc)}, status_code=409)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
-    except (RuntimeError, OSError) as exc:
+    except (RuntimeError, OSError, asyncio.TimeoutError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 

@@ -11,6 +11,27 @@ CMTS = {"address": "192.0.2.1"}
 
 
 class CliTests(unittest.IsolatedAsyncioTestCase):
+    async def test_targeted_reset_has_fixed_command_and_does_not_request_callback(self):
+        reader, writer = self.connection(b"\0")
+        with (patch.object(cmts_cli, "_connect", AsyncMock(return_value=(reader, writer))),
+              patch.object(cmts_cli, "_local_user", return_value="monitor")):
+            result = await cmts_cli.reset_modem(CMTS, "10.190.1.127", "maksim")
+        self.assertEqual(result["outcome"], "accepted")
+        writer.write.assert_called_once_with(
+            b"0\0monitor\0maksim\0clear cable modem 10.190.1.127 reset\0")
+
+    async def test_reset_rejection_timeout_and_invalid_target(self):
+        with (patch.object(cmts_cli, "_exchange", AsyncMock(return_value=b"% Invalid input detected")) as send,
+              patch.object(cmts_cli, "_local_user", return_value="monitor")):
+            with self.assertRaisesRegex(RuntimeError, "192.0.2.1.*Invalid input"):
+                await cmts_cli.reset_modem(CMTS, "10.190.1.127")
+            send.side_effect = asyncio.TimeoutError()
+            self.assertEqual((await cmts_cli.reset_modem(CMTS, "10.190.1.127"))["outcome"], "unknown")
+            for address in ("all", "10.190.1.127;reload", "0.0.0.0", "255.255.255.255"):
+                with self.assertRaises(ValueError):
+                    await cmts_cli.reset_modem(CMTS, address)
+            self.assertEqual(send.await_count, 2)
+
     def test_statuses_from_cli_preserve_exact_state(self):
         for state in ("online", "w-online", "p-online", "online(d)", "init(io)",
                       "init(o)", "offline", "w-online(pt)", "p-online(ptd)"):

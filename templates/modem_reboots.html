@@ -4,12 +4,12 @@
 <p>Всего записей: {{ total }}. Время: {{ display_timezone }}.</p>
 <p>Подтверждение команды не означает завершения перезагрузки. При неизвестном результате проверьте пинг и статус модема.</p>
 <section class="panel"><div class="table-wrap"><table class="activity-table">
-<thead><tr><th>Время</th><th>Пользователь</th><th>Модем</th><th>Адрес SNMP</th><th>Источник</th><th>Результат</th></tr></thead>
+<thead><tr><th>Время</th><th>Пользователь</th><th>Модем</th><th>Адрес команды</th><th>Источник</th><th>Результат</th></tr></thead>
 <tbody>{% for entry in events %}<tr>
 <td data-label="Время">{{ entry.occurred_local }}</td>
 <td data-label="Пользователь">{{ entry.username }}</td>
 <td data-label="Модем">{{ entry.device }}</td>
-<td data-label="Адрес SNMP">{{ entry.address }} : {{ entry.port }}</td>
+<td data-label="Адрес команды">{{ entry.address }} : {{ entry.port }}</td>
 <td data-label="Источник">{{ entry.source }}</td>
 <td data-label="Результат">{{ {'pending': 'Попытка начата, ответ не записан', 'accepted': 'Команда подтверждена', 'unknown': 'Результат неизвестен', 'blocked': 'Повторная команда заблокирована', 'invalid': 'Некорректный адрес или порт', 'rejected': 'Команда отклонена'} .get(entry.outcome, entry.outcome) }}</td>
 </tr>{% else %}<tr><td colspan="6">Записей пока нет.</td></tr>{% endfor %}</tbody>

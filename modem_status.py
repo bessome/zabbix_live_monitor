@@ -224,6 +224,42 @@ async def _read(location):
             "updated_at": int(time.time())}
 
 
+async def locate_for_reset(configs, device=None, mac=None):
+    """Locate one modem and recheck its current MAC/IP before a write."""
+    device = device or {}
+    if mac:
+        mac = normalize_mac(mac)
+        if len(mac) != 12:
+            raise ValueError("Нужен полный MAC модема.")
+    else:
+        candidates = set().union(*(_macs(device.get(field))
+                                   for field in ("name", "technical_name", "mac")))
+        if len(candidates) > 1:
+            raise RuntimeError("В данных модема несколько MAC-адресов.")
+        mac = next(iter(candidates), None)
+    addresses = {device.get(field) for field in
+                 ("interface_ip", "snmp_address", "address")} - {None, "", "—"}
+    if not configs or not (mac or addresses):
+        raise ValueError("Нет CMTS или адреса для поиска модема.")
+    outcomes = await asyncio.wait_for(asyncio.gather(*(
+        _locate_one(cmts, mac, addresses) for cmts in configs
+    ), return_exceptions=True), 35)
+    if any(isinstance(value, BaseException) for value in outcomes):
+        raise RuntimeError("Не все CMTS доступны; принадлежность модема не подтверждена.")
+    matches = [value for value in outcomes if value is not None]
+    if len(matches) != 1:
+        raise RuntimeError("Модем не найден однозначно на CMTS.")
+    cmts, index, compact = matches[0]
+    target = await _target(cmts)
+    with SnmpEngine() as engine:
+        actual_mac, actual_ip = await _get(engine, target, cmts["community"],
+            [MAC_COLUMN + "." + index, IP_COLUMN + "." + index])
+    ip = _address(actual_ip)
+    if _mac(actual_mac) != compact or not ip or (not mac and ip not in addresses):
+        raise RuntimeError("MAC или IP модема изменился; обновите карточку перед перезагрузкой.")
+    return cmts, compact, ip
+
+
 async def status_for(configs, device=None, mac=None):
     """Read fresh status independently of modem reachability and Zabbix history."""
     device = device or {}

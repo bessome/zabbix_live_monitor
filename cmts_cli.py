@@ -113,6 +113,34 @@ async def _exchange(address, local_user, remote_user, command):
         await writer.wait_closed()
 
 
+async def reset_modem(cmts, modem_ip, user=""):
+    """Send only a targeted reset, through the same single-channel RSH client."""
+    address = str(ipaddress.ip_address(cmts["address"]))
+    ip = ipaddress.IPv4Address(modem_ip)
+    if ip.is_unspecified or ip.is_multicast or ip.is_loopback or int(ip) == 0xffffffff:
+        raise ValueError("Некорректный IP модема.")
+    local_user = _local_user()
+    remote_user = user or local_user
+    for name in (local_user, remote_user):
+        if not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,63}", name):
+            raise ValueError("Некорректное имя пользователя RSH.")
+    try:
+        output = await asyncio.wait_for(_exchange(address, local_user, remote_user,
+                                                  f"clear cable modem {ip} reset"), TIMEOUT)
+    except (asyncio.TimeoutError, asyncio.IncompleteReadError):
+        return {"outcome": "unknown", "message": f"CMTS {address}: ответ на перезагрузку {ip} не получен. "
+                "Команда могла выполниться; проверьте пинг и статус.", "cooldown_seconds": 30}
+    except (RuntimeError, OSError) as exc:
+        raise RuntimeError(f"CMTS {address}: {exc}") from exc
+    detail = _diagnostic(output)
+    if "%" in detail or any(text in detail.casefold() for text in (
+            "access denied", "permission denied", "invalid input", "incomplete command",
+            "ambiguous command", "not found", "no modem", "unknown command", "authorization failed")):
+        raise RuntimeError(f"CMTS {address}: " + detail)
+    return {"outcome": "accepted", "message": f"CMTS {address}: команда перезагрузки модема {ip} отправлена. "
+            "Проверьте пинг и статус.", "cooldown_seconds": 30}
+
+
 async def read_status(cmts, mac, user=""):
     compact = normalize_mac(mac)
     if len(compact) != 12:

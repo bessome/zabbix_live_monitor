@@ -3,14 +3,15 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('static/modem-reboot.js', 'utf8');
 
-async function scenario({confirm = true, failure = false} = {}) {
+async function scenario({confirm = true, failure = false, method = 'snmp'} = {}) {
   let click;
   const calls = [], timers = [];
-  const button = {disabled: false, addEventListener: (_, fn) => { click = fn; }};
+  const button = {dataset: {rebootMethod: method}, disabled: false, addEventListener: (_, fn) => { click = fn; }};
+  const alternative = {dataset: {rebootMethod: method === 'snmp' ? 'cmts' : 'snmp'}, addEventListener() {}};
   const message = {textContent: ''};
   const root = {
     dataset: {deviceLabel: 'Modem', csrfToken: 'csrf-test', modemRebootUrl: '/api/modem-reboot'},
-    querySelector: selector => selector === 'button' ? button : message
+    querySelector: () => message, querySelectorAll: () => [button, alternative]
   };
   vm.runInNewContext(source, {
     document: {querySelectorAll: () => [root]},
@@ -24,7 +25,7 @@ async function scenario({confirm = true, failure = false} = {}) {
     }
   });
   await click();
-  return {click, calls, timers, button, message};
+  return {click, calls, timers, button, alternative, message};
 }
 
 (async () => {
@@ -34,6 +35,8 @@ async function scenario({confirm = true, failure = false} = {}) {
   assert.equal(sent.calls.length, 1);
   assert.equal(sent.calls[0].options.method, 'POST');
   assert.equal(sent.calls[0].options.body.get('csrf_token'), 'csrf-test');
+  assert.equal(sent.calls[0].options.body.get('method'), 'snmp');
+  assert.equal(sent.alternative.disabled, true);
   assert.equal(sent.message.textContent, 'unknown-result');
   assert.equal(sent.button.disabled, true);
   await sent.click();
@@ -43,5 +46,8 @@ async function scenario({confirm = true, failure = false} = {}) {
   const failed = await scenario({failure: true});
   assert.match(failed.message.textContent, /неизвестен/);
   assert.equal(failed.calls.length, 1);
+  const cmts = await scenario({method: 'cmts'});
+  assert.equal(cmts.calls[0].options.body.get('method'), 'cmts');
+  assert.equal(cmts.calls.length, 1);
   console.log('Modem reboot UI checks passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });
