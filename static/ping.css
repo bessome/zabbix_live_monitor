@@ -23,14 +23,10 @@
 #ping-message{font-size:13px;color:#5d6976;margin-bottom:0}
 #ping-message:empty{display:none}
 .device-monitor-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);grid-template-rows:min-content 1fr;column-gap:16px;align-items:start}
-.tv-amplifier-grid{grid-template-columns:minmax(300px,.85fr) minmax(0,1.15fr)}
 .device-monitor-grid>.panel{min-width:0;margin:18px 0}
 .device-monitor-grid>.ping-panel{grid-column:1;grid-row:1}
 .device-monitor-grid>.device-details{grid-column:1;grid-row:2}
-.device-monitor-grid>.modem-panel{grid-column:2;grid-row:1 / span 2}
-.tv-amplifier-grid>.ping-panel{grid-column:2}
-.tv-amplifier-grid>.device-details{grid-column:2}
-.tv-amplifier-grid>.optical-panel{grid-column:1;grid-row:1 / span 2}
+.device-monitor-grid>.device-side-panel{grid-column:2;grid-row:1 / span 2}
 .modem-panel>p{color:#5d6976;margin:0 0 12px}
 .modem-state{font-size:13px}
 .modem-mac-status{font-size:14px;overflow-wrap:anywhere}

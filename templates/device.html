@@ -29,13 +29,7 @@
 <table id="switch-cable-results" hidden><thead><tr><th>Пара</th><th>Статус</th><th>Длина</th><th>Ошибка</th></tr></thead><tbody id="switch-cable-pairs"></tbody></table>
 </dialog>
 {% endif %}
-<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires') else '' }}{{ ' tv-amplifier-grid' if category == 'TV_Amplifires' else '' }}">
-{% if category == 'TV_Amplifires' %}
-<section class="panel optical-panel" id="optical-monitor" aria-label="Оптическая мощность" data-category="{{ category }}" data-host-id="{{ device.id }}">
-<p id="optical-state" class="modem-state" aria-live="polite">Загрузка Optical input power…</p>
-<div id="optical-channels" class="optical-channels"></div>
-</section>
-{% endif %}
+<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires') else '' }}">
 <section class="panel ping-panel" id="ping-monitor" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <div class="ping-heading"><h2>Пинг устройства</h2><span id="ping-state" class="ping-state">Ожидание…</span></div>
 <div class="ping-chart"><canvas id="ping-canvas" role="img" aria-label="График времени отклика и потерь пакетов за последнюю минуту"></canvas>
@@ -49,8 +43,14 @@
 <div class="ping-legend"><span><i class="ping-line"></i>RTT</span><span><i class="ping-loss-mark"></i>Loss</span><span title="SNMP sysUpTime">Uptime <strong id="ping-uptime">n/a</strong></span></div>
 <p id="ping-message" aria-live="polite">Ожидание первого результата…</p>
 </section>
+{% if category == 'TV_Amplifires' %}
+<section class="panel device-side-panel optical-panel" id="optical-monitor" aria-label="Оптическая мощность" data-category="{{ category }}" data-host-id="{{ device.id }}">
+<p id="optical-state" class="modem-state" aria-live="polite">Загрузка Optical input power…</p>
+<div id="optical-channels" class="optical-channels"></div>
+</section>
+{% endif %}
 {% if category == 'Modems' %}
-<section class="panel modem-panel" id="modem-monitor" aria-label="Показатели каналов модема" data-category="{{ category }}" data-host-id="{{ device.id }}">
+<section class="panel device-side-panel modem-panel" id="modem-monitor" aria-label="Показатели каналов модема" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <div class="modem-graph-actions"><button type="button" id="modem-overview-open" class="modem-overview-button">Общий график</button><button type="button" id="victor-open" class="modem-overview-button">Виктор</button></div>
 <p id="modem-state" class="modem-state" aria-live="polite">Загрузка каналов…</p>
 <div id="modem-channels" class="modem-channels"></div>

@@ -7,6 +7,12 @@
 - Round only for presentation. Preserve source values and precision for history, chart coordinates, rate calculations, aggregation, and alarm threshold comparisons. Do not round identifiers, MAC/IP addresses, dates, or timestamps as measurements.
 - When modifying a measurement or chart, apply the existing display formatter consistently to its current and historical views. Consult `.codex/skills/zabbix-device-metrics/SKILL.md` for the device-metrics workflow and formatting checks.
 
+## Device card layout
+
+- Use the modem card layout for every device type whenever a desktop card has measurements beside the ping chart: ping chart on the left, additional measurements on the right, and the "Устройство" details directly below the ping chart at the same width. Never reverse these columns for a particular device type.
+- Reuse `.device-monitor-grid` with `.ping-panel`, `.device-side-panel`, and `.device-details` in `templates/device.html` and `static/ping.css`. Put the ping panel before the measurements in document order. On narrow screens and in forced mobile mode, stack the chart, measurements, and details in that order.
+- Cards without measurements beside the chart (currently Switches, VOIP, and Routers) keep their existing full-width layout. If such a card gains a side panel, adopt the same shared layout; do not create a device-specific column order.
+
 ## HTTPS and page assets
 
 - Production traffic reaches Caddy over HTTPS; Caddy connects to FastAPI/Uvicorn over HTTP inside the Compose network. Do not assume `request.url.scheme` inside the app is the browser's scheme.
