@@ -40,7 +40,27 @@ router = APIRouter()
 @router.get("/settings/cmts")
 def cmts_page(request: Request):
     require_admin(request)
-    return render(request, "cmts_settings.html", cmts=cmts_list())
+    return render(request, "cmts_settings.html", cmts=cmts_list(),
+                  modem_write_configured=bool(setting("snmp_write_community:Modems")))
+
+
+@router.post("/settings/cmts/modem-write-community")
+async def save_modem_write_community(request: Request):
+    require_admin(request)
+    form = await checked_form(request)
+    community = str(form.get("community", ""))
+    if len(community) > 128 or any(ord(char) < 32 for char in community):
+        raise HTTPException(422, "Неверная SNMP write community.")
+    with closing(connect()) as con:
+        if form.get("clear_community") == "1":
+            con.execute("DELETE FROM settings WHERE key='snmp_write_community:Modems'")
+        elif community:
+            con.execute("INSERT INTO settings(key,value) VALUES (?,?) "
+                        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                        ("snmp_write_community:Modems", encrypt_community(community)))
+        con.commit()
+    add_message(request, "SNMP write community модемов сохранена.")
+    return RedirectResponse("/settings/cmts", status_code=303)
 
 
 @router.post("/settings/cmts")

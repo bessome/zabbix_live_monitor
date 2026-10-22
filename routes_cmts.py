@@ -5,11 +5,12 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app_storage import cmts_for, cmts_list, snmp_community_for
-from app_web import render, require_user
+from app_storage import cmts_for, cmts_list, snmp_community_for, snmp_write_community_for
+from app_web import checked_form, render, require_user
 from cmts_monitor import normalize_mac, resolve_mac, search_cmts
 from docsis_modem import basic_channels
 from modem_status import status_for as modem_status_for
+from modem_reboot import RebootBusy, reboot_modem
 from ping_monitor import snapshot_for
 from snmp_monitor import uptime_for
 from zabbix_service import host_rows
@@ -19,6 +20,35 @@ _verified = {}
 _verify_lock = asyncio.Lock()
 VERIFY_SECONDS = 30
 _search_limit = asyncio.Semaphore(4)
+
+
+@router.post("/api/cmts/{cmts_id}/modems/{mac}/modem-reboot")
+async def discovered_reboot(request: Request, cmts_id: int, mac: str):
+    user = require_user(request, api=True)
+    if user["role"] not in ("execute", "admin"):
+        raise HTTPException(403)
+    await checked_form(request)
+    # Resolve again for a write: do not reset an IP from the 30-second read cache.
+    try:
+        compact = normalize_mac(mac)
+        if len(compact) != 12:
+            raise ValueError("Нужен полный MAC модема.")
+        cmts = cmts_for(cmts_id)
+        if cmts is None:
+            raise HTTPException(404)
+        modem = await resolve_mac(cmts, compact)
+        if modem is None:
+            raise HTTPException(404, "Модем не найден на CMTS.")
+        if not modem["ip"]:
+            raise ValueError("IP модема неизвестен; перезагрузка недоступна.")
+        result = await reboot_modem(modem["ip"], 161, snmp_write_community_for("Modems"))
+    except RebootBusy as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    except (RuntimeError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/cmts/{cmts_id}/modems/{mac}/modem-status")

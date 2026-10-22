@@ -14,6 +14,7 @@ from app_storage import (cmts_for, cmts_list, favorite_devices_for, favorite_ids
 from app_web import checked_form, render, require_user
 from cable_test import CableTestBusy, run_cable_test
 from mac_vendors import lookup_macs
+from modem_reboot import RebootBusy, reboot_modem
 from modem_status import status_for as modem_status_for
 from ping_monitor import snapshot_for
 from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_for,
@@ -33,6 +34,30 @@ router = APIRouter()
 HISTORY_PERIODS = {"1h": 3600, "12h": 43200, "24h": 86400,
                    "2d": 172800, "14d": 1209600}
 HISTORY_PAGE_SIZE = 50000
+
+
+@router.post("/api/devices/{category}/{host_id}/modem-reboot")
+async def device_modem_reboot(request: Request, category: str, host_id: str):
+    user = require_user(request, api=True)
+    if category != "Modems":
+        raise HTTPException(404)
+    if user["role"] not in ("execute", "admin"):
+        raise HTTPException(403)
+    await checked_form(request)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        device = next((row for row in rows if row["id"] == host_id), None)
+        if device is None:
+            raise HTTPException(404)
+        result = await reboot_modem(device["snmp_address"], device["snmp_port"],
+                                    snmp_write_community_for("Modems"))
+    except RebootBusy as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    except (RuntimeError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/devices/{category}/{host_id}/modem-status")

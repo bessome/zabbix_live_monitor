@@ -852,6 +852,80 @@ class AppTests(unittest.TestCase):
             self.assertEqual(read_levels.call_count, 4)
             descriptions.assert_not_called()
 
+    def test_modem_reboot_permissions_targets_and_settings(self):
+        paths = ["/api/devices/Modems/42/modem-reboot",
+                 "/api/cmts/1/modems/cc3540e608b1/modem-reboot"]
+        for path in paths:
+            self.assertEqual(self.client.post(path).status_code, 401)
+        self.login()
+        csrf = self.token("/settings/cmts")
+        setting_path = "/settings/cmts/modem-write-community"
+        self.assertEqual(self.client.post(setting_path, data={"community": "secret"}).status_code, 400)
+        self.client.post(setting_path, data={"csrf_token": csrf, "clear_community": "1"})
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"), "private")
+        self.client.post(setting_path, data={"csrf_token": csrf, "community": "reset-test-secret"})
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"), "reset-test-secret")
+        self.assertNotIn("reset-test-secret", self.storage.setting("snmp_write_community:Modems"))
+        self.assertNotIn("reset-test-secret", self.client.get("/settings/cmts").text)
+        self.client.post(setting_path, data={"csrf_token": csrf, "community": ""})
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"), "reset-test-secret")
+        device = {"id": "42", "name": "Modem", "technical_name": "cc3540e608b1",
+                  "address": "192.0.2.42", "snmp_address": "192.0.2.42", "snmp_port": "1161"}
+        modem = {"cmts_id": 1, "cmts_name": "CMTS", "mac": "cc:35:40:e6:08:b1",
+                 "mac_compact": "cc3540e608b1", "ip": "192.0.2.43"}
+        accepted = {"outcome": "accepted", "message": "OK", "cooldown_seconds": 30}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.device_descriptions", return_value={}),
+              patch("routes_devices.reboot_modem", AsyncMock(return_value=accepted)) as reset,
+              patch("routes_cmts.cmts_for", return_value={"id": 1}),
+              patch("routes_cmts.resolve_mac", AsyncMock(return_value=modem)) as resolve,
+              patch("routes_cmts.verified_modem", AsyncMock(return_value=modem)),
+              patch("routes_cmts.reboot_modem", AsyncMock(return_value=accepted)) as discovered_reset):
+            for path in paths:
+                self.assertEqual(self.client.post(path).status_code, 400)
+                response = self.client.post(path, data={"csrf_token": csrf, "address": "198.51.100.99"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["outcome"], "accepted")
+                self.assertEqual(self.client.get(path).status_code, 405)
+            reset.assert_awaited_once_with("192.0.2.42", "1161", "reset-test-secret")
+            discovered_reset.assert_awaited_once_with("192.0.2.43", 161, "reset-test-secret")
+            resolve.assert_awaited_once_with({"id": 1}, "cc3540e608b1")
+            self.assertEqual(self.client.post(paths[0].replace("42", "99"), data={"csrf_token": csrf}).status_code, 404)
+            resolve.return_value = {**modem, "ip": None}
+            self.assertEqual(self.client.post(paths[1], data={"csrf_token": csrf}).status_code, 422)
+            self.assertEqual(discovered_reset.await_count, 1)
+            with patch("routes_cmts.verified_modem", AsyncMock(return_value={**modem, "ip": None})):
+                self.assertNotIn('data-modem-reboot-url=', self.client.get("/cmts/1/modems/cc3540e608b1").text)
+            for page_path in ("/devices/Modems/42", "/cmts/1/modems/cc3540e608b1"):
+                page = self.client.get(page_path)
+                self.assertIn('data-modem-reboot-url="/api/', page.text)
+                self.assertIn('src="/static/modem-reboot.js?', page.text)
+                self.assertNotIn('src="http://', page.text)
+            self.assertEqual(self.client.get("/static/modem-reboot.js").status_code, 200)
+            resolve.return_value = modem
+            for role in ("execute", "read"):
+                username = "Reboot" + role
+                with closing(self.storage.connect()) as con:
+                    con.execute("INSERT INTO users(username,password_hash,role) VALUES (?,?,?)",
+                                (username, self.storage.hash_password("reboot-password-123"), role))
+                    con.commit()
+                self.client.post("/logout", data={"csrf_token": csrf})
+                self.login(username, "reboot-password-123")
+                csrf = self.token("/profile")
+                for path in paths:
+                    self.assertEqual(self.client.post(path, data={"csrf_token": csrf}).status_code,
+                                     200 if role == "execute" else 403)
+                page = self.client.get("/devices/Modems/42")
+                self.assertEqual('data-modem-reboot-url=' in page.text, role == "execute")
+                page = self.client.get("/cmts/1/modems/cc3540e608b1")
+                self.assertEqual('data-modem-reboot-url=' in page.text, role == "execute")
+                self.assertEqual(self.client.post(setting_path, data={"csrf_token": csrf}).status_code, 403)
+                resolve.return_value = modem
+        self.client.post("/logout", data={"csrf_token": csrf})
+        self.login()
+        self.client.post(setting_path, data={"csrf_token": self.token("/settings/cmts"), "clear_community": "1"})
+        self.assertEqual(self.storage.snmp_write_community_for("Modems"), "private")
+
     def test_modem_status_is_authorized_and_assets_are_relative(self):
         path = "/api/devices/Modems/42/modem-status"
         self.assertEqual(self.client.get(path).status_code, 401)

@@ -14,6 +14,9 @@
 <p class="modem-mac-status" data-modem-status-url="/api/cmts/{{ modem.cmts_id }}/modems/{{ modem.mac_compact }}/modem-status" aria-live="polite">Статус модема: <strong>Загрузка…</strong></p>
 <script src="/static/modem-status.js?v={{ asset_version }}" defer></script>
 {% if modem.ip %}
+{% set modem_reboot_url = '/api/cmts/' ~ modem.cmts_id ~ '/modems/' ~ modem.mac_compact ~ '/modem-reboot' %}
+{% set modem_reboot_label = modem.mac ~ ' (' ~ modem.ip ~ ')' %}
+{% include 'modem_reboot.html' %}
 <section class="panel ping-panel" id="ping-monitor" data-api-base="/api/cmts/{{ modem.cmts_id }}/modems/{{ modem.mac_compact }}">
 <div class="ping-heading"><h2>Пинг устройства</h2><span id="ping-state" class="ping-state">Ожидание…</span></div>
 <div class="ping-chart"><canvas id="ping-canvas" role="img" aria-label="Пинг за последнюю минуту"></canvas>

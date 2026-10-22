@@ -29,6 +29,10 @@
 .modem-state{font-size:13px}
 .modem-mac-status{font-size:14px;overflow-wrap:anywhere}
 .modem-mac-status strong{font-family:Consolas,monospace}
+.modem-reboot{margin:0 0 14px}
+.modem-reboot-button{padding:7px 12px;min-height:36px}
+.modem-reboot-message{font-size:13px;overflow-wrap:anywhere}
+.modem-reboot-message:empty{display:none}
 .modem-mac-status[data-state="online"] strong{color:#167344}
 .modem-mac-status[data-state="warning"] strong{color:#8a5700}
 .modem-mac-status[data-state="offline"] strong{color:#bf3030}

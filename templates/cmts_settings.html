@@ -3,6 +3,16 @@
 <h1>CMTS</h1>
 <p>Добавьте Cisco CMTS для поиска модемов по кабельному MAC. Если community не задана, используется public.</p>
 <section class="panel">
+<h2>Перезагрузка модемов</h2>
+<p>Общая SNMP write community модемов для обеих карточек. По умолчанию — private.</p>
+<form method="post" action="/settings/cmts/modem-write-community" class="cmts-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>SNMP write community модемов<input name="community" type="password" maxlength="128" autocomplete="new-password" placeholder="{{ 'Задана — оставьте пустым, чтобы сохранить' if modem_write_configured else 'private' }}"></label>
+<label class="snmp-clear"><input name="clear_community" type="checkbox" value="1"> Сбросить на private</label>
+<button type="submit">Сохранить community</button>
+</form>
+</section>
+<section class="panel">
 <h2>Добавить CMTS</h2>
 <form method="post" action="/settings/cmts" class="cmts-form">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
