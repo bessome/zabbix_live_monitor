@@ -10,8 +10,8 @@
 <div class="device-view-options" role="group" aria-label="Вид списка устройств"><button type="button" data-device-view="list" aria-pressed="true">Список</button><button type="button" data-device-view="tree" aria-pressed="false">Дерево</button></div>
 </div>
 <p id="status" aria-live="polite"></p>
-<div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button><label id="monitored-only-label" class="monitored-only-label" hidden><input id="monitored-only" type="checkbox">Опрашиваемые</label></div>
-<div class="table-wrap"><table class="device-table device-metric-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th class="device-metric-heading"><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Опт. уровень</button></th>{% elif category == 'Modems' %}<th>Устройство</th><th class="device-metric-heading">US Level</th><th class="device-metric-heading">DS Level</th>{% else %}<th>Устройство</th><th class="device-text-heading">Описание</th>{% endif %}<th class="device-favorite-cell" aria-label="Избранное" title="Избранное">☆</th></tr></thead>
+<div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · Показатели: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button><label id="monitored-only-label" class="monitored-only-label" hidden><input id="monitored-only" type="checkbox">Опрашиваемые</label></div>
+<div class="table-wrap"><table class="device-table device-metric-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th class="device-metric-heading"><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Опт. уровень</button></th>{% elif category == 'Modems' %}<th>Устройство</th><th class="device-metric-heading">US Level</th><th class="device-metric-heading">DS Level</th>{% elif category == 'EDFA' %}<th>Устройство</th><th class="device-metric-heading">Optical output level</th><th class="device-metric-heading">Optical input level</th>{% else %}<th>Устройство</th><th class="device-text-heading">Описание</th>{% endif %}<th class="device-favorite-cell" aria-label="Избранное" title="Избранное">☆</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
 <div class="pagination" aria-label="Навигация по страницам">
@@ -46,6 +46,8 @@ const metricColumns = category === "Modems"
   ? [{key: "us", label: "US Level", path: ["modem_levels", "us"], min: 20, max: 52},
      {key: "ds", label: "DS Level", path: ["modem_levels", "ds"], min: -15, max: 18}]
   : category === "TV_Amplifires" ? [{key: "optical", label: "Опт. уровень", path: ["optical_level"], min: -3.4, max: Infinity}]
+  : category === "EDFA" ? [{key: "output", label: "Optical output level", mobileLabel: "OUT", path: ["edfa_levels", "output"]},
+     {key: "input", label: "Optical input level", mobileLabel: "IN", path: ["edfa_levels", "input"]}]
   : [{key: "description", label: "Описание", path: ["device_description"], text: true}];
 const status = document.getElementById("status");
 const search = document.getElementById("search");
@@ -87,7 +89,7 @@ try {
     if (Array.isArray(saved.branchSorts)) {
       for (const entry of saved.branchSorts) {
         if (Array.isArray(entry) && typeof entry[0] === "string" && typeof entry[1] === "string"
-          && /^(name|level|optical|us|ds|description):(asc|desc)$/.test(entry[1])) branchSorts.set(entry[0], entry[1]);
+          && /^(name|level|optical|us|ds|output|input|description):(asc|desc)$/.test(entry[1])) branchSorts.set(entry[0], entry[1]);
       }
     }
     if (typeof saved.query === "string") search.value = saved.query;
@@ -110,8 +112,8 @@ function saveSearch() {
 window.addEventListener("pagehide", saveSearch);
 function monitorControls() {
   document.getElementById("list-monitor-status").textContent = monitoredIds.size
-    ? "Пинг: 1 с · SNMP: 5 с · Выбрано: " + monitoredIds.size + "/5"
-    : "Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с";
+    ? "Пинг: 1 с · Показатели: 5 с · Выбрано: " + monitoredIds.size + "/5"
+    : "Выберите до 5 устройств · Пинг: 1 с · Показатели: 5 с";
   document.getElementById("list-monitor-clear").hidden = !monitoredIds.size;
   document.getElementById("monitored-only-label").hidden = !monitoredIds.size;
   document.querySelectorAll(".device-monitor-select").forEach(input => {
@@ -149,7 +151,7 @@ function paintLiveRow(row, pulse = false, pulseMetrics = false) {
     }
   }
 
-  if (!["Modems", "TV_Amplifires"].includes(category)) return;
+  if (!["Modems", "TV_Amplifires", "EDFA"].includes(category)) return;
   if ("summary" in live && row.liveSummary !== live.summary) {
     updateRowSummary(row, {id}, live.summary || {});
     row.liveSummary = live.summary;
@@ -169,6 +171,10 @@ function paintLiveRows(pulse = false, pulseMetrics = false) {
 function summaryFromSnmp(data) {
   const items = data.items || [];
   if (category === "TV_Amplifires") return {optical_level: items[0] || null};
+  if (category === "EDFA") return {edfa_levels: {
+    output: items.find(item => item.label === "Optical output level") || null,
+    input: items.find(item => item.label === "Optical input level") || null
+  }};
   const levels = {};
   for (const kind of ["US", "DS"]) {
     const candidates = items.filter(item => item.label?.startsWith(kind) && item.label.endsWith(" Level"));
@@ -185,7 +191,7 @@ async function pollMonitorKind(kind) {
   const state = monitorRequests[kind];
   if (state.inFlight || !monitoredIds.size || document.hidden) return;
   const metricPath = category === "Modems" ? "/modem-channels"
-    : category === "TV_Amplifires" ? "/optical-power" : null;
+    : category === "TV_Amplifires" ? "/optical-power" : category === "EDFA" ? "/edfa-levels" : null;
   if (kind === "metrics" && !metricPath) return;
   state.inFlight = true;
   const revision = monitorRevision;
@@ -316,16 +322,19 @@ function updateRowSummary(row, device, summary) {
     const valid = metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value));
     const numeric = valid ? Number(metric.raw_value ?? metric.value) : NaN;
     const alert = valid && (metric.alert ?? (numeric < column.min || numeric > column.max));
-    const state = valid ? (alert ? "critical" : "normal") : "unknown";
+    const rated = column.min != null || column.max != null || metric?.alert != null;
+    const state = !valid ? "unknown" : category === "EDFA" && ["normal", "warning", "critical"].includes(metric.state)
+      ? metric.state : (alert ? "critical" : rated ? "normal" : "unrated");
     value.textContent = !summary ? "Загрузка…" : valid
       ? Number(Number(metric.value).toFixed(2)).toString() + (metric.units ? " " + metric.units : "") : "n/a";
-    if (alert) value.title = column.label + " вне нормы";
+    if (state === "critical" || state === "warning") value.title = column.label + " вне нормы";
     cell.dataset.metricState = state;
     states.push(state);
   }
   row.dataset.levelState = states.length && states.every(state => state === "critical") ? "critical"
+    : states.length && states.every(state => state === "critical" || state === "warning") ? "warning"
     : states.length && states.every(state => state === "normal") ? "normal"
-    : states.includes("critical") ? "mixed" : "unknown";
+    : states.some(state => state === "critical" || state === "warning") ? "mixed" : "unknown";
 }
 function deviceRow(device) {
   const tr = document.createElement("tr");
@@ -341,7 +350,7 @@ function deviceRow(device) {
   select.checked = monitoredIds.has(String(device.id));
   select.disabled = !select.checked && monitoredIds.size >= 5;
   select.setAttribute("aria-label", "Мониторинг: " + device.name);
-  select.title = "Пинг: 1 с · SNMP: 5 с (до 5 устройств)";
+  select.title = "Пинг: 1 с · Показатели: 5 с (до 5 устройств)";
   select.addEventListener("change", () => selectMonitor(String(device.id), select.checked));
   nameRow.appendChild(select);
   tr.nameLink = deviceLink(device);
@@ -353,7 +362,7 @@ function deviceRow(device) {
     const metricCell = document.createElement("td");
     metricCell.className = "device-metric-cell" + (column.text ? " device-text-cell" : "");
     metricCell.dataset.label = column.label;
-    metricCell.dataset.mobileLabel = column.key === "us" ? "US" : column.key === "ds" ? "DS" : column.label;
+    metricCell.dataset.mobileLabel = column.mobileLabel || (column.key === "us" ? "US" : column.key === "ds" ? "DS" : column.label);
     const value = document.createElement("span");
     metricCell.appendChild(value);
     tr.metricCells.set(column.key, {cell: metricCell, value});

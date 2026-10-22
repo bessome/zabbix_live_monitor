@@ -109,7 +109,75 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="ping-monitor"', page.text)
         self.assertIn("Device description</dt>", page.text)
         self.assertIn("EDFA description", page.text)
-        self.assertNotIn('id="optical-monitor"', page.text)
+        self.assertIn('id="optical-monitor"', page.text)
+        self.assertIn('class="device-monitor-grid"', page.text)
+        self.assertRegex(page.text, r'src="/static/optical\.js\?v=\d+"')
+        self.assertNotIn('src="http://', page.text)
+
+    def test_edfa_values_and_history_are_scoped(self):
+        path = "/api/devices/EDFA/42/edfa-levels"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.login()
+        device = {"id": "42", "name": "EDFA", "technical_name": "edfa", "address": "192.0.2.42"}
+        item = {"id": "81", "label": "Optical output level", "value": "19.123456789",
+                "raw_value": "19.123456789", "units": "dBm", "value_type": "0"}
+        values = {"42": {"output": item}}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.edfa_levels", return_value=values),
+              patch("routes_devices.numeric_history", new_callable=AsyncMock,
+                    return_value={"points": [[123, 19.123456789]]}) as history):
+            self.assertEqual(self.client.get(path).json()["items"], [item])
+            self.assertEqual(self.client.get("/api/devices/EDFA").json()["devices"][0]["edfa_levels"], values["42"])
+            self.assertEqual(self.client.get("/api/devices/EDFA/summaries?ids=42").json()["summaries"]["42"]["edfa_levels"], values["42"])
+            response = self.client.get(path + "/81/history?period=12h")
+            self.assertEqual(response.json()["points"][0][1], 19.123456789)
+            history.assert_awaited_once_with(item, "12h")
+            self.assertEqual(self.client.get(path + "/99/history").status_code, 404)
+            self.assertEqual(self.client.get(path + "/81/history?period=bad").status_code, 422)
+            self.assertEqual(self.client.get(path.replace("/42/", "/99/")).status_code, 404)
+            self.assertEqual(self.client.get(path.replace("/EDFA/", "/Modems/")).status_code, 404)
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.edfa_levels", side_effect=RuntimeError("Zabbix unavailable"))):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json()["items"], [])
+
+    def test_edfa_source_keeps_precision_and_missing_readings(self):
+        from zabbix_service import edfa_levels
+        def item(item_id, name, value, clock="100", **overrides):
+            return {"itemid": item_id, "hostid": "42", "name": name, "status": "0",
+                    "value_type": "0", "units": "dBm", "lastvalue": value,
+                    "lastclock": clock, **overrides}
+        items = [item("1", "Optical output level", "19.123456789"),
+                 item("2", "Optical output level", "17", "90"),
+                 item("3", "Optical input level", "NaN"),
+                 item("4", "Optical output level", "22", "110", status="1"),
+                 item("5", "Optical output level", "23", "120", hostid="99"),
+                 item("6", "Optical input level", "text", "130", value_type="1")]
+        with patch("zabbix_service.zabbix_call", return_value=items) as call:
+            result = edfa_levels(["42"])["42"]
+        self.assertEqual(result["output"]["value"], "19.123456789")
+        self.assertEqual(result["output"]["units"], "dBm")
+        self.assertIsNone(result["input"]["value"])
+        self.assertEqual(result["input"]["id"], "3")
+        self.assertEqual(call.call_args.args[1]["filter"]["name"],
+                         ["Optical output level", "Optical input level"])
+
+    def test_edfa_thresholds_use_original_values(self):
+        from zabbix_service import edfa_levels
+        for kind, value, expected in [
+            ("output", "22.7", "normal"), ("output", "22.699999", "warning"),
+            ("output", "20.000001", "warning"), ("output", "20", "critical"),
+            ("output", "19.9", "critical"), ("input", "-1", "normal"),
+            ("input", "-1.000001", "critical"), ("input", "0", "normal"),
+            ("output", "NaN", "unknown"), ("input", "", "unknown"),
+        ]:
+            with self.subTest(kind=kind, value=value):
+                item = {"itemid": "81", "hostid": "42", "name": f"Optical {kind} level",
+                        "status": "0", "value_type": "0", "units": "dBm",
+                        "lastvalue": value, "lastclock": "100"}
+                with patch("zabbix_service.zabbix_call", return_value=[item]):
+                    self.assertEqual(edfa_levels(["42"])["42"][kind]["state"], expected)
 
     def test_onu_olt_item_search_and_history_are_scoped_to_group(self):
         self.assertEqual(self.client.get("/onu-ont", follow_redirects=False).status_code, 303)

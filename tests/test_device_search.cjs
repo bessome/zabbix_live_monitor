@@ -34,7 +34,7 @@ function loadPage(storage, category = 'VOIP', user = '1', reply = null) {
     setInterval(handler, ms) { intervals.push({handler, ms}); },
     fetch: async url => {
       requests.push(url);
-      if (reply && /\/(modem-channels|optical-power|ping)$/.test(url)) return reply(url);
+      if (reply && /\/(modem-channels|optical-power|edfa-levels|ping)$/.test(url)) return reply(url);
       const params = new URL(url, 'https://example.test').searchParams;
       return {ok: true, json: async () => ({devices: [], total: 500,
         page: Number(params.get('page')), pages: 20,
@@ -380,6 +380,26 @@ test('SNMP summary selects lowest channel and keeps missing values unavailable',
   assert.equal(vm.runInContext('liveValues.get("1").summary.optical_level.value', amplifier.context), '-4.2');
 });
 
+test('EDFA polling reads both Zabbix levels and clears them after an error', async () => {
+  let fail = false;
+  const page = loadPage(new Map(), 'EDFA', '1', async url => {
+    if (fail) throw new Error('Unavailable');
+    return {ok: true, json: async () => url.endsWith('/edfa-levels') ? {items: [
+      {id: '2', label: 'Optical input level', value: '-5.123456', units: 'dBm'},
+      {id: '1', label: 'Optical output level', value: '19.123456', units: 'dBm'}
+    ]} : {sent: 1, current_ms: 1}};
+  });
+  await flush();
+  vm.runInContext('selectMonitor("1", true)', page.context);
+  await flush();
+  assert.ok(page.requests.some(url => url.endsWith('/1/edfa-levels')));
+  assert.equal(vm.runInContext('liveValues.get("1").summary.edfa_levels.output.value', page.context), '19.123456');
+  assert.equal(vm.runInContext('liveValues.get("1").summary.edfa_levels.input.value', page.context), '-5.123456');
+  fail = true;
+  await vm.runInContext('pollMonitorKind("metrics")', page.context);
+  assert.equal(vm.runInContext('liveValues.get("1").summary', page.context), null);
+});
+
 test('selecting a device keeps existing status and parameters until the first poll finishes', async () => {
   for (const category of ['Modems', 'TV_Amplifires', 'VOIP']) {
     const page = loadPage(new Map(), category);
@@ -484,6 +504,26 @@ test('only all abnormal numeric columns make the entire row abnormal', async () 
   vm.runInContext('updateRowSummary(metricRow, {}, testSummary)', page.context);
   assert.equal(vm.runInContext("metricRow.metricCells.get('us').cell.dataset.metricState", page.context), 'critical');
 });
+test('EDFA cells use server thresholds and whole rows require both abnormal readings', async () => {
+  const page = loadPage(new Map(), 'EDFA');
+  await flush();
+  installMetricRow(page);
+  for (const [output, input, expected] of [
+    ['warning', 'normal', 'mixed'], ['critical', 'normal', 'mixed'],
+    ['warning', 'critical', 'warning'], ['critical', 'critical', 'critical'],
+    ['normal', 'normal', 'normal'], ['warning', 'unknown', 'mixed']
+  ]) {
+    page.context.summary = {edfa_levels: {
+      output: {value: '20', state: output},
+      input: {value: input === 'unknown' ? null : '-1', state: input}
+    }};
+    vm.runInContext('updateRowSummary(metricRow, {}, summary)', page.context);
+    assert.equal(vm.runInContext('metricRow.dataset.levelState', page.context), expected);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('output').cell.dataset.metricState", page.context), output);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('input').cell.dataset.metricState", page.context), input);
+  }
+});
+
 test('every list has separate value cells and the favorite action remains last', async () => {
   for (const category of ['Modems', 'TV_Amplifires', 'Switches', 'EDFA', 'VOIP', 'Routers']) {
     const page = loadPage(new Map(), category);
@@ -498,9 +538,10 @@ test('every list has separate value cells and the favorite action remains last',
       var renderedRow = deviceRow({id: '42', name: 'Device', display_name: 'Device - 192.0.2.42',
         address: '192.0.2.42', device_description: 'Description',
         modem_levels: {us: {value: '40', units: 'dBmV'}, ds: {value: '0', units: 'dBmV'}},
-        optical_level: {value: '-2', units: 'dBm'}});
+        optical_level: {value: '-2', units: 'dBm'},
+        edfa_levels: {output: {value: '19.12345', units: 'dBm'}, input: {value: '-5', units: 'dBm'}}});
     `, page.context);
-    assert.equal(vm.runInContext('renderedRow.children.length', page.context), category === 'Modems' ? 4 : 3);
+    assert.equal(vm.runInContext('renderedRow.children.length', page.context), ['Modems', 'EDFA'].includes(category) ? 4 : 3);
     assert.equal(vm.runInContext('renderedRow.children.at(-1).className', page.context), 'device-favorite-cell');
     assert.equal(vm.runInContext('renderedRow.children[0].children.length', page.context), 1);
     assert.equal(vm.runInContext('renderedRow.children[0].children[0].children.at(-1).textContent', page.context),
@@ -509,6 +550,13 @@ test('every list has separate value cells and the favorite action remains last',
       assert.equal(vm.runInContext('renderedRow.children[1].dataset.label', page.context), 'US Level');
       assert.equal(vm.runInContext('renderedRow.children[2].dataset.label', page.context), 'DS Level');
       assert.equal(vm.runInContext('renderedRow.children[1].children[0].textContent', page.context), '40 dBmV');
+    }
+    if (category === 'EDFA') {
+      assert.equal(vm.runInContext('renderedRow.children[1].dataset.label', page.context), 'Optical output level');
+      assert.equal(vm.runInContext('renderedRow.children[2].dataset.mobileLabel', page.context), 'IN');
+      assert.equal(vm.runInContext('renderedRow.children[1].children[0].textContent', page.context), '19.12 dBm');
+      assert.equal(vm.runInContext('renderedRow.children[2].dataset.metricState', page.context), 'unrated');
+      assert.equal(vm.runInContext('renderedRow.dataset.levelState', page.context), 'unknown');
     }
   }
 });

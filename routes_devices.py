@@ -24,6 +24,7 @@ from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_fo
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, mac_ports_for, parse_excluded_names,
                             snapshot_for as switch_snapshot_for, traffic_for)
 from zabbix_service import (amplifier_list_optical_levels, category_filter,
+                             edfa_levels,
                              device_descriptions, host_rows,
                              modem_list_levels,
                              modem_channel_definitions, modem_overview_definitions,
@@ -272,6 +273,7 @@ async def devices_api(request: Request, category: str, q: str = "",
     visible = rows[start:start + per_page]
     try:
         host_ids = [row["id"] for row in visible]
+        edfa_values = {}
         if category == "Modems":
             modem_levels = await asyncio.to_thread(modem_list_levels, host_ids)
             optical_levels = {}
@@ -281,6 +283,9 @@ async def devices_api(request: Request, category: str, q: str = "",
             optical_levels = (all_optical_levels if all_optical_levels is not None else
                               await asyncio.to_thread(amplifier_list_optical_levels, host_ids))
             descriptions = await asyncio.to_thread(device_descriptions, host_ids)
+        elif category == "EDFA":
+            modem_levels, optical_levels, descriptions = {}, {}, {}
+            edfa_values = await asyncio.to_thread(edfa_levels, host_ids)
         else:
             modem_levels = {}
             optical_levels = {}
@@ -292,6 +297,7 @@ async def devices_api(request: Request, category: str, q: str = "",
         {**row, "device_description": descriptions.get(row["id"]),
          "modem_levels": modem_levels.get(row["id"]) if category == "Modems" else None,
          "optical_level": optical_levels.get(row["id"]) if category == "TV_Amplifires" else None,
+         "edfa_levels": edfa_values.get(row["id"]) if category == "EDFA" else None,
          "favorite": row["id"] in favorite_ids}
         for row in visible
     ]
@@ -322,6 +328,9 @@ async def device_summaries(request: Request, category: str, ids: str = ""):
             summaries = {host_id: {"optical_level": levels.get(host_id),
                                    "device_description": descriptions.get(host_id)}
                          for host_id in host_ids}
+        elif category == "EDFA":
+            levels = await asyncio.to_thread(edfa_levels, host_ids)
+            summaries = {host_id: {"edfa_levels": levels.get(host_id)} for host_id in host_ids}
         else:
             descriptions = await asyncio.to_thread(device_descriptions, host_ids)
             summaries = {host_id: {"device_description": descriptions.get(host_id)}
@@ -566,6 +575,43 @@ async def switch_cable_test(request: Request, category: str, host_id: str, if_in
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
     except (RuntimeError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/edfa-levels")
+async def edfa_current(request: Request, category: str, host_id: str):
+    require_user(request, api=True)
+    if category != "EDFA":
+        raise HTTPException(404)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        if not any(row["id"] == host_id for row in rows):
+            raise HTTPException(404)
+        levels = (await asyncio.to_thread(edfa_levels, [host_id])).get(host_id, {})
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc), "items": []}, status_code=503)
+    return JSONResponse({"items": [levels[key] for key in ("output", "input") if key in levels],
+                         "updated_at": int(time.time())}, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/edfa-levels/{item_id}/history")
+async def edfa_history(request: Request, category: str, host_id: str, item_id: str, period: str = "1h"):
+    require_user(request, api=True)
+    if category != "EDFA":
+        raise HTTPException(404)
+    if period not in HISTORY_PERIODS:
+        raise HTTPException(422, "Неверный период графика.")
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        if not any(row["id"] == host_id for row in rows):
+            raise HTTPException(404)
+        levels = (await asyncio.to_thread(edfa_levels, [host_id])).get(host_id, {})
+        item = next((entry for entry in levels.values() if entry["id"] == item_id), None)
+        if item is None:
+            raise HTTPException(404)
+        result = await numeric_history(item, period)
+    except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 

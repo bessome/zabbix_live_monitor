@@ -29,7 +29,7 @@
 <table id="switch-cable-results" hidden><thead><tr><th>Пара</th><th>Статус</th><th>Длина</th><th>Ошибка</th></tr></thead><tbody id="switch-cable-pairs"></tbody></table>
 </dialog>
 {% endif %}
-<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires') else '' }}">
+<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires', 'EDFA') else '' }}">
 <section class="panel ping-panel" id="ping-monitor" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <div class="ping-heading"><h2>Пинг устройства</h2><span id="ping-state" class="ping-state">Ожидание…</span></div>
 <div class="ping-chart"><canvas id="ping-canvas" role="img" aria-label="График времени отклика и потерь пакетов за последнюю минуту"></canvas>
@@ -43,9 +43,9 @@
 <div class="ping-legend"><span><i class="ping-line"></i>RTT</span><span><i class="ping-loss-mark"></i>Loss</span><span title="SNMP sysUpTime">Uptime <strong id="ping-uptime">n/a</strong></span></div>
 <p id="ping-message" aria-live="polite">Ожидание первого результата…</p>
 </section>
-{% if category == 'TV_Amplifires' %}
+{% if category in ('TV_Amplifires', 'EDFA') %}
 <section class="panel device-side-panel optical-panel" id="optical-monitor" aria-label="Оптическая мощность" data-category="{{ category }}" data-host-id="{{ device.id }}">
-<p id="optical-state" class="modem-state" aria-live="polite">Загрузка Optical input power…</p>
+<p id="optical-state" class="modem-state" aria-live="polite">Загрузка оптических уровней…</p>
 <div id="optical-channels" class="optical-channels"></div>
 </section>
 {% endif %}
@@ -109,7 +109,7 @@
 {% if category == 'Modems' %}<script src="/static/modem-status.js?v={{ asset_version }}" defer></script><script src="{{ url_for('static', path='/modem.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'Modems' %}<script src="{{ url_for('static', path='/modem-overview.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'Modems' %}<script src="{{ url_for('static', path='/victor.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
-{% if category == 'TV_Amplifires' %}<script src="{{ url_for('static', path='/optical.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
+{% if category in ('TV_Amplifires', 'EDFA') %}<script src="{{ url_for('static', path='/optical.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'Switches' %}<script src="{{ url_for('static', path='/switch.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 <script src="{{ url_for('static', path='/metric-history.js').path }}?v={{ asset_version }}" defer></script>
 {% endblock %}

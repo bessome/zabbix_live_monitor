@@ -222,6 +222,50 @@ def modem_list_levels(host_ids):
     return result
 
 
+def edfa_levels(host_ids):
+    """Latest enabled numeric EDFA items; keep source precision for the UI."""
+    if not host_ids:
+        return {}
+    names = {"optical output level": "output", "optical input level": "input"}
+    items = zabbix_call("item.get", {
+        "output": ["itemid", "hostid", "name", "status", "value_type", "units", "lastvalue", "lastclock"],
+        "hostids": host_ids, "filter": {"name": ["Optical output level", "Optical input level"]},
+    })
+    choices = {}
+    for item in items:
+        host_id = str(item.get("hostid"))
+        kind = names.get(str(item.get("name", "")).strip().casefold())
+        if host_id not in host_ids or not kind or str(item.get("status")) != "0" or str(item.get("value_type")) not in ("0", "3"):
+            continue
+        try:
+            clock = int(item.get("lastclock") or 0)
+        except (TypeError, ValueError):
+            clock = 0
+        value = None
+        try:
+            number = Decimal(str(item.get("lastvalue")))
+            if clock > 0 and number.is_finite():
+                value = str(number)
+        except InvalidOperation:
+            pass
+        rank = (-clock, str(item.get("itemid", "")))
+        state = "unknown"
+        if value is not None:
+            if kind == "output":
+                state = "critical" if number <= 20 else "warning" if number < Decimal("22.7") else "normal"
+            else:
+                state = "critical" if number < -1 else "normal"
+        key = (host_id, kind)
+        if key not in choices or rank < choices[key][0]:
+            choices[key] = (rank, {"id": str(item["itemid"]), "label": "Optical " + kind + " level",
+                                   "value": value, "raw_value": value, "state": state, "units": str(item.get("units") or ""),
+                                   "value_type": str(item["value_type"]), "lastclock": clock})
+    result = {host_id: {} for host_id in host_ids}
+    for (host_id, kind), (_, metric) in choices.items():
+        result[host_id][kind] = metric
+    return result
+
+
 def amplifier_list_optical_levels(host_ids, *, include_raw=False):
     """Read the current Optical input power item for each visible amplifier."""
     if not host_ids:

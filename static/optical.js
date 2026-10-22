@@ -4,7 +4,8 @@
   const list = document.getElementById("optical-channels");
   const state = document.getElementById("optical-state");
   const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
-    + "/" + encodeURIComponent(root.dataset.hostId) + "/optical-power";
+    + "/" + encodeURIComponent(root.dataset.hostId)
+    + (root.dataset.category === "EDFA" ? "/edfa-levels" : "/optical-power");
   const previousValues = new Map();
   let signature = "";
   let inFlight = false;
@@ -44,12 +45,16 @@
       const units = row.querySelector(".modem-units");
       const changed = previousValues.has(item.id)
         && previousValues.get(item.id) !== item.value && item.value != null;
-      number.textContent = item.value == null ? "n/a" : item.value;
-      units.textContent = item.value == null || !item.units ? "" : " " + item.units;
+      const valid = item.value != null && item.value !== "" && Number.isFinite(Number(item.value));
+      number.textContent = valid ? String(Number(Number(item.value).toFixed(2))) : "n/a";
+      units.textContent = !valid || !item.units ? "" : " " + item.units;
       number.classList.toggle("modem-value-changed", changed);
       previousValues.set(item.id, item.value);
       row.querySelector("strong").classList.toggle("optical-value-alert",
-        item.value != null && Number.isFinite(Number(item.value)) && Number(item.value) < -3.4);
+        valid && (root.dataset.category === "EDFA" ? item.state === "critical"
+          : Number(item.raw_value ?? item.value) < -3.4));
+      row.querySelector("strong").classList.toggle("optical-value-warning",
+        valid && root.dataset.category === "EDFA" && item.state === "warning");
     }
   }
 
@@ -59,6 +64,7 @@
       row.querySelector(".modem-number").classList.remove("modem-value-changed");
       row.querySelector(".modem-units").textContent = "";
       row.querySelector("strong").classList.remove("optical-value-alert");
+      row.querySelector("strong").classList.remove("optical-value-warning");
       previousValues.set(row.dataset.itemId, null);
     }
   }
@@ -75,11 +81,11 @@
       const data = await response.json();
       if (!response.ok) {
         if (data.items?.length) render(data.items);
-        throw new Error(data.error || "SNMP недоступен");
+        throw new Error(data.error || "Показатели недоступны");
       }
       render(data.items);
       state.textContent = data.items.length
-        ? "" : "Показатель Optical input power для этого устройства не найден.";
+        ? "" : "Оптические показатели для этого устройства не найдены в Zabbix.";
     } catch (error) {
       markUnavailable();
       state.textContent = error.message;

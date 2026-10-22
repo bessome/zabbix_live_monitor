@@ -2,6 +2,9 @@
 
 ## Numeric values and charts
 
+- EDFA shows separate `Optical output level` and `Optical input level` columns in lists and tree branches, and both readings beside the ping chart in its card. Read enabled numeric Zabbix items with those exact names; use their units and the existing numeric history. Missing readings stay `n/a`. Do not apply Amplifires alarm thresholds to EDFA without explicit EDFA thresholds.
+- EDFA thresholds use original values: Output <= 20 is critical (red), 20 < Output < 22.7 is warning (orange), Output >= 22.7 is normal; Input < -1 is critical (red), Input >= -1 is normal. Reuse the server-provided state in lists, trees, and cards. Color the entire row only when both readings are abnormal; use orange if either is a warning, and keep a critical cell red.
+
 - Apply this display rule to every existing and new numeric measurement throughout the app: at most two decimal places, with trailing fractional zeros removed (`-19.400000000000002` → `-19.4`, `12.00` → `12`, `1.236` → `1.24`). Display rounded negative zero as `0`.
 - Use the same formatting for lists, device cards, live readings, chart axes, tooltips, legends, overlays, and latest/min/max/average summaries. Keep units visible and preserve integer counters and status labels. Missing or non-finite readings must retain the appropriate `n/a` or `—` state, never become zero.
 - Round only for presentation. Preserve source values and precision for history, chart coordinates, rate calculations, aggregation, and alarm threshold comparisons. Do not round identifiers, MAC/IP addresses, dates, or timestamps as measurements.

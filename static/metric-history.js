@@ -275,7 +275,7 @@
     const row = event.target.closest(".optical-row");
     if (!row || !opticalList.contains(row)) return;
     openHistory(row.querySelector("span").textContent,
-      baseUrl + "/optical-power/" + encodeURIComponent(row.dataset.itemId) + "/history");
+      baseUrl + (root.dataset.category === "EDFA" ? "/edfa-levels/" : "/optical-power/") + encodeURIComponent(row.dataset.itemId) + "/history");
   });
   if (restartButton) restartButton.addEventListener("click", () => {
     if (!restartButton.dataset.itemId) return;
