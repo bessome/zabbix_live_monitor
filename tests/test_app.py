@@ -74,7 +74,7 @@ class AppTests(unittest.TestCase):
         self.assertNotIn("settings-menu", nav)
         self.assertNotIn(">Главная</a>", nav)
         links = re.findall(r'href="/devices/([^"]+)"', nav)
-        self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "VOIP", "Routers"])
+        self.assertEqual(links, ["TV_Amplifires", "EDFA", "Switches", "Modems", "VOIP", "Routers"])
         self.assertIn('href="/onu-ont"', nav)
 
     def test_static_assets_use_origin_relative_urls(self):
@@ -95,6 +95,21 @@ class AppTests(unittest.TestCase):
         self.assertNotIn('href="http://', devices_page.text)
         self.assertNotIn('src="http://', devices_page.text)
         self.assertEqual(self.client.get("/static/pagination.css").status_code, 200)
+
+    def test_edfa_section_and_basic_card(self):
+        self.login()
+        self.assertIn('data-category="EDFA"', self.client.get("/settings").text)
+        self.assertEqual(self.client.get("/devices/EDFA").status_code, 200)
+        device = {"id": "42", "name": "EDFA 42", "technical_name": "edfa-42",
+                  "address": "192.0.2.42"}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.device_descriptions", return_value={"42": "EDFA description"})):
+            page = self.client.get("/devices/EDFA/42")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="ping-monitor"', page.text)
+        self.assertIn("Device description</dt>", page.text)
+        self.assertIn("EDFA description", page.text)
+        self.assertNotIn('id="optical-monitor"', page.text)
 
     def test_onu_olt_item_search_and_history_are_scoped_to_group(self):
         self.assertEqual(self.client.get("/onu-ont", follow_redirects=False).status_code, 303)
@@ -834,7 +849,7 @@ class AppTests(unittest.TestCase):
         levels = {"42": {"value": "-3.41", "units": "dBm", "alert": True}}
         with (patch("routes_devices.host_rows", return_value=[amplifier]),
               patch("routes_devices.amplifier_list_optical_levels", return_value=levels) as read_levels,
-              patch("routes_devices.device_descriptions") as descriptions):
+              patch("routes_devices.device_descriptions", return_value={"42": "Amplifier description"}) as descriptions):
             response = self.client.get("/api/devices/TV_Amplifires")
             self.assertEqual(response.json()["devices"][0]["optical_level"], levels["42"])
             summary = self.client.get("/api/devices/TV_Amplifires/summaries?ids=42")
@@ -843,14 +858,15 @@ class AppTests(unittest.TestCase):
             self.assertIn("Optical input power</dt>", detail.text)
             self.assertIn("-3.41 dBm", detail.text)
             self.assertIn('class="device-level-alert-blink">-3.41 dBm', detail.text)
-            self.assertNotIn("Device description</dt>", detail.text)
+            self.assertIn("Device description</dt>", detail.text)
+            self.assertIn("Amplifier description", detail.text)
             self.assertIn('href="/static/ping.css?', detail.text)
             self.assertIn('src="/static/optical.js?', detail.text)
             levels["42"] = {"value": "-3.4", "units": "dBm", "alert": False}
             healthy_detail = self.client.get("/devices/TV_Amplifires/42")
             self.assertIn('class="">-3.4 dBm', healthy_detail.text)
             self.assertEqual(read_levels.call_count, 4)
-            descriptions.assert_not_called()
+            self.assertEqual(descriptions.call_count, 2)
 
     def test_modem_reboot_permissions_targets_and_settings(self):
         paths = ["/api/devices/Modems/42/modem-reboot",
@@ -1015,6 +1031,7 @@ class AppTests(unittest.TestCase):
                         "multiplier": "0.1", "units": "dBm", "value_type": "0"}]
         with (patch("routes_devices.host_rows", return_value=[device]),
               patch("routes_devices.amplifier_list_optical_levels", return_value={}),
+              patch("routes_devices.device_descriptions", return_value={}),
               patch("routes_devices.optical_power_definitions", return_value=definitions),
               patch("routes_devices.snmp_community_for", return_value="public"),
               patch("routes_devices.snmp_snapshot_for", new_callable=AsyncMock,

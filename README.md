@@ -1,6 +1,6 @@
 # Zabbix Live Monitoring
 
-Каркас приложения на FastAPI для мониторинга устройств Zabbix. В нём есть вход, один главный Admin, роли read и read + execute, пять меню устройств (TV_Amplifires, Switches, Modems, VOIP, Routers), поиск, страница устройства, настройки URL API и фильтров по группам или шаблонам, управление пользователями.
+Каркас приложения на FastAPI для мониторинга устройств Zabbix. В нём есть вход, один главный Admin, роли read и read + execute, шесть меню устройств (TV_Amplifires, EDFA, Switches, Modems, VOIP, Routers), поиск, страница устройства, настройки URL API и фильтров по группам или шаблонам, управление пользователями.
 
 `main.py` — точка входа для PyCharm и Uvicorn. Маршруты разделены между `routes_account.py`, `routes_devices.py`, `routes_cmts.py` и `routes_settings.py`; доступ к Zabbix находится в `zabbix_service.py`, пользователи и настройки SQLite — в `app_storage.py`, общие функции страниц — в `app_web.py`, конфигурация — в `app_config.py`.
 

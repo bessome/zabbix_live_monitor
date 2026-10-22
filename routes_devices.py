@@ -304,10 +304,9 @@ async def device_detail(request: Request, category: str, host_id: str):
     try:
         if category == "TV_Amplifires":
             optical_levels = await asyncio.to_thread(amplifier_list_optical_levels, [host_id])
-            descriptions = {}
         else:
             optical_levels = {}
-            descriptions = await asyncio.to_thread(device_descriptions, [host_id])
+        descriptions = await asyncio.to_thread(device_descriptions, [host_id])
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
     device = {**device, "device_description": descriptions.get(host_id),

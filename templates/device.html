@@ -100,7 +100,8 @@
 <dt>ID Zabbix</dt><dd>{{ device.id }}</dd>
 <dt>Техническое имя</dt><dd>{{ device.technical_name }}</dd>
 {% if category == 'TV_Amplifires' %}<dt>Optical input power</dt><dd class="{{ 'device-level-alert-blink' if device.optical_level and device.optical_level.alert else '' }}">{{ device.optical_level.value if device.optical_level else 'n/a' }}{% if device.optical_level and device.optical_level.units %} {{ device.optical_level.units }}{% endif %}</dd>
-{% else %}<dt>Device description</dt><dd class="device-detail-description">{{ device.device_description or "—" }}</dd>{% endif %}
+{% endif %}
+<dt>Device description</dt><dd class="device-detail-description">{{ device.device_description or "—" }}</dd>
 <dt>Адрес</dt><dd>{% if device_http_url %}<a href="{{ device_http_url }}" target="_blank" rel="noopener noreferrer" title="Открыть веб-интерфейс устройства">{{ device.address }}</a>{% else %}{{ device.address }}{% endif %}</dd>
 </dl></section>
 </div>

@@ -9,6 +9,8 @@
 
 ## Device card layout
 
+- Always show `Device description` in the "Устройство" block for every Zabbix device category, including TV_Amplifires and EDFA. Use `—` when it is missing. Additional values such as optical power must not replace the description in this block.
+
 - Use the modem card layout for every device type whenever a desktop card has measurements beside the ping chart: ping chart on the left, additional measurements on the right, and the "Устройство" details directly below the ping chart at the same width. Never reverse these columns for a particular device type.
 - Reuse `.device-monitor-grid` with `.ping-panel`, `.device-side-panel`, and `.device-details` in `templates/device.html` and `static/ping.css`. Put the ping panel before the measurements in document order. On narrow screens and in forced mobile mode, stack the chart, measurements, and details in that order.
 - Cards without measurements beside the chart (currently Switches, VOIP, and Routers) keep their existing full-width layout. If such a card gains a side panel, adopt the same shared layout; do not create a device-specific column order.
