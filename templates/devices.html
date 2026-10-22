@@ -439,7 +439,24 @@ function renderTree(devices) {
       if (child.devices.length) {
         const table = document.createElement("table");
         table.className = "device-table tree-device-table";
-        if (category === "TV_Amplifires") table.classList.add("amplifier-table");
+        if (category === "TV_Amplifires") {
+          table.classList.add("amplifier-table");
+          const head = document.createElement("thead");
+          const heading = document.createElement("tr");
+          for (const [by, label] of [["name", "Имя / адрес"], ["level", "Оптический уровень"]]) {
+            const cell = document.createElement("th");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "amplifier-sort-button";
+            button.dataset.amplifierSort = by;
+            button.textContent = label;
+            cell.appendChild(button);
+            bindAmplifierSortButton(button);
+            heading.appendChild(cell);
+          }
+          head.appendChild(heading);
+          table.appendChild(head);
+        }
         body = document.createElement("tbody");
         for (const device of child.devices) body.appendChild(deviceRow(device));
         table.appendChild(body);
@@ -510,24 +527,29 @@ async function refresh() {
   }
 }
 function goTo(page) { currentPage = page; refresh(); }
+function updateAmplifierSortHeader(button) {
+  const [by, direction] = amplifierSort.split(":");
+  button.closest("th").setAttribute("aria-sort", button.dataset.amplifierSort === by
+    ? (direction === "asc" ? "ascending" : "descending") : "none");
+}
+function bindAmplifierSortButton(button) {
+  updateAmplifierSortHeader(button);
+  button.addEventListener("click", () => {
+    const by = button.dataset.amplifierSort;
+    setAmplifierSort(by + (amplifierSort === by + ":asc" ? ":desc" : ":asc"));
+  });
+}
 function setAmplifierSort(value) {
   amplifierSort = value;
   document.getElementById("amplifier-sort").value = value;
-  document.querySelectorAll("[data-amplifier-sort]").forEach(button => {
-    const [by, direction] = value.split(":");
-    button.closest("th").setAttribute("aria-sort", button.dataset.amplifierSort === by
-      ? (direction === "asc" ? "ascending" : "descending") : "none");
-  });
+  document.querySelectorAll("[data-amplifier-sort]").forEach(updateAmplifierSortHeader);
   currentPage = 1;
   refresh();
 }
 if (category === "TV_Amplifires") {
   document.getElementById("amplifier-sort").value = amplifierSort;
   document.getElementById("amplifier-sort").addEventListener("change", event => setAmplifierSort(event.target.value));
-  document.querySelectorAll("[data-amplifier-sort]").forEach(button => button.addEventListener("click", () => {
-    const by = button.dataset.amplifierSort;
-    setAmplifierSort(by + (amplifierSort === by + ":asc" ? ":desc" : ":asc"));
-  }));
+  document.querySelectorAll("[data-amplifier-sort]").forEach(bindAmplifierSortButton);
 }
 first.addEventListener("click", () => goTo(1));
 previous.addEventListener("click", () => goTo(currentPage - 1));

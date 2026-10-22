@@ -78,6 +78,50 @@ test('amplifier level column rounds presentation and keeps missing values neutra
   }
 });
 
+test('tree group tables expose working amplifier sort headers', async () => {
+  const page = loadPage(new Map(), 'TV_Amplifires');
+  await flush();
+  vm.runInContext(`
+    const created = [];
+    function treeElement(tag) {
+      const node = {
+        tag, dataset: {}, children: [], attributes: {}, listeners: {},
+        classList: {add() {}},
+        addEventListener(event, handler) { this.listeners[event] = handler; },
+        appendChild(child) { child.parent = this; this.children.push(child); },
+        append(...children) { children.forEach(child => this.appendChild(child)); },
+        setAttribute(key, value) { this.attributes[key] = value; },
+        closest(tag) { return this.parent?.tag === tag ? this.parent : this.parent?.closest(tag); }
+      };
+      created.push(node);
+      return node;
+    }
+    document.createElement = treeElement;
+    document.createDocumentFragment = () => treeElement('fragment');
+    document.querySelectorAll = selector => selector === '[data-amplifier-sort]'
+      ? created.filter(node => node.dataset.amplifierSort) : [];
+    deviceRow = device => ({dataset: {hostId: device.id}});
+    view = 'tree';
+    openGroups.add('City/Street');
+    renderTree([{id: '2', groups: ['City/Street']}, {id: '1', groups: ['City/Street']}]);
+    var levelButton = created.find(node => node.dataset.amplifierSort === 'level');
+    var nameButton = created.find(node => node.dataset.amplifierSort === 'name');
+  `, page.context);
+  assert.equal(vm.runInContext("nameButton.closest('th').attributes['aria-sort']", page.context), 'ascending');
+  vm.runInContext('levelButton.listeners.click()', page.context);
+  await flush();
+  let params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
+  assert.equal(params.get('view'), 'tree');
+  assert.equal(params.get('sort_by'), 'level');
+  assert.equal(params.get('sort_dir'), 'asc');
+  assert.equal(vm.runInContext("levelButton.closest('th').attributes['aria-sort']", page.context), 'ascending');
+  vm.runInContext('levelButton.listeners.click()', page.context);
+  await flush();
+  params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
+  assert.equal(params.get('sort_dir'), 'desc');
+  assert.equal(vm.runInContext("openGroups.has('City/Street')", page.context), true);
+});
+
 test('returning from monitoring restores the query, page and page size', async () => {
   const storage = new Map();
   const original = loadPage(storage);
