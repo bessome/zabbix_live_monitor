@@ -15,38 +15,39 @@ html[data-theme="dark"] .device-level-alert-blink{animation-name:device-level-bl
 html[data-theme="dark"] .device-view-options{border-color:#536374}html[data-theme="dark"] .device-view-options button{background:transparent;color:#d9e8f4}html[data-theme="dark"] .device-view-options button[aria-pressed="true"]{background:#2677b2;color:#fff}html[data-theme="dark"] .device-tree-group,html[data-theme="dark"] .device-tree,html[data-theme="dark"] .device-tree-device{border-color:#354558}html[data-theme="dark"] .device-tree-group summary:hover{background:#263e56}html[data-theme="dark"] .device-tree-count{background:#354c61;color:#d5e1eb}html[data-theme="dark"] .device-tree-address{color:#aab9c6}
 @media(max-width:720px){.device-view-options{grid-column:1/-1;justify-self:start;margin-bottom:0}.device-tree-group .device-tree-group{margin-left:6px}.device-tree-children{padding-left:2px}}
 .device-detail-description{white-space:pre-wrap}
-.amplifier-table{table-layout:fixed;border-collapse:separate;border-spacing:0 2px}
-.amplifier-table th:first-child{width:calc(74% - 54px)}
-.amplifier-table th:nth-child(2){width:26%}
-.amplifier-table td{padding:7px 12px;border-bottom:0;vertical-align:middle}
-.amplifier-table tr[data-level-state="normal"] td{background:#269e35;color:#fff}
-.amplifier-table tr[data-level-state="critical"] td{background:#a32923;color:#fff}
-.amplifier-table tr[data-level-state="unknown"] td{background:#e8edf2;color:#536171}
-.amplifier-table td a{color:inherit}
-.amplifier-table .device-name-row{gap:7px;flex-wrap:wrap}
-.amplifier-table .device-description{display:block;margin:0;padding:0;background:transparent;color:inherit;font-size:14px;font-weight:600;white-space:normal;overflow:visible;max-width:none}
+.device-metric-table{table-layout:fixed;border-collapse:separate;border-spacing:0 2px}
+.device-metric-table .device-metric-heading{width:140px}
+.device-metric-table .device-text-heading{width:44%}
+.device-metric-table td{padding:7px 12px;vertical-align:middle}
+.device-metric-table .device-description{display:block;max-width:none;white-space:normal;overflow-wrap:anywhere;overflow:visible;color:inherit;font-size:14px;line-height:1.35}
+.device-metric-table .device-metric-cell:not(.device-text-cell){font-weight:600}
+.device-metric-table .device-metric-cell[data-metric-state="normal"]{background:#269e35;color:#fff}
+.device-metric-table .device-metric-cell[data-metric-state="critical"]{background:#a32923;color:#fff;animation:list-metric-alert 1s ease-in-out infinite alternate}
+.device-metric-table tr[data-level-state="critical"] td{background:#a32923;color:#fff}
+.device-metric-table td a{color:inherit}
+.device-metric-table .device-name-row{gap:7px;flex-wrap:wrap}
+@keyframes list-metric-alert{from{background:#a32923}to{background:#7e2225}}
 .amplifier-sort-button{background:transparent;color:inherit;padding:3px 0;text-align:left;font-weight:600}
 .amplifier-sort-button:hover{background:transparent;color:#17609d}
-.amplifier-table th[aria-sort="ascending"] button::after{content:" ↑"}
-.amplifier-table th[aria-sort="descending"] button::after{content:" ↓"}
-html[data-theme="dark"] .amplifier-table tr[data-level-state="normal"] td{background:#246e39;color:#ecfff0}
-html[data-theme="dark"] .amplifier-table tr[data-level-state="critical"] td{background:#7e3039;color:#fff0ee}
-html[data-theme="dark"] .amplifier-table tr[data-level-state="unknown"] td{background:#293b4d;color:#c4d0dc}
+.device-metric-table th[aria-sort="ascending"] button::after{content:" ↑"}
+.device-metric-table th[aria-sort="descending"] button::after{content:" ↓"}
+html[data-theme="dark"] .device-metric-table .device-metric-cell[data-metric-state="normal"]{background:#246e39;color:#ecfff0}
+html[data-theme="dark"] .device-metric-table .device-metric-cell[data-metric-state="critical"],
+html[data-theme="dark"] .device-metric-table tr[data-level-state="critical"] td{background:#7e3039;color:#fff0ee}
 html[data-theme="dark"] .amplifier-sort-button{background:transparent;color:#d9e8f4}
-html[data-theme="dark"] .amplifier-table .device-description,
-html[data-theme="dark"] .amplifier-table td a{color:inherit}
+html[data-theme="dark"] .device-metric-table .device-description,
+html[data-theme="dark"] .device-metric-table td a{color:inherit}
+@media(prefers-reduced-motion:reduce){.device-metric-table .device-metric-cell[data-metric-state="critical"]{animation:none}}
 @media(max-width:720px){
-  .amplifier-table td{padding:7px 2px}
-  .amplifier-table tr[data-level-state] td{background:transparent;color:inherit}
-  .amplifier-table tr[data-level-state="normal"]{background:#269e35;color:#fff}
-  .amplifier-table tr[data-level-state="critical"]{background:#a32923;color:#fff}
-  .amplifier-table tr[data-level-state="unknown"]{background:#e8edf2;color:#536171}
-  .device-table.amplifier-table td[data-label]{grid-template-columns:max-content minmax(0,1fr);column-gap:14px}
-  .amplifier-table td:not(:first-child)::before{color:inherit;white-space:nowrap}
-  html[data-theme="dark"] .amplifier-table tr[data-level-state] td{background:transparent;color:inherit}
-  html[data-theme="dark"] .amplifier-table tr[data-level-state="normal"]{background:#246e39;color:#ecfff0}
-  html[data-theme="dark"] .amplifier-table tr[data-level-state="critical"]{background:#7e3039;color:#fff0ee}
-  html[data-theme="dark"] .amplifier-table tr[data-level-state="unknown"]{background:#293b4d;color:#c4d0dc}
+  .device-metric-table td{padding:7px 2px}
+  .device-table.device-metric-table td[data-label]{grid-template-columns:max-content minmax(0,1fr);column-gap:14px}
+  .device-metric-table td:not(:first-child)::before{color:inherit;white-space:nowrap}
+  .device-metric-table tr[data-level-state="critical"]{background:#a32923;color:#fff}
+  html[data-theme="dark"] .device-metric-table tr[data-level-state="critical"]{background:#7e3039;color:#fff0ee}
+  .tree-device-table.device-metric-table thead{display:block;margin-bottom:6px}
+  .tree-device-table.device-metric-table thead tr{display:flex;gap:8px;border:0;background:transparent;box-shadow:none;margin:0;padding:0}
+  .tree-device-table.device-metric-table thead th{display:block;width:auto;padding:0;border:0;background:transparent;font-size:12px}
+  .tree-device-table.device-metric-table thead .device-favorite-cell{display:none}
 }
 .list-monitor-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0 12px;font-size:13px;color:var(--muted,#687785)}
 .list-monitor-controls button{font-size:12px;padding:5px 9px}

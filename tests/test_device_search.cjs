@@ -45,6 +45,13 @@ function loadPage(storage, category = 'VOIP', user = '1', reply = null) {
   return {context, element, requests, intervals};
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
+function installMetricRow(page) {
+  vm.runInContext(`
+    var metricRow = {dataset: {}, metricCells: new Map(metricColumns.map(column => [column.key, {
+      cell: {dataset: {}}, value: {removeAttribute() {}}
+    }]))};
+  `, page.context);
+}
 
 test('amplifier sort applies to the whole API query and survives navigation', async () => {
   const storage = new Map();
@@ -65,31 +72,33 @@ test('amplifier sort applies to the whole API query and survives navigation', as
 test('amplifier level column rounds presentation and keeps missing values neutral', async () => {
   const page = loadPage(new Map(), 'TV_Amplifires');
   await flush();
-  vm.runInContext(`
-    const level = {classList: {add() {}}, removeAttribute() {}, amplifierRow: {dataset: {}}};
-  `, page.context);
+  installMetricRow(page);
   for (const [value, text, state] of [[-2.90001, '-2.9 dBm', 'normal'],
     [-3.40001, '-3.4 dBm', 'critical'], [-0.00001, '0 dBm', 'normal'],
     [null, 'n/a', 'unknown'], ['', 'n/a', 'unknown'], ['Infinity', 'n/a', 'unknown']]) {
     page.context.testValue = value;
-    vm.runInContext(`updateDeviceSummary(level, {}, {optical_level: {value: testValue, units: 'dBm'}})`, page.context);
-    assert.equal(vm.runInContext('level.textContent', page.context), text);
-    assert.equal(vm.runInContext('level.amplifierRow.dataset.levelState', page.context), state);
+    vm.runInContext(`updateRowSummary(metricRow, {}, {optical_level: {value: testValue, units: 'dBm'}})`, page.context);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('optical').value.textContent", page.context), text);
+    assert.equal(vm.runInContext('metricRow.dataset.levelState', page.context), state);
   }
 });
 
-test('tree group tables expose working amplifier sort headers', async () => {
-  const page = loadPage(new Map(), 'TV_Amplifires');
+test('tree sorting changes only the branch whose header was clicked', async () => {
+  const storage = new Map();
+  const page = loadPage(storage, 'TV_Amplifires');
   await flush();
+  const requestCount = page.requests.length;
   vm.runInContext(`
     const created = [];
     function treeElement(tag) {
       const node = {
         tag, dataset: {}, children: [], attributes: {}, listeners: {},
+        get rows() { return this.children; },
         classList: {add() {}},
         addEventListener(event, handler) { this.listeners[event] = handler; },
         appendChild(child) { child.parent = this; this.children.push(child); },
         append(...children) { children.forEach(child => this.appendChild(child)); },
+        replaceChildren(...children) { this.children = []; this.append(...children); },
         setAttribute(key, value) { this.attributes[key] = value; },
         closest(tag) { return this.parent?.tag === tag ? this.parent : this.parent?.closest(tag); }
       };
@@ -101,25 +110,35 @@ test('tree group tables expose working amplifier sort headers', async () => {
     document.querySelectorAll = selector => selector === '[data-amplifier-sort]'
       ? created.filter(node => node.dataset.amplifierSort) : [];
     deviceRow = device => ({dataset: {hostId: device.id}});
+    for (const [id, value] of [['1', -1], ['2', -5], ['3', -2], ['4', -8]]) {
+      summaryCache.set(id, {at: Date.now(), summary: {optical_level: {value, units: 'dBm'}}});
+    }
     view = 'tree';
     openGroups.add('City/Street');
-    renderTree([{id: '2', groups: ['City/Street']}, {id: '1', groups: ['City/Street']}]);
-    var levelButton = created.find(node => node.dataset.amplifierSort === 'level');
-    var nameButton = created.find(node => node.dataset.amplifierSort === 'name');
+    renderTree([
+      {id: '2', name: 'B', groups: ['City/Street']}, {id: '1', name: 'A', groups: ['City/Street']},
+      {id: '4', name: 'D', groups: ['City/Other']}, {id: '3', name: 'C', groups: ['City/Other']}
+    ]);
+    var levelButton = created.find(node => node.dataset.amplifierSort === 'level' && node.sortBranch === 'City/Street');
+    var otherButton = created.find(node => node.dataset.amplifierSort === 'level' && node.sortBranch === 'City/Other');
+    var selectedBody = levelButton.closest('table').children.find(node => node.tag === 'tbody');
+    var otherBody = otherButton.closest('table').children.find(node => node.tag === 'tbody');
   `, page.context);
-  assert.equal(vm.runInContext("nameButton.closest('th').attributes['aria-sort']", page.context), 'ascending');
   vm.runInContext('levelButton.listeners.click()', page.context);
   await flush();
-  let params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
-  assert.equal(params.get('view'), 'tree');
-  assert.equal(params.get('sort_by'), 'level');
-  assert.equal(params.get('sort_dir'), 'asc');
+  assert.equal(vm.runInContext("selectedBody.children.map(node => node.dataset.hostId).join(',')", page.context), '2,1');
+  assert.equal(vm.runInContext("otherBody.children.map(node => node.dataset.hostId).join(',')", page.context), '3,4');
   assert.equal(vm.runInContext("levelButton.closest('th').attributes['aria-sort']", page.context), 'ascending');
   vm.runInContext('levelButton.listeners.click()', page.context);
   await flush();
-  params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
-  assert.equal(params.get('sort_dir'), 'desc');
+  assert.equal(vm.runInContext("selectedBody.children.map(node => node.dataset.hostId).join(',')", page.context), '1,2');
+  assert.equal(vm.runInContext("otherBody.children.map(node => node.dataset.hostId).join(',')", page.context), '3,4');
+  assert.equal(vm.runInContext("branchSorts.has('City/Other')", page.context), false);
+  assert.equal(vm.runInContext('amplifierSort', page.context), 'name:asc');
   assert.equal(vm.runInContext("openGroups.has('City/Street')", page.context), true);
+  assert.equal(page.requests.length, requestCount);
+  const saved = JSON.parse(storage.get('zabbix-device-search:1:TV_Amplifires'));
+  assert.deepEqual(saved.branchSorts, [['City/Street', 'level:desc']]);
 });
 
 test('returning from monitoring restores the query, page and page size', async () => {
@@ -407,49 +426,88 @@ test('parameters blink on each successful SNMP reply, independently of ping and 
     monitoredIds.add('1');
     let flashes = 0;
     let renders = 0;
-    updateDeviceSummary = () => { renders++; };
-    const description = {animate() { flashes++; return {cancel() {}}; }};
-    const testRow = {dataset: {hostId: '1'}, querySelector() { return description; }};
+    updateRowSummary = () => { renders++; };
+    const value = {animate() { flashes++; return {cancel() {}}; }};
+    const testRow = {dataset: {hostId: '1'}, metricCells: new Map([['us', {value}], ['ds', {value}]])};
     liveValues.set('1', {summary: {modem_levels: {us: {value: '40'}}}, metricsUpdated: true});
     paintLiveRow(testRow, false, true);
     paintLiveRow(testRow);
   `, page.context);
-  assert.equal(vm.runInContext('flashes', page.context), 1);
+  assert.equal(vm.runInContext('flashes', page.context), 2);
   assert.equal(vm.runInContext('renders', page.context), 1);
   vm.runInContext(`
     liveValues.set('1', {summary: {modem_levels: {us: {value: '40'}}}, metricsUpdated: true});
     paintLiveRow(testRow, false, true);
   `, page.context);
-  assert.equal(vm.runInContext('flashes', page.context), 2);
+  assert.equal(vm.runInContext('flashes', page.context), 4);
   vm.runInContext(`
     liveValues.set('1', {summary: null, metricsUpdated: false});
     paintLiveRow(testRow, false, true);
   `, page.context);
-  assert.equal(vm.runInContext('flashes', page.context), 2);
+  assert.equal(vm.runInContext('flashes', page.context), 4);
 });
 
 test('missing, empty and invalid SNMP values render as n/a without units', async () => {
   for (const category of ['Modems', 'TV_Amplifires']) {
     const page = loadPage(new Map(), category);
     await flush();
-    vm.runInContext(`
-      document.createElement = () => ({classList: {add() {}}});
-      const description = {
-        childNodes: [], classList: {add() {}}, removeAttribute() {},
-        replaceChildren() { this.childNodes = []; }, append(text) { this.childNodes.push(text); },
-        appendChild(child) { this.childNodes.push(child); }
-      };
-    `, page.context);
+    installMetricRow(page);
     for (const value of [null, '', 'NaN']) {
       page.context.emptyValue = value;
       vm.runInContext(`
         var metric = {value: emptyValue, units: 'dBmV'};
-        updateDeviceSummary(description, {}, {modem_levels: {us: metric, ds: metric}, optical_level: metric});
+        updateRowSummary(metricRow, {}, {modem_levels: {us: metric, ds: metric}, optical_level: metric});
       `, page.context);
-      const rendered = vm.runInContext(category === 'Modems'
-        ? 'description.childNodes.map(child => typeof child === "string" ? child : child.textContent).join("")'
-        : 'description.textContent', page.context);
-      assert.equal(rendered, category === 'Modems' ? 'US: n/a · DS: n/a' : 'n/a');
+      for (const text of vm.runInContext('[...metricRow.metricCells.values()].map(entry => entry.value.textContent)', page.context)) {
+        assert.equal(text, 'n/a');
+      }
+      assert.equal(vm.runInContext('metricRow.dataset.levelState', page.context), 'unknown');
+    }
+  }
+});
+
+test('only all abnormal numeric columns make the entire row abnormal', async () => {
+  const page = loadPage(new Map(), 'Modems');
+  await flush();
+  installMetricRow(page);
+  for (const [us, ds, rowState, usState, dsState] of [
+    [40, 20, 'mixed', 'normal', 'critical'], [60, 20, 'critical', 'critical', 'critical'],
+    [null, 20, 'mixed', 'unknown', 'critical'], [40, 0, 'normal', 'normal', 'normal'],
+    [null, null, 'unknown', 'unknown', 'unknown']]) {
+    page.context.testSummary = {modem_levels: {us: {value: us}, ds: {value: ds}}};
+    vm.runInContext('updateRowSummary(metricRow, {}, testSummary)', page.context);
+    assert.equal(vm.runInContext('metricRow.dataset.levelState', page.context), rowState);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('us').cell.dataset.metricState", page.context), usState);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('ds').cell.dataset.metricState", page.context), dsState);
+  }
+  page.context.testSummary = {modem_levels: {us: {value: 20, alert: true}, ds: {value: 0}}};
+  vm.runInContext('updateRowSummary(metricRow, {}, testSummary)', page.context);
+  assert.equal(vm.runInContext("metricRow.metricCells.get('us').cell.dataset.metricState", page.context), 'critical');
+});
+test('every list has separate value cells and the favorite action remains last', async () => {
+  for (const category of ['Modems', 'TV_Amplifires', 'Switches', 'EDFA', 'VOIP', 'Routers']) {
+    const page = loadPage(new Map(), category);
+    await flush();
+    vm.runInContext(`
+      document.createElement = tag => ({
+        tag, dataset: {}, children: [], classList: {add() {}},
+        setAttribute() {}, getAttribute() { return ''; }, removeAttribute() {}, addEventListener() {},
+        appendChild(child) { this.children.push(child); },
+        append(...children) { this.children.push(...children); }
+      });
+      var renderedRow = deviceRow({id: '42', name: 'Device', display_name: 'Device - 192.0.2.42',
+        address: '192.0.2.42', device_description: 'Description',
+        modem_levels: {us: {value: '40', units: 'dBmV'}, ds: {value: '0', units: 'dBmV'}},
+        optical_level: {value: '-2', units: 'dBm'}});
+    `, page.context);
+    assert.equal(vm.runInContext('renderedRow.children.length', page.context), category === 'Modems' ? 4 : 3);
+    assert.equal(vm.runInContext('renderedRow.children.at(-1).className', page.context), 'device-favorite-cell');
+    assert.equal(vm.runInContext('renderedRow.children[0].children.length', page.context), 1);
+    assert.equal(vm.runInContext('renderedRow.children[0].children[0].children.at(-1).textContent', page.context), 'Device - 192.0.2.42');
+    if (category === 'Modems') {
+      assert.equal(vm.runInContext('renderedRow.children[1].dataset.label', page.context), 'US Level');
+      assert.equal(vm.runInContext('renderedRow.children[2].dataset.label', page.context), 'DS Level');
+      assert.equal(vm.runInContext('renderedRow.children[1].children[0].textContent', page.context), '40 dBmV');
     }
   }
 });

@@ -317,7 +317,7 @@ async def device_summaries(request: Request, category: str, ids: str = ""):
             summaries = {host_id: {"modem_levels": levels.get(host_id)}
                          for host_id in host_ids}
         elif category == "TV_Amplifires":
-            levels = await asyncio.to_thread(amplifier_list_optical_levels, host_ids)
+            levels = await asyncio.to_thread(amplifier_list_optical_levels, host_ids, include_raw=True)
             summaries = {host_id: {"optical_level": levels.get(host_id)}
                          for host_id in host_ids}
         else:

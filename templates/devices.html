@@ -6,12 +6,12 @@
 <div class="device-toolbar">
 <label><span class="toolbar-label-full">Поиск устройства</span><span class="toolbar-label-short">Поиск</span><input id="search" type="search" placeholder="Имя, техническое имя или адрес" autocomplete="off"></label>
 <label id="page-size-label"><span class="toolbar-label-full">Строк на странице</span><span class="toolbar-label-short">Строк</span><select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="250">250</option></select></label>
-{% if category == 'TV_Amplifires' %}<label>Сортировка<select id="amplifier-sort"><option value="name:asc">Имя: А → Я</option><option value="name:desc">Имя: Я → А</option><option value="level:asc">Уровень: по возрастанию</option><option value="level:desc">Уровень: по убыванию</option></select></label>{% endif %}
+{% if category == 'TV_Amplifires' %}<label id="amplifier-sort-label">Сортировка<select id="amplifier-sort"><option value="name:asc">Имя: А → Я</option><option value="name:desc">Имя: Я → А</option><option value="level:asc">Уровень: по возрастанию</option><option value="level:desc">Уровень: по убыванию</option></select></label>{% endif %}
 <div class="device-view-options" role="group" aria-label="Вид списка устройств"><button type="button" data-device-view="list" aria-pressed="true">Список</button><button type="button" data-device-view="tree" aria-pressed="false">Дерево</button></div>
 </div>
 <p id="status" aria-live="polite"></p>
 <div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button><label id="monitored-only-label" class="monitored-only-label" hidden><input id="monitored-only" type="checkbox">Опрашиваемые</label></div>
-<div class="table-wrap"><table class="device-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Опт. уровень</button></th>{% else %}<th>Устройство</th>{% endif %}<th class="device-favorite-cell" aria-label="Избранное" title="Избранное">☆</th></tr></thead>
+<div class="table-wrap"><table class="device-table device-metric-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th class="device-metric-heading"><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Опт. уровень</button></th>{% elif category == 'Modems' %}<th>Устройство</th><th class="device-metric-heading">US Level</th><th class="device-metric-heading">DS Level</th>{% else %}<th>Устройство</th><th class="device-text-heading">Описание</th>{% endif %}<th class="device-favorite-cell" aria-label="Избранное" title="Избранное">☆</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
 <div class="pagination" aria-label="Навигация по страницам">
@@ -41,6 +41,12 @@
 <script>
 const category = document.getElementById("device-list").dataset.category;
 const rows = document.getElementById("rows");
+// One definition per visible value; reuse for list rows and every tree branch.
+const metricColumns = category === "Modems"
+  ? [{key: "us", label: "US Level", path: ["modem_levels", "us"], min: 20, max: 52},
+     {key: "ds", label: "DS Level", path: ["modem_levels", "ds"], min: -15, max: 18}]
+  : category === "TV_Amplifires" ? [{key: "optical", label: "Опт. уровень", path: ["optical_level"], min: -3.4, max: Infinity}]
+  : [{key: "description", label: "Описание", path: ["device_description"], text: true}];
 const status = document.getElementById("status");
 const search = document.getElementById("search");
 const monitoredOnly = document.getElementById("monitored-only");
@@ -61,6 +67,7 @@ let view = "list";
 let amplifierSort = "name:asc";
 try { if (localStorage.getItem(viewStorageKey) === "tree") view = "tree"; } catch (_) {}
 const openGroups = new Set();
+const branchSorts = new Map();
 const displayTime = new Intl.DateTimeFormat("en-GB", {
   timeZone: document.documentElement.dataset.timezone,
   hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
@@ -77,6 +84,12 @@ try {
   const saved = JSON.parse(sessionStorage.getItem(searchStorageKey));
   if (saved && typeof saved === "object") {
     if (["name:asc", "name:desc", "level:asc", "level:desc"].includes(saved.amplifierSort)) amplifierSort = saved.amplifierSort;
+    if (Array.isArray(saved.branchSorts)) {
+      for (const entry of saved.branchSorts) {
+        if (Array.isArray(entry) && typeof entry[0] === "string" && typeof entry[1] === "string"
+          && /^(name|level|optical|us|ds|description):(asc|desc)$/.test(entry[1])) branchSorts.set(entry[0], entry[1]);
+      }
+    }
     if (typeof saved.query === "string") search.value = saved.query;
     if (["25", "50", "100", "250"].includes(saved.pageSize)) pageSize.value = saved.pageSize;
     if (Number.isSafeInteger(saved.page) && saved.page > 0) currentPage = saved.page;
@@ -90,7 +103,7 @@ function saveSearch() {
   try {
     sessionStorage.setItem(searchStorageKey, JSON.stringify({
       query: search.value, page: currentPage, pageSize: pageSize.value,
-      view, openGroups: [...openGroups], amplifierSort
+      view, openGroups: [...openGroups], amplifierSort, branchSorts: [...branchSorts]
     }));
   } catch (_) {}
 }
@@ -135,19 +148,23 @@ function paintLiveRow(row, pulse = false, pulseMetrics = false) {
       indicator.classList.add("monitor-pulse");
     }
   }
-  const description = row.querySelector(".device-description");
+
   if (!["Modems", "TV_Amplifires"].includes(category)) return;
   if ("summary" in live && row.liveSummary !== live.summary) {
-    updateDeviceSummary(description, {id}, live.summary || {});
+    updateRowSummary(row, {id}, live.summary || {});
     row.liveSummary = live.summary;
   }
   if (pulseMetrics && live.metricsUpdated && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    row.liveSummaryAnimation?.cancel();
-    row.liveSummaryAnimation = description.animate([{opacity: 0.3}, {opacity: 1}], {duration: 650, easing: "ease-out"});
+    row.liveSummaryAnimations?.forEach(animation => animation.cancel());
+    row.liveSummaryAnimations = [...row.metricCells.values()].map(({value}) => value.animate([{opacity: 0.3}, {opacity: 1}], {duration: 650, easing: "ease-out"}));
   }
 }
 function paintLiveRows(pulse = false, pulseMetrics = false) {
   document.querySelectorAll("#device-list tr[data-host-id]").forEach(row => paintLiveRow(row, pulse, pulseMetrics));
+  if (pulseMetrics) tree.querySelectorAll(".device-tree-group[open]").forEach(group => {
+    const sort = branchSorts.get(group.branchPath);
+    if (sort && !sort.startsWith("name:")) group.renderDevices();
+  });
 }
 function summaryFromSnmp(data) {
   const items = data.items || [];
@@ -264,46 +281,34 @@ function availabilityIndicator(value) {
   }
   return indicator;
 }
-function updateDeviceSummary(description, device, summary) {
-  description.className = "device-description";
-  description.removeAttribute("title");
-  if (!summary) {
-    description.textContent = "Загрузка…";
-    return;
-  }
-  if (category === "Modems") {
-    description.classList.add("modem-level-summary");
-    const levels = summary.modem_levels || {};
-    const levelText = metric => metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value))
-      ? metric.value + (metric.units ? " " + metric.units : "") : "n/a";
-    description.replaceChildren();
-    for (const [kind, label, min, max] of [["us", "US", 20, 52], ["ds", "DS", -15, 18]]) {
-      if (description.childNodes.length) description.append(" · ");
-      const metric = levels[kind];
-      const part = document.createElement("span");
-      part.textContent = label + ": " + levelText(metric);
-      const value = metric?.value == null ? NaN : Number(metric.value);
-      if (metric?.alert ?? (Number.isFinite(value) && (value < min || value > max))) {
-        part.className = "device-level-alert-blink";
-        part.title = label + " Level вне диапазона " + min + "…" + max;
-      }
-      description.appendChild(part);
+function listColumnValue(summary, column) {
+  return column.path.reduce((data, key) => data?.[key], summary);
+}
+function updateRowSummary(row, device, summary) {
+  const states = [];
+  for (const column of metricColumns) {
+    const {cell, value} = row.metricCells.get(column.key);
+    value.className = "device-description";
+    value.removeAttribute("title");
+    const metric = listColumnValue(summary, column);
+    if (column.text) {
+      value.textContent = summary ? (metric || "—") : "Загрузка…";
+      cell.dataset.metricState = "text";
+      continue;
     }
-    description.title = description.textContent;
-  } else if (category === "TV_Amplifires") {
-    description.classList.add("modem-level-summary");
-    const metric = summary.optical_level;
-    description.textContent = (metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value))
-        ? Number(Number(metric.value).toFixed(2)).toString() + (metric.units ? " " + metric.units : "") : "n/a");
-    const value = metric?.value == null ? NaN : Number(metric.value);
-    const alert = metric?.alert ?? (Number.isFinite(value) && value < -3.4);
-    if (alert)
-      description.classList.add("device-level-alert-blink");
-    if (description.amplifierRow) description.amplifierRow.dataset.levelState =
-      metric?.value != null && metric.value !== "" && Number.isFinite(value) ? (alert ? "critical" : "normal") : "unknown";
-  } else {
-    description.textContent = "Описание: " + (summary.device_description || "—");
+    const valid = metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value));
+    const numeric = valid ? Number(metric.raw_value ?? metric.value) : NaN;
+    const alert = valid && (metric.alert ?? (numeric < column.min || numeric > column.max));
+    const state = valid ? (alert ? "critical" : "normal") : "unknown";
+    value.textContent = !summary ? "Загрузка…" : valid
+      ? Number(Number(metric.value).toFixed(2)).toString() + (metric.units ? " " + metric.units : "") : "n/a";
+    if (alert) value.title = column.label + " вне нормы";
+    cell.dataset.metricState = state;
+    states.push(state);
   }
+  row.dataset.levelState = states.length && states.every(state => state === "critical") ? "critical"
+    : states.length && states.every(state => state === "normal") ? "normal"
+    : states.includes("critical") ? "mixed" : "unknown";
 }
 function deviceRow(device) {
   const tr = document.createElement("tr");
@@ -323,19 +328,20 @@ function deviceRow(device) {
   nameRow.appendChild(select);
   nameRow.append(availabilityIndicator(device.availability), deviceLink(device));
   nameCell.appendChild(nameRow);
-  const description = document.createElement("small");
-  if (category === "TV_Amplifires") description.amplifierRow = tr;
-  updateDeviceSummary(description, device,
+  tr.appendChild(nameCell);
+  tr.metricCells = new Map();
+  for (const column of metricColumns) {
+    const metricCell = document.createElement("td");
+    metricCell.className = "device-metric-cell" + (column.text ? " device-text-cell" : "");
+    metricCell.dataset.label = column.label;
+    const value = document.createElement("span");
+    metricCell.appendChild(value);
+    tr.metricCells.set(column.key, {cell: metricCell, value});
+    tr.appendChild(metricCell);
+  }
+  updateRowSummary(tr, device,
     "device_description" in device || "modem_levels" in device || "optical_level" in device
       ? device : summaryCache.get(String(device.id))?.summary);
-  if (category !== "TV_Amplifires") nameCell.appendChild(description);
-  tr.appendChild(nameCell);
-  if (category === "TV_Amplifires") {
-    const levelCell = document.createElement("td");
-    levelCell.dataset.label = "Опт. уровень";
-    levelCell.appendChild(description);
-    tr.appendChild(levelCell);
-  }
   const favoriteCell = document.createElement("td");
   favoriteCell.className = "device-favorite-cell";
   favoriteCell.appendChild(favoriteButton(device));
@@ -364,17 +370,39 @@ async function loadSummaries(devices, body) {
         if (!summary) continue;
         summaryCache.set(String(device.id), {summary, at: Date.now()});
         const row = [...body.rows].find(row => row.dataset.hostId === String(device.id));
-        if (row && !monitoredIds.has(String(device.id))) updateDeviceSummary(row.querySelector(".device-description"), device, summary);
+        if (row && !monitoredIds.has(String(device.id))) updateRowSummary(row, device, summary);
       }
     } catch (_) {
       for (const device of batch) {
         const row = [...body.rows].find(row => row.dataset.hostId === String(device.id));
         if (row && !monitoredIds.has(String(device.id)) && !summaryCache.has(String(device.id))) {
-          row.querySelector(".device-description").textContent = "Данные недоступны";
+          updateRowSummary(row, device, {});
         }
       }
     }
   }
+}
+function sortedBranchDevices(devices, spec) {
+  const [key, direction] = spec.split(":");
+  const nameCompare = (a, b) => (a.display_name || a.name || "").localeCompare(b.display_name || b.name || "", "ru", {numeric: true});
+  const valueFor = device => {
+    const live = liveValues.get(String(device.id));
+    const summary = live && "summary" in live ? live.summary
+      : summaryCache.get(String(device.id))?.summary || device;
+    const column = metricColumns.find(column => column.key === (key === "level" ? "optical" : key));
+    if (!column) return null;
+    const metric = listColumnValue(summary, column);
+    if (column.text) return metric || null;
+    const raw = metric?.raw_value ?? metric?.value;
+    return raw != null && raw !== "" && Number.isFinite(Number(raw)) ? Number(raw) : null;
+  };
+  return [...devices].sort((a, b) => {
+    if (key === "name") return (direction === "desc" ? -1 : 1) * nameCompare(a, b);
+    const left = valueFor(a), right = valueFor(b);
+    if (left === null || right === null) return left === right ? nameCompare(a, b) : left === null ? 1 : -1;
+    const compare = typeof left === "string" ? left.localeCompare(right, "ru", {numeric: true}) : left - right;
+    return compare ? (direction === "desc" ? -compare : compare) : nameCompare(a, b);
+  });
 }
 function renderTree(devices) {
   const root = {children: new Map(), devices: []};
@@ -408,6 +436,8 @@ function renderTree(devices) {
       const details = document.createElement("details");
       details.className = "device-tree-group";
       details.open = Boolean(search.value.trim()) || openGroups.has(groupPath);
+      details.branchPath = groupPath;
+      const sortButtons = [];
       details.addEventListener("toggle", () => {
         if (!search.value.trim()) {
           if (details.open) openGroups.add(groupPath);
@@ -430,42 +460,59 @@ function renderTree(devices) {
       let body;
       if (child.devices.length) {
         const table = document.createElement("table");
-        table.className = "device-table tree-device-table";
-        if (category === "TV_Amplifires") {
-          table.classList.add("amplifier-table");
-          const head = document.createElement("thead");
-          const heading = document.createElement("tr");
-          for (const [by, label] of [["name", "Имя / адрес"], ["level", "Опт. уровень"]]) {
-            const cell = document.createElement("th");
+        table.className = "device-table device-metric-table tree-device-table";
+        if (category === "TV_Amplifires") table.classList.add("amplifier-table");
+        const head = document.createElement("thead");
+        const heading = document.createElement("tr");
+        for (const column of [{key: "name", label: "Имя / адрес"}, ...metricColumns]) {
+          const cell = document.createElement("th");
+          if (column.key !== "name") cell.className = column.text ? "device-text-heading" : "device-metric-heading";
+          {
             const button = document.createElement("button");
             button.type = "button";
             button.className = "amplifier-sort-button";
-            button.dataset.amplifierSort = by;
-            button.textContent = label;
+            button.dataset.amplifierSort = column.key === "optical" ? "level" : column.key;
+            button.sortBranch = groupPath;
+            button.sortBranchDetails = details;
+            sortButtons.push(button);
+            button.textContent = column.label;
             cell.appendChild(button);
             bindAmplifierSortButton(button);
-            heading.appendChild(cell);
           }
-          const favoritesHeading = document.createElement("th");
-          favoritesHeading.className = "device-favorite-cell";
-          favoritesHeading.textContent = "☆";
-          favoritesHeading.setAttribute("aria-label", "Избранное");
-          favoritesHeading.title = "Избранное";
-          heading.appendChild(favoritesHeading);
-          head.appendChild(heading);
-          table.appendChild(head);
+          heading.appendChild(cell);
         }
+        const favoritesHeading = document.createElement("th");
+        favoritesHeading.className = "device-favorite-cell";
+        favoritesHeading.textContent = "☆";
+        favoritesHeading.setAttribute("aria-label", "Избранное");
+        heading.appendChild(favoritesHeading);
+        head.appendChild(heading);
+        table.appendChild(head);
         body = document.createElement("tbody");
-        for (const device of child.devices) body.appendChild(deviceRow(device));
+        for (const device of sortedBranchDevices(child.devices, branchSorts.get(groupPath) || "name:asc")) body.appendChild(deviceRow(device));
         table.appendChild(body);
         content.appendChild(table);
       }
       details.appendChild(content);
-      let loading = false;
+      let loading = null;
+      details.renderDevices = () => {
+        if (!body) return;
+        const existing = new Map([...body.rows].map(row => [row.dataset.hostId, row]));
+        body.replaceChildren(...sortedBranchDevices(child.devices, branchSorts.get(groupPath) || "name:asc")
+          .map(device => existing.get(String(device.id)) || deviceRow(device)));
+      };
       details.loadSummaries = () => {
-        if (!body || loading) return;
-        loading = true;
-        loadSummaries(child.devices, body).finally(() => { loading = false; });
+        if (!body) return Promise.resolve();
+        if (loading) return loading;
+        loading = loadSummaries(child.devices, body).then(() => details.renderDevices()).finally(() => { loading = null; });
+        return loading;
+      };
+      details.sortDevices = value => {
+        branchSorts.set(groupPath, value);
+        sortButtons.forEach(updateAmplifierSortHeader);
+        saveSearch();
+        details.renderDevices();
+        return value.startsWith("name:") ? Promise.resolve() : details.loadSummaries();
       };
       fragment.appendChild(details);
     }
@@ -479,6 +526,7 @@ function applyView() {
   tree.hidden = view !== "tree";
   pagination.hidden = view === "tree";
   document.getElementById("page-size-label").hidden = view === "tree";
+  if (category === "TV_Amplifires") document.getElementById("amplifier-sort-label").hidden = view === "tree";
   viewButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.deviceView === view)));
 }
 async function refresh() {
@@ -486,7 +534,7 @@ async function refresh() {
   const sequence = ++requestSequence;
   const params = new URLSearchParams({q: search.value.trim(), page: String(currentPage), per_page: pageSize.value, view});
   if (category === "TV_Amplifires") {
-    const [by, direction] = amplifierSort.split(":");
+    const [by, direction] = (view === "tree" ? "name:asc" : amplifierSort).split(":");
     params.set("sort_by", by);
     params.set("sort_dir", direction);
   }
@@ -526,7 +574,7 @@ async function refresh() {
 }
 function goTo(page) { currentPage = page; refresh(); }
 function updateAmplifierSortHeader(button) {
-  const [by, direction] = amplifierSort.split(":");
+  const [by, direction] = (button.sortBranch ? branchSorts.get(button.sortBranch) || "name:asc" : amplifierSort).split(":");
   button.closest("th").setAttribute("aria-sort", button.dataset.amplifierSort === by
     ? (direction === "asc" ? "ascending" : "descending") : "none");
 }
@@ -534,7 +582,10 @@ function bindAmplifierSortButton(button) {
   updateAmplifierSortHeader(button);
   button.addEventListener("click", () => {
     const by = button.dataset.amplifierSort;
-    setAmplifierSort(by + (amplifierSort === by + ":asc" ? ":desc" : ":asc"));
+    const current = button.sortBranch ? branchSorts.get(button.sortBranch) || "name:asc" : amplifierSort;
+    const next = by + (current === by + ":asc" ? ":desc" : ":asc");
+    if (button.sortBranch) button.sortBranchDetails.sortDevices(next).catch(() => {});
+    else setAmplifierSort(next);
   });
 }
 function setAmplifierSort(value) {
