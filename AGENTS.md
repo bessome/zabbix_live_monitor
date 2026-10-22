@@ -9,6 +9,10 @@
 
 ## Device card layout
 
+- Device lists and trees do not have a separate address column. Use `device_display_name` for visible names: append ` - address` only when that complete address is absent from the name. Keep the original Zabbix name and address unchanged. Use the same display name in card titles and saved-device lists.
+
+- Place the favorite star at the right edge of a device row, in a dedicated narrow final column in desktop lists and trees. In mobile cards, place it at the top right. Keep it out of the device name and measurement columns; device titles and saved-device lists also keep this action on the right.
+
 - Always show `Device description` in the "Устройство" block for every Zabbix device category, including TV_Amplifires and EDFA. Use `—` when it is missing. Additional values such as optical power must not replace the description in this block.
 
 - Use the modem card layout for every device type whenever a desktop card has measurements beside the ping chart: ping chart on the left, additional measurements on the right, and the "Устройство" details directly below the ping chart at the same width. Never reverse these columns for a particular device type.

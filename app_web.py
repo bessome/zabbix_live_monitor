@@ -7,10 +7,11 @@ from contextlib import closing
 from fastapi import HTTPException
 from fastapi.templating import Jinja2Templates
 
-from app_config import CATEGORIES, DISPLAY_TIMEZONE, ROOT
+from app_config import CATEGORIES, DISPLAY_TIMEZONE, ROOT, device_display_name
 from app_storage import connect, record_activity
 
 templates = Jinja2Templates(directory=ROOT / "templates")
+templates.env.filters["device_name"] = device_display_name
 SESSION_SECONDS = 7 * 24 * 60 * 60
 
 def user_for(request):

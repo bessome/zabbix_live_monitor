@@ -1,5 +1,6 @@
 """Application paths and environment configuration."""
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -23,3 +24,16 @@ except ZoneInfoNotFoundError as exc:
 
 def format_display_timestamp(timestamp):
     return datetime.fromtimestamp(timestamp, tz=DISPLAY_ZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+def device_display_name(name, address):
+    """Add the interface address for display without changing the Zabbix name."""
+    name = str(name or "").strip()
+    address = str(address or "").strip()
+    if not address or address in ("—", "n/a"):
+        return name
+    if not name:
+        return address
+    if re.search(r"(?<![a-zA-Z0-9.:])" + re.escape(address) + r"(?![a-zA-Z0-9.:])", name, re.I):
+        return name
+    return name + " - " + address

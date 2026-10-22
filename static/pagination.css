@@ -16,15 +16,14 @@ html[data-theme="dark"] .device-view-options{border-color:#536374}html[data-them
 @media(max-width:720px){.device-view-options{grid-column:1/-1;justify-self:start;margin-bottom:0}.device-tree-group .device-tree-group{margin-left:6px}.device-tree-children{padding-left:2px}}
 .device-detail-description{white-space:pre-wrap}
 .amplifier-table{table-layout:fixed;border-collapse:separate;border-spacing:0 2px}
-.amplifier-table th:first-child{width:74%}
-.amplifier-table th:last-child{width:26%}
+.amplifier-table th:first-child{width:calc(74% - 54px)}
+.amplifier-table th:nth-child(2){width:26%}
 .amplifier-table td{padding:7px 12px;border-bottom:0;vertical-align:middle}
 .amplifier-table tr[data-level-state="normal"] td{background:#269e35;color:#fff}
 .amplifier-table tr[data-level-state="critical"] td{background:#a32923;color:#fff}
 .amplifier-table tr[data-level-state="unknown"] td{background:#e8edf2;color:#536171}
 .amplifier-table td a{color:inherit}
 .amplifier-table .device-name-row{gap:7px;flex-wrap:wrap}
-.amplifier-table .amplifier-address{display:block;font-size:12px;opacity:.85}
 .amplifier-table .device-description{display:block;margin:0;padding:0;background:transparent;color:inherit;font-size:14px;font-weight:600;white-space:normal;overflow:visible;max-width:none}
 .amplifier-sort-button{background:transparent;color:inherit;padding:3px 0;text-align:left;font-weight:600}
 .amplifier-sort-button:hover{background:transparent;color:#17609d}

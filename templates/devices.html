@@ -11,7 +11,7 @@
 </div>
 <p id="status" aria-live="polite"></p>
 <div class="list-monitor-controls"><span id="list-monitor-status" role="status">Выберите до 5 устройств · Пинг: 1 с · SNMP: 5 с</span><button id="list-monitor-clear" type="button" hidden>Остановить опрос</button><label id="monitored-only-label" class="monitored-only-label" hidden><input id="monitored-only" type="checkbox">Опрашиваемые</label></div>
-<div class="table-wrap"><table class="device-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Оптический уровень</button></th>{% else %}<th>Устройство</th><th>Адрес</th>{% endif %}</tr></thead>
+<div class="table-wrap"><table class="device-table{{ ' amplifier-table' if category == 'TV_Amplifires' else '' }}"><thead><tr>{% if category == 'TV_Amplifires' %}<th><button type="button" class="amplifier-sort-button" data-amplifier-sort="name">Имя / адрес</button></th><th><button type="button" class="amplifier-sort-button" data-amplifier-sort="level">Оптический уровень</button></th>{% else %}<th>Устройство</th>{% endif %}<th class="device-favorite-cell" aria-label="Избранное" title="Избранное">☆</th></tr></thead>
 <tbody id="rows"></tbody></table></div>
 <div id="device-tree" class="device-tree" hidden></div>
 <div class="pagination" aria-label="Навигация по страницам">
@@ -231,16 +231,10 @@ monitoredOnly.addEventListener("change", () => {
   requestSequence++;
   refresh();
 });
-function cell(tr, label, value) {
-  const td = document.createElement("td");
-  td.dataset.label = label;
-  td.textContent = value;
-  tr.appendChild(td);
-}
 function deviceLink(device) {
   const link = document.createElement("a");
   link.href = "/devices/" + encodeURIComponent(category) + "/" + encodeURIComponent(device.id);
-  link.textContent = device.name;
+  link.textContent = device.display_name || device.name;
   return link;
 }
 function favoriteButton(device) {
@@ -327,14 +321,8 @@ function deviceRow(device) {
   select.title = "Пинг: 1 с · SNMP: 5 с (до 5 устройств)";
   select.addEventListener("change", () => selectMonitor(String(device.id), select.checked));
   nameRow.appendChild(select);
-  nameRow.append(availabilityIndicator(device.availability), deviceLink(device), favoriteButton(device));
+  nameRow.append(availabilityIndicator(device.availability), deviceLink(device));
   nameCell.appendChild(nameRow);
-  if (category === "TV_Amplifires" && !String(device.name).includes(String(device.address))) {
-    const address = document.createElement("small");
-    address.className = "amplifier-address";
-    address.textContent = device.address;
-    nameCell.appendChild(address);
-  }
   const description = document.createElement("small");
   if (category === "TV_Amplifires") description.amplifierRow = tr;
   updateDeviceSummary(description, device,
@@ -347,7 +335,11 @@ function deviceRow(device) {
     levelCell.dataset.label = "Оптический уровень";
     levelCell.appendChild(description);
     tr.appendChild(levelCell);
-  } else cell(tr, "Адрес", device.address);
+  }
+  const favoriteCell = document.createElement("td");
+  favoriteCell.className = "device-favorite-cell";
+  favoriteCell.appendChild(favoriteButton(device));
+  tr.appendChild(favoriteCell);
   paintLiveRow(tr);
   return tr;
 }
@@ -454,6 +446,12 @@ function renderTree(devices) {
             bindAmplifierSortButton(button);
             heading.appendChild(cell);
           }
+          const favoritesHeading = document.createElement("th");
+          favoritesHeading.className = "device-favorite-cell";
+          favoritesHeading.textContent = "☆";
+          favoritesHeading.setAttribute("aria-label", "Избранное");
+          favoritesHeading.title = "Избранное";
+          heading.appendChild(favoritesHeading);
           head.appendChild(heading);
           table.appendChild(head);
         }

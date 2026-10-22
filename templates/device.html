@@ -1,7 +1,7 @@
-{% extends "base.html" %}{% block title %}{{ device.name }} · Zabbix Live Monitoring{% endblock %}
+{% extends "base.html" %}{% block title %}{{ device.name|device_name(device.address) }} · Zabbix Live Monitoring{% endblock %}
 {% block content %}
 <p><a href="/devices/{{ category }}">← {{ category }}</a></p>
-<div class="device-title-row"><h1>{% if device_http_url %}<a class="device-web-link" href="{{ device_http_url }}" target="_blank" rel="noopener noreferrer" title="Открыть веб-интерфейс устройства">{{ device.name }}</a>{% else %}{{ device.name }}{% endif %}{% if category == 'Modems' %}<span id="modem-restarts-daily" title="Рестартов за последние 24 часа" hidden></span>{% endif %}</h1><button type="button" class="favorite-toggle" data-category="{{ category }}" data-host-id="{{ device.id }}" data-favorite="{{ 'true' if favorite else 'false' }}" aria-pressed="{{ 'true' if favorite else 'false' }}" aria-label="{{ 'Убрать из избранного' if favorite else 'Добавить в избранное' }}" title="{{ 'Убрать из избранного' if favorite else 'Добавить в избранное' }}">{{ '★' if favorite else '☆' }}</button></div>
+<div class="device-title-row"><h1>{% if device_http_url %}<a class="device-web-link" href="{{ device_http_url }}" target="_blank" rel="noopener noreferrer" title="Открыть веб-интерфейс устройства">{{ device.name|device_name(device.address) }}</a>{% else %}{{ device.name|device_name(device.address) }}{% endif %}{% if category == 'Modems' %}<span id="modem-restarts-daily" title="Рестартов за последние 24 часа" hidden></span>{% endif %}</h1><button type="button" class="favorite-toggle" data-category="{{ category }}" data-host-id="{{ device.id }}" data-favorite="{{ 'true' if favorite else 'false' }}" aria-pressed="{{ 'true' if favorite else 'false' }}" aria-label="{{ 'Убрать из избранного' if favorite else 'Добавить в избранное' }}" title="{{ 'Убрать из избранного' if favorite else 'Добавить в избранное' }}">{{ '★' if favorite else '☆' }}</button></div>
 {% if category == 'Modems' %}
 <div class="modem-status-row">
 <p class="modem-mac-status" data-modem-status-url="/api/devices/{{ category }}/{{ device.id }}/modem-status" aria-live="polite">Статус модема: <strong>Загрузка…</strong></p>
@@ -70,7 +70,7 @@
 <div id="modem-overview-legend" class="modem-overview-legend"></div>
 </dialog>
 <dialog id="victor-dialog" class="modem-history-dialog victor-dialog" aria-labelledby="victor-title">
-<div class="modem-history-heading"><h2 id="victor-title">{{ device.name }} — Levels</h2><button type="button" id="victor-close" aria-label="Закрыть график Виктор">×</button></div>
+<div class="modem-history-heading"><h2 id="victor-title">{{ device.name|device_name(device.address) }} — Levels</h2><button type="button" id="victor-close" aria-label="Закрыть график Виктор">×</button></div>
 <div id="victor-periods" class="modem-history-periods" role="group" aria-label="Период графика Виктор">
 <button type="button" data-period="1h" aria-pressed="true">1h</button>
 <button type="button" data-period="12h" aria-pressed="false">12h</button>

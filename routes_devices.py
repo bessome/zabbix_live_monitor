@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app_config import device_display_name
 from app_storage import (cmts_for, cmts_list, favorite_devices_for, favorite_ids_for,
                          recent_devices_for, record_recent_device, remove_favorite,
                          save_favorite, setting, snmp_community_for,
@@ -225,6 +226,8 @@ async def devices_api(request: Request, category: str, q: str = "",
         rows = await asyncio.to_thread(host_rows, category)
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
+    rows = [{**row, "display_name": device_display_name(row.get("name"), row.get("address"))}
+            for row in rows]
     query = normalize_device_search(q.strip()[:100])
     if selected_ids is not None:
         rows = [row for row in rows if row["id"] in selected_ids]

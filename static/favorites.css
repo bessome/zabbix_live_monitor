@@ -7,6 +7,7 @@
 .favorite-toggle:hover{background:#ffefbd}
 .favorite-toggle[data-favorite="true"]{color:#b07500}
 .favorite-toggle:disabled{opacity:.6;cursor:wait}
+.device-table .device-favorite-cell{width:54px;padding-left:8px;padding-right:8px;text-align:center;vertical-align:middle;white-space:nowrap}
 .saved-device-list{list-style:none;margin:0;padding:0}
 .saved-device-list li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #e1e7ed}
 .saved-device-list li:last-child{border-bottom:0}
@@ -14,3 +15,9 @@
 .saved-device-list a strong,.saved-device-list a small{display:block}
 .saved-device-list a small{color:#617083;font-size:13px}
 @media(max-width:720px){.favorite-toggle{width:31px;min-height:31px}.saved-device-list li{min-height:56px}}
+@media(max-width:720px){
+  .device-table tr{position:relative}
+  .device-table td:first-child{padding-right:42px}
+  .device-table td.device-favorite-cell{position:absolute;top:8px;right:8px;display:block;width:31px;padding:0;border:0}
+  .device-table td.device-favorite-cell::before{display:none}
+}
