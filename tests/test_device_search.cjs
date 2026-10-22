@@ -503,11 +503,33 @@ test('every list has separate value cells and the favorite action remains last',
     assert.equal(vm.runInContext('renderedRow.children.length', page.context), category === 'Modems' ? 4 : 3);
     assert.equal(vm.runInContext('renderedRow.children.at(-1).className', page.context), 'device-favorite-cell');
     assert.equal(vm.runInContext('renderedRow.children[0].children.length', page.context), 1);
-    assert.equal(vm.runInContext('renderedRow.children[0].children[0].children.at(-1).textContent', page.context), 'Device - 192.0.2.42');
+    assert.equal(vm.runInContext('renderedRow.children[0].children[0].children.at(-1).textContent', page.context),
+      category === 'TV_Amplifires' ? 'Device - 192.0.2.42 (Description)' : 'Device - 192.0.2.42');
     if (category === 'Modems') {
       assert.equal(vm.runInContext('renderedRow.children[1].dataset.label', page.context), 'US Level');
       assert.equal(vm.runInContext('renderedRow.children[2].dataset.label', page.context), 'DS Level');
       assert.equal(vm.runInContext('renderedRow.children[1].children[0].textContent', page.context), '40 dBmV');
     }
   }
+});
+
+test('amplifier model names come from Device description and stay after live SNMP updates', async () => {
+  const page = loadPage(new Map(), 'TV_Amplifires');
+  await flush();
+  installMetricRow(page);
+  vm.runInContext("metricRow.nameLink = {}; var namedDevice = {name: 'Amp', display_name: 'Amp - 192.0.2.42'}", page.context);
+  for (const [description, model] of [
+    ['Lambda PRO 71 firmware 1.0', 'Vector L PRO 71'], ['SNMP ECM01 unit', 'Vector B PRO 51'],
+    ['Firmware V4.7', 'OPR-2108G'], ['FW V6.2.3', 'ASCENT AON1110'],
+    ['lambda  pro 71', 'Vector L PRO 71'], ['Other model', 'Other model'], ['', ''], [null, '']]) {
+    page.context.sourceDescription = description;
+    vm.runInContext('updateRowSummary(metricRow, namedDevice, {device_description: sourceDescription})', page.context);
+    assert.equal(vm.runInContext('metricRow.nameLink.textContent', page.context),
+      'Amp - 192.0.2.42' + (model ? ' (' + model + ')' : ''));
+  }
+  vm.runInContext(`
+    updateRowSummary(metricRow, namedDevice, {device_description: 'ECM01'});
+    updateRowSummary(metricRow, {id: '42'}, {optical_level: {value: '-2', units: 'dBm'}});
+  `, page.context);
+  assert.equal(vm.runInContext('metricRow.nameLink.textContent', page.context), 'Amp - 192.0.2.42 (Vector B PRO 51)');
 });

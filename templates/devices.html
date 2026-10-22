@@ -248,10 +248,25 @@ monitoredOnly.addEventListener("change", () => {
   requestSequence++;
   refresh();
 });
+function amplifierModelDescription(description) {
+  const value = String(description || "").trim();
+  const normalized = value.toLowerCase().replace(/\s+/g, " ");
+  for (const [marker, model] of [["lambda pro 71", "Vector L PRO 71"], ["ecm01", "Vector B PRO 51"],
+    ["v4.7", "OPR-2108G"], ["v6.2.3", "ASCENT AON1110"]]) {
+    if (normalized.includes(marker)) return model;
+  }
+  return value;
+}
+function deviceNameText(device, summary = device) {
+  const name = device.display_name || device.name;
+  if (category !== "TV_Amplifires") return name;
+  const description = amplifierModelDescription(summary?.device_description);
+  return description ? name + " (" + description + ")" : name;
+}
 function deviceLink(device) {
   const link = document.createElement("a");
   link.href = "/devices/" + encodeURIComponent(category) + "/" + encodeURIComponent(device.id);
-  link.textContent = device.display_name || device.name;
+  link.textContent = deviceNameText(device, summaryCache.get(String(device.id))?.summary || device);
   return link;
 }
 function favoriteButton(device) {
@@ -285,6 +300,8 @@ function listColumnValue(summary, column) {
   return column.path.reduce((data, key) => data?.[key], summary);
 }
 function updateRowSummary(row, device, summary) {
+  if (category === "TV_Amplifires" && row.nameLink && summary && "device_description" in summary)
+    row.nameLink.textContent = deviceNameText(device, summary);
   const states = [];
   for (const column of metricColumns) {
     const {cell, value} = row.metricCells.get(column.key);
@@ -327,7 +344,8 @@ function deviceRow(device) {
   select.title = "Пинг: 1 с · SNMP: 5 с (до 5 устройств)";
   select.addEventListener("change", () => selectMonitor(String(device.id), select.checked));
   nameRow.appendChild(select);
-  nameRow.append(availabilityIndicator(device.availability), deviceLink(device));
+  tr.nameLink = deviceLink(device);
+  nameRow.append(availabilityIndicator(device.availability), tr.nameLink);
   nameCell.appendChild(nameRow);
   tr.appendChild(nameCell);
   tr.metricCells = new Map();
@@ -354,8 +372,8 @@ function deviceRow(device) {
 async function loadSummaries(devices, body) {
   const now = Date.now();
   const pending = devices.filter(device => {
-    if (monitoredIds.has(String(device.id))) return false;
     const cached = summaryCache.get(String(device.id));
+    if (monitoredIds.has(String(device.id))) return category === "TV_Amplifires" && !cached?.summary?.device_description;
     return !cached || now - cached.at > 14000;
   });
   for (let index = 0; index < pending.length; index += 100) {
@@ -372,6 +390,7 @@ async function loadSummaries(devices, body) {
         if (!summary) continue;
         summaryCache.set(String(device.id), {summary, at: Date.now()});
         const row = [...body.rows].find(row => row.dataset.hostId === String(device.id));
+        if (category === "TV_Amplifires" && row?.nameLink) row.nameLink.textContent = deviceNameText(device, summary);
         if (row && !monitoredIds.has(String(device.id))) updateRowSummary(row, device, summary);
       }
     } catch (_) {

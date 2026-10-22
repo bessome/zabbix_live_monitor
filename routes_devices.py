@@ -280,7 +280,7 @@ async def devices_api(request: Request, category: str, q: str = "",
             modem_levels = {}
             optical_levels = (all_optical_levels if all_optical_levels is not None else
                               await asyncio.to_thread(amplifier_list_optical_levels, host_ids))
-            descriptions = {}
+            descriptions = await asyncio.to_thread(device_descriptions, host_ids)
         else:
             modem_levels = {}
             optical_levels = {}
@@ -318,7 +318,9 @@ async def device_summaries(request: Request, category: str, ids: str = ""):
                          for host_id in host_ids}
         elif category == "TV_Amplifires":
             levels = await asyncio.to_thread(amplifier_list_optical_levels, host_ids, include_raw=True)
-            summaries = {host_id: {"optical_level": levels.get(host_id)}
+            descriptions = await asyncio.to_thread(device_descriptions, host_ids)
+            summaries = {host_id: {"optical_level": levels.get(host_id),
+                                   "device_description": descriptions.get(host_id)}
                          for host_id in host_ids}
         else:
             descriptions = await asyncio.to_thread(device_descriptions, host_ids)

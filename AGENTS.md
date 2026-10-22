@@ -9,6 +9,8 @@
 
 ## Device card layout
 
+- In TV_Amplifires lists and trees, append the Zabbix `Device description` to the visible device name in parentheses. For descriptions containing `Lambda PRO 71`, `ECM01`, `V4.7`, or `V6.2.3`, display respectively `Vector L PRO 71`, `Vector B PRO 51`, `OPR-2108G`, or `ASCENT AON1110` as that suffix. Other descriptions remain as supplied; omit empty parentheses when no description is available. Keep the original description in the device card and preserve the suffix during direct SNMP metric updates.
+
 - Use the Amplifires list table as the common layout for all device categories, in both list and tree views: device name on the left, one separate column on the right for each displayed value, and the favorite action last. Never combine two measurements into one cell or place summaries below the device name. Modems have separate US Level and DS Level columns; Amplifires have an optical-level column. Text descriptions also occupy their own column when displayed in a list.
 - In mobile list cards, keep numeric measurements side by side in a single row of separate cells. Use compact labels (US/DS), smaller text, and no wrapping of a measurement and its units. The device name remains above that row, and the favorite action stays at the top right. Text descriptions may wrap.
 - Sorting a tree branch must reorder only that branch's direct device rows. Keep sibling and closed branches, group hierarchy, expansion state, and list-mode sorting unchanged. Store the sort independently per branch and reapply it when that branch's readings refresh. Do not apply a global API sort to the entire tree when the user clicks a branch header.

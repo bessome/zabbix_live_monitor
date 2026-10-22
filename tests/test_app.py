@@ -852,8 +852,10 @@ class AppTests(unittest.TestCase):
               patch("routes_devices.device_descriptions", return_value={"42": "Amplifier description"}) as descriptions):
             response = self.client.get("/api/devices/TV_Amplifires")
             self.assertEqual(response.json()["devices"][0]["optical_level"], levels["42"])
+            self.assertEqual(response.json()["devices"][0]["device_description"], "Amplifier description")
             summary = self.client.get("/api/devices/TV_Amplifires/summaries?ids=42")
-            self.assertEqual(summary.json()["summaries"], {"42": {"optical_level": levels["42"]}})
+            self.assertEqual(summary.json()["summaries"], {"42": {"optical_level": levels["42"],
+                                                                   "device_description": "Amplifier description"}})
             detail = self.client.get("/devices/TV_Amplifires/42")
             self.assertIn("Optical input power</dt>", detail.text)
             self.assertIn("-3.41 dBm", detail.text)
@@ -866,7 +868,7 @@ class AppTests(unittest.TestCase):
             healthy_detail = self.client.get("/devices/TV_Amplifires/42")
             self.assertIn('class="">-3.4 dBm', healthy_detail.text)
             self.assertEqual(read_levels.call_count, 4)
-            self.assertEqual(descriptions.call_count, 2)
+            self.assertEqual(descriptions.call_count, 4)
 
     def test_amplifier_sorting_uses_raw_levels_before_pagination(self):
         self.login()
@@ -880,6 +882,7 @@ class AppTests(unittest.TestCase):
         levels["29"] = {"value": "NaN", "raw_value": "NaN"}
         path = "/api/devices/TV_Amplifires?sort_by=level&per_page=25"
         with (patch("routes_devices.host_rows", return_value=devices),
+              patch("routes_devices.device_descriptions", return_value={}),
               patch("routes_devices.amplifier_list_optical_levels", return_value=levels) as read):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200)
