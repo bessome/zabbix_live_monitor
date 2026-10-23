@@ -12,6 +12,8 @@
 
 ## Device card layout
 
+- Use the modem layout and shared `metricColumns` implementation as the template for every current and future device category with displayed parameters. Every numeric list/tree column must support ascending and descending sorting. Build headers and sort controls from the shared column definitions; sort lists before pagination using source precision, keep missing values last, and keep tree sorting local to each branch.
+
 - In TV_Amplifires lists and trees, append the Zabbix `Device description` to the visible device name in parentheses. For descriptions containing `Lambda PRO 71`, `ECM01`, `V4.7`, or any of `V6.2.3`, `V6.2.4`, `V5.2.4`, display respectively `Vector L PRO 71`, `Vector B PRO 51`, `OPR-2108G`, or `ASCENT AON1110` as that suffix. Other descriptions remain as supplied; omit empty parentheses when no description is available. Keep the original description in the device card and preserve the suffix during direct SNMP metric updates.
 
 - Use the Amplifires list table as the common layout for all device categories, in both list and tree views: device name on the left, one separate column on the right for each displayed value, and the favorite action last. Never combine two measurements into one cell or place summaries below the device name. Modems have separate US Level and DS Level columns; Amplifires have an optical-level column. Text descriptions also occupy their own column when displayed in a list.

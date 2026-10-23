@@ -970,7 +970,32 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.client.get("/api/devices/Modems?sort_by=level").status_code, 422)
         page = self.client.get("/devices/TV_Amplifires")
         self.assertIn('id="amplifier-sort"', page.text)
-        self.assertIn('data-amplifier-sort="level"', page.text)
+        self.assertIn('button.dataset.amplifierSort = key', page.text)
+
+    def test_edfa_and_modem_sorting_before_pagination(self):
+        self.login()
+        devices = [{"id": str(i), "name": f"Device {i:02}", "technical_name": f"device-{i}",
+                    "address": f"192.0.2.{i}"} for i in range(1, 31)]
+        for category, reader, kinds in [("EDFA", "edfa_levels", ("output", "input")),
+                                         ("Modems", "modem_list_levels", ("us", "ds"))]:
+            for kind in kinds:
+                levels = {str(i): {kind: {"value": "1", "raw_value": str(i / 10000)}}
+                          for i in range(1, 29)}
+                levels["29"] = {kind: {"value": "NaN"}}
+                with (self.subTest(category=category, kind=kind),
+                      patch("routes_devices.host_rows", return_value=devices),
+                      patch("routes_devices." + reader, return_value=levels) as read):
+                    path = f"/api/devices/{category}?sort_by={kind}&per_page=25"
+                    first = self.client.get(path)
+                    self.assertEqual(first.status_code, 200)
+                    self.assertEqual([row["id"] for row in first.json()["devices"]],
+                                     [str(i) for i in range(1, 26)])
+                    self.assertEqual(read.call_count, 1)
+                    second = self.client.get(path + "&page=2").json()["devices"]
+                    self.assertEqual([row["id"] for row in second], ["26", "27", "28", "29", "30"])
+                    desc = self.client.get(path + "&sort_dir=desc").json()["devices"]
+                    self.assertEqual(desc[0]["id"], "28")
+                    self.assertEqual(self.client.get(path + "&sort_dir=bad").status_code, 422)
 
     def test_amplifier_sort_source_retains_raw_precision(self):
         item = {"itemid": "1", "hostid": "42", "name": "Optical input power", "status": "0",

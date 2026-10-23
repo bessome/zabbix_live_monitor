@@ -214,10 +214,15 @@ async def devices_api(request: Request, category: str, q: str = "",
                        ids: str | None = None, sort_by: str = "name", sort_dir: str = "asc"):
     user = require_user(request, api=True)
     category_filter(category)
-    if sort_by not in ("name", "level") or sort_dir not in ("asc", "desc"):
+    allowed_sorts = {"name"}
+    if category == "TV_Amplifires":
+        allowed_sorts.add("level")
+    elif category == "EDFA":
+        allowed_sorts.update(("output", "input"))
+    elif category == "Modems":
+        allowed_sorts.update(("us", "ds"))
+    if sort_by not in allowed_sorts or sort_dir not in ("asc", "desc"):
         raise HTTPException(422, "Invalid sort parameters")
-    if sort_by == "level" and category != "TV_Amplifires":
-        raise HTTPException(422, "Level sorting is available for amplifiers")
     if page < 1 or per_page not in (25, 50, 100, 250) or view not in ("list", "tree"):
         raise HTTPException(422, "Invalid pagination parameters")
     selected_ids = None if ids is None else set(part.strip() for part in ids.split(",") if part.strip())
@@ -239,6 +244,30 @@ async def devices_api(request: Request, category: str, q: str = "",
             (view == "tree" and any(query in normalize_device_search(group)
                                     for group in row.get("groups", [])))]
     all_optical_levels = None
+    all_device_levels = None
+    if category in ("EDFA", "Modems"):
+        rows = sorted(rows, key=lambda row: (normalize_device_search(row["name"]), row["id"]),
+                      reverse=sort_by == "name" and sort_dir == "desc")
+        if sort_by != "name":
+            try:
+                all_device_levels = await asyncio.to_thread(
+                    edfa_levels if category == "EDFA" else modem_list_levels,
+                    [row["id"] for row in rows],
+                    **({"include_raw": True} if category == "Modems" else {}))
+            except RuntimeError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=503)
+            values = {}
+            for host_id, levels in all_device_levels.items():
+                metric = levels.get(sort_by) or {}
+                try:
+                    value = Decimal(str(metric.get("raw_value", metric.get("value"))))
+                except InvalidOperation:
+                    continue
+                if value.is_finite():
+                    values[host_id] = value
+            rows = (sorted((row for row in rows if row["id"] in values),
+                           key=lambda row: values[row["id"]], reverse=sort_dir == "desc")
+                    + [row for row in rows if row["id"] not in values])
     if category == "TV_Amplifires":
         rows = sorted(rows, key=lambda row: (normalize_device_search(row["name"]), row["id"]),
                       reverse=sort_by == "name" and sort_dir == "desc")
@@ -275,7 +304,8 @@ async def devices_api(request: Request, category: str, q: str = "",
         host_ids = [row["id"] for row in visible]
         edfa_values = {}
         if category == "Modems":
-            modem_levels = await asyncio.to_thread(modem_list_levels, host_ids)
+            modem_levels = (all_device_levels if all_device_levels is not None else
+                            await asyncio.to_thread(modem_list_levels, host_ids))
             optical_levels = {}
             descriptions = {}
         elif category == "TV_Amplifires":
@@ -285,7 +315,8 @@ async def devices_api(request: Request, category: str, q: str = "",
             descriptions = await asyncio.to_thread(device_descriptions, host_ids)
         elif category == "EDFA":
             modem_levels, optical_levels, descriptions = {}, {}, {}
-            edfa_values = await asyncio.to_thread(edfa_levels, host_ids)
+            edfa_values = (all_device_levels if all_device_levels is not None else
+                           await asyncio.to_thread(edfa_levels, host_ids))
         else:
             modem_levels = {}
             optical_levels = {}

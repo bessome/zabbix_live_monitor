@@ -13,6 +13,7 @@ function loadPage(storage, category = 'VOIP', user = '1', reply = null) {
     if (!elements.has(id)) elements.set(id, {
       value: id === 'page-size' ? '50' : '', dataset: {category},
       listeners: {}, addEventListener(name, handler) { this.listeners[name] = handler; },
+      insertBefore() {}, appendChild() {},
       replaceChildren() {}, querySelectorAll() { return []; }
     });
     return elements.get(id);
@@ -21,6 +22,8 @@ function loadPage(storage, category = 'VOIP', user = '1', reply = null) {
   const intervals = [];
   const context = vm.createContext({
     document: {
+      createElement: () => ({dataset: {}, addEventListener() {}, setAttribute() {},
+        closest() { return {setAttribute() {}}; }, appendChild(child) { child.parentElement = this; }}),
       getElementById: element, querySelector: element, querySelectorAll: () => [],
       documentElement: {dataset: {timezone: 'Europe/Tallinn'}}
     },
@@ -67,6 +70,24 @@ test('amplifier sort applies to the whole API query and survives navigation', as
   params = new URL(restored.requests[0], 'https://example.test').searchParams;
   assert.equal(params.get('sort_by'), 'level');
   assert.equal(params.get('sort_dir'), 'desc');
+});
+
+test('all numeric list columns sort through the API and restore their direction', async () => {
+  for (const [category, keys] of [['EDFA', ['output', 'input']], ['Modems', ['us', 'ds']]]) {
+    for (const key of keys) {
+      const storage = new Map();
+      const page = loadPage(storage, category);
+      await flush();
+      page.element('amplifier-sort').listeners.change({target: {value: key + ':desc'}});
+      await flush();
+      const params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
+      assert.equal(params.get('sort_by'), key);
+      assert.equal(params.get('sort_dir'), 'desc');
+      const restored = loadPage(storage, category);
+      assert.equal(new URL(restored.requests[0], 'https://example.test').searchParams.get('sort_by'), key);
+      assert.equal(vm.runInContext('amplifierSort', restored.context), key + ':desc');
+    }
+  }
 });
 
 test('amplifier level column rounds presentation and keeps missing values neutral', async () => {

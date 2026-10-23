@@ -175,7 +175,7 @@ def device_descriptions(host_ids):
     return descriptions
 
 
-def modem_list_levels(host_ids):
+def modem_list_levels(host_ids, *, include_raw=False):
     """Read one current US and DS level per visible modem from Zabbix."""
     if not host_ids:
         return {}
@@ -216,6 +216,8 @@ def modem_list_levels(host_ids):
                                    "units": str(item.get("units") or ""),
                                    "alert": value < (20 if kind == "us" else -15)
                                    or value > (52 if kind == "us" else 18)})
+            if include_raw:
+                choices[key][1]["raw_value"] = str(value)
     result = {}
     for (host_id, kind), (_, metric) in choices.items():
         result.setdefault(host_id, {})[kind] = metric
