@@ -243,17 +243,19 @@ def ups_levels(host_ids):
 
     return _named_device_levels(host_ids, {
         "Output Load L1": "load", "Battery Capacity": "battery", "autonomy": "autonomy",
-    }, state_for)
+    }, state_for, case_insensitive=True)
 
 
-def _named_device_levels(host_ids, labels, state_for):
+def _named_device_levels(host_ids, labels, state_for, *, case_insensitive=False):
     if not host_ids:
         return {}
     names = {label.casefold(): kind for label, kind in labels.items()}
     kind_labels = {kind: label for label, kind in labels.items()}
     items = zabbix_call("item.get", {
         "output": ["itemid", "hostid", "name", "status", "value_type", "units", "lastvalue", "lastclock"],
-        "hostids": host_ids, "filter": {"name": list(labels)},
+        "hostids": host_ids,
+        **({"search": {"name": list(labels)}, "searchByAny": True} if case_insensitive
+           else {"filter": {"name": list(labels)}}),
     })
     choices = {}
     for item in items:

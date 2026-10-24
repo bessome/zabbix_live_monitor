@@ -148,6 +148,31 @@ class AppTests(unittest.TestCase):
         self.assertEqual(levels["load"]["state"], "unrated")
         self.assertEqual(levels["autonomy"]["units"], "s")
 
+    def test_ups_api_search_ignores_name_case_and_keeps_l1(self):
+        from zabbix_service import ups_levels
+        def item(item_id, name, value, units="%"):
+            return {"itemid": item_id, "hostid": "42", "name": name, "lastvalue": value,
+                    "units": units, "status": "0", "value_type": "0", "lastclock": "100"}
+        items = [item("1", "Output load L1", "3"), item("2", "Autonomy", "262", "min"),
+                 item("3", "Battery Capacity", "100"), item("4", "Output load L2", "90"),
+                 item("5", "Output load L10", "80"), item("6", "Autonomy alarm", "1", "")]
+        def api(method, params):
+            self.assertEqual(method, "item.get")
+            # Model the API's case-sensitive filter and case-insensitive search.
+            if "filter" in params:
+                return [entry for entry in items if entry["name"] in params["filter"]["name"]]
+            self.assertTrue(params["searchByAny"])
+            return [entry for entry in items if any(
+                name.casefold() in entry["name"].casefold() for name in params["search"]["name"])]
+        with patch("zabbix_service.zabbix_call", side_effect=api):
+            levels = ups_levels(["42"])["42"]
+        self.assertEqual(set(levels), {"load", "battery", "autonomy"})
+        self.assertEqual(levels["load"]["id"], "1")
+        self.assertEqual(levels["load"]["label"], "Output Load L1")
+        self.assertEqual(levels["autonomy"]["id"], "2")
+        self.assertEqual(levels["autonomy"]["label"], "autonomy")
+        self.assertEqual(levels["autonomy"]["units"], "min")
+
     def test_ups_values_and_history_are_scoped(self):
         path = "/api/devices/UPSs/42/ups-levels"
         self.assertEqual(self.client.get(path).status_code, 401)
