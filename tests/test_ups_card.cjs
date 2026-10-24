@@ -77,7 +77,7 @@ test('UPS card keeps load history inline and opens battery history separately', 
   page.setItems([
     {id: 'load', label: 'Output Load L1', value: '12.123456789', units: '%', state: 'unrated'},
     {id: 'battery', label: 'Battery Capacity', value: '49.999999', units: '%', state: 'critical'},
-    {id: 'autonomy', label: 'autonomy', value: '600', units: 's', state: 'unrated'}
+    {id: 'autonomy', label: 'Autonomy', value: '600', units: 's', state: 'unrated'}
   ]);
   await flush();
   await page.timers.find(timer => timer.ms === 5000).fn();

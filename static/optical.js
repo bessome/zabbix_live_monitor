@@ -14,7 +14,7 @@
   function render(items) {
     if (ups) {
       document.dispatchEvent(new CustomEvent("ups-load-item", {detail: items.find(item => item.label === "Output Load L1") || null}));
-      items = ["Output Load L1", "Battery Capacity", "autonomy"].map((label, index) =>
+      items = ["Output Load L1", "Battery Capacity", "Autonomy"].map((label, index) =>
         items.find(item => item.label === label) || {id: "missing:" + index, label, value: null});
     }
     const nextSignature = items.map(item => item.id).join("|");

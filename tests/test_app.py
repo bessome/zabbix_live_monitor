@@ -170,7 +170,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(levels["load"]["id"], "1")
         self.assertEqual(levels["load"]["label"], "Output Load L1")
         self.assertEqual(levels["autonomy"]["id"], "2")
-        self.assertEqual(levels["autonomy"]["label"], "autonomy")
+        self.assertEqual(levels["autonomy"]["label"], "Autonomy")
         self.assertEqual(levels["autonomy"]["units"], "min")
 
     def test_ups_values_and_history_are_scoped(self):

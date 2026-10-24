@@ -242,7 +242,7 @@ def ups_levels(host_ids):
         return "unrated"
 
     return _named_device_levels(host_ids, {
-        "Output Load L1": "load", "Battery Capacity": "battery", "autonomy": "autonomy",
+        "Output Load L1": "load", "Battery Capacity": "battery", "Autonomy": "autonomy",
     }, state_for, case_insensitive=True)
 
 

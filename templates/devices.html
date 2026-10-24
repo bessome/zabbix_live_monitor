@@ -50,7 +50,7 @@ const metricColumns = category === "Modems"
      {key: "input", label: "Optical input level", mobileLabel: "IN", path: ["edfa_levels", "input"]}]
   : category === "UPSs" ? [{key: "load", label: "Output Load L1", mobileLabel: "Load L1", path: ["ups_levels", "load"]},
      {key: "battery", label: "Battery Capacity", mobileLabel: "Battery", path: ["ups_levels", "battery"]},
-     {key: "autonomy", label: "autonomy", path: ["ups_levels", "autonomy"]}]
+     {key: "autonomy", label: "Autonomy", path: ["ups_levels", "autonomy"]}]
   : [{key: "description", label: "Описание", path: ["device_description"], text: true}];
 const sortableList = metricColumns.some(column => !column.text);
 const listSortKeys = ["name", ...metricColumns.filter(column => !column.text).map(column => column.key === "optical" ? "level" : column.key)];
