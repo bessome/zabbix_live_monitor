@@ -24,7 +24,7 @@ from snmp_monitor import (display_modem_values, snapshot_for as snmp_snapshot_fo
 from switch_monitor import (DEFAULT_EXCLUDED_NAMES, mac_ports_for, parse_excluded_names,
                             snapshot_for as switch_snapshot_for, traffic_for)
 from zabbix_service import (amplifier_list_optical_levels, category_filter,
-                             edfa_levels,
+                             edfa_levels, ups_levels,
                              device_descriptions, host_rows,
                              modem_list_levels,
                              modem_channel_definitions, modem_overview_definitions,
@@ -221,6 +221,8 @@ async def devices_api(request: Request, category: str, q: str = "",
         allowed_sorts.update(("output", "input"))
     elif category == "Modems":
         allowed_sorts.update(("us", "ds"))
+    elif category == "UPSs":
+        allowed_sorts.update(("load", "battery", "autonomy"))
     if sort_by not in allowed_sorts or sort_dir not in ("asc", "desc"):
         raise HTTPException(422, "Invalid sort parameters")
     if page < 1 or per_page not in (25, 50, 100, 250) or view not in ("list", "tree"):
@@ -245,13 +247,13 @@ async def devices_api(request: Request, category: str, q: str = "",
                                     for group in row.get("groups", [])))]
     all_optical_levels = None
     all_device_levels = None
-    if category in ("EDFA", "Modems"):
+    if category in ("EDFA", "Modems", "UPSs"):
         rows = sorted(rows, key=lambda row: (normalize_device_search(row["name"]), row["id"]),
                       reverse=sort_by == "name" and sort_dir == "desc")
         if sort_by != "name":
             try:
                 all_device_levels = await asyncio.to_thread(
-                    edfa_levels if category == "EDFA" else modem_list_levels,
+                    {"EDFA": edfa_levels, "Modems": modem_list_levels, "UPSs": ups_levels}[category],
                     [row["id"] for row in rows],
                     **({"include_raw": True} if category == "Modems" else {}))
             except RuntimeError as exc:
@@ -303,6 +305,7 @@ async def devices_api(request: Request, category: str, q: str = "",
     try:
         host_ids = [row["id"] for row in visible]
         edfa_values = {}
+        ups_values = {}
         if category == "Modems":
             modem_levels = (all_device_levels if all_device_levels is not None else
                             await asyncio.to_thread(modem_list_levels, host_ids))
@@ -317,6 +320,10 @@ async def devices_api(request: Request, category: str, q: str = "",
             modem_levels, optical_levels, descriptions = {}, {}, {}
             edfa_values = (all_device_levels if all_device_levels is not None else
                            await asyncio.to_thread(edfa_levels, host_ids))
+        elif category == "UPSs":
+            modem_levels, optical_levels, descriptions = {}, {}, {}
+            ups_values = (all_device_levels if all_device_levels is not None else
+                          await asyncio.to_thread(ups_levels, host_ids))
         else:
             modem_levels = {}
             optical_levels = {}
@@ -329,6 +336,7 @@ async def devices_api(request: Request, category: str, q: str = "",
          "modem_levels": modem_levels.get(row["id"]) if category == "Modems" else None,
          "optical_level": optical_levels.get(row["id"]) if category == "TV_Amplifires" else None,
          "edfa_levels": edfa_values.get(row["id"]) if category == "EDFA" else None,
+         "ups_levels": ups_values.get(row["id"]) if category == "UPSs" else None,
          "favorite": row["id"] in favorite_ids}
         for row in visible
     ]
@@ -362,6 +370,9 @@ async def device_summaries(request: Request, category: str, ids: str = ""):
         elif category == "EDFA":
             levels = await asyncio.to_thread(edfa_levels, host_ids)
             summaries = {host_id: {"edfa_levels": levels.get(host_id)} for host_id in host_ids}
+        elif category == "UPSs":
+            levels = await asyncio.to_thread(ups_levels, host_ids)
+            summaries = {host_id: {"ups_levels": levels.get(host_id)} for host_id in host_ids}
         else:
             descriptions = await asyncio.to_thread(device_descriptions, host_ids)
             summaries = {host_id: {"device_description": descriptions.get(host_id)}
@@ -606,6 +617,43 @@ async def switch_cable_test(request: Request, category: str, host_id: str, if_in
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
     except (RuntimeError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/ups-levels")
+async def ups_current(request: Request, category: str, host_id: str):
+    require_user(request, api=True)
+    if category != "UPSs":
+        raise HTTPException(404)
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        if not any(row["id"] == host_id for row in rows):
+            raise HTTPException(404)
+        levels = (await asyncio.to_thread(ups_levels, [host_id])).get(host_id, {})
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc), "items": []}, status_code=503)
+    return JSONResponse({"items": [levels[key] for key in ("load", "battery", "autonomy") if key in levels],
+                         "updated_at": int(time.time())}, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/devices/{category}/{host_id}/ups-levels/{item_id}/history")
+async def ups_history(request: Request, category: str, host_id: str, item_id: str, period: str = "1h"):
+    require_user(request, api=True)
+    if category != "UPSs":
+        raise HTTPException(404)
+    if period not in HISTORY_PERIODS:
+        raise HTTPException(422, "Неверный период графика.")
+    try:
+        rows = await asyncio.to_thread(host_rows, category)
+        if not any(row["id"] == host_id for row in rows):
+            raise HTTPException(404)
+        levels = (await asyncio.to_thread(ups_levels, [host_id])).get(host_id, {})
+        item = next((entry for entry in levels.values() if entry["id"] == item_id), None)
+        if item is None:
+            raise HTTPException(404)
+        result = await numeric_history(item, period)
+    except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 

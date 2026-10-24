@@ -37,7 +37,7 @@ function loadPage(storage, category = 'VOIP', user = '1', reply = null) {
     setInterval(handler, ms) { intervals.push({handler, ms}); },
     fetch: async url => {
       requests.push(url);
-      if (reply && /\/(modem-channels|optical-power|edfa-levels|ping)$/.test(url)) return reply(url);
+      if (reply && /\/(modem-channels|optical-power|edfa-levels|ups-levels|ping)$/.test(url)) return reply(url);
       const params = new URL(url, 'https://example.test').searchParams;
       return {ok: true, json: async () => ({devices: [], total: 500,
         page: Number(params.get('page')), pages: 20,
@@ -73,7 +73,8 @@ test('amplifier sort applies to the whole API query and survives navigation', as
 });
 
 test('all numeric list columns sort through the API and restore their direction', async () => {
-  for (const [category, keys] of [['EDFA', ['output', 'input']], ['Modems', ['us', 'ds']]]) {
+  for (const [category, keys] of [['EDFA', ['output', 'input']], ['Modems', ['us', 'ds']],
+    ['UPSs', ['load', 'battery', 'autonomy']]]) {
     for (const key of keys) {
       const storage = new Map();
       const page = loadPage(storage, category);
@@ -505,6 +506,32 @@ test('missing, empty and invalid SNMP values render as n/a without units', async
       assert.equal(vm.runInContext('metricRow.dataset.levelState', page.context), 'unknown');
     }
   }
+});
+
+test('UPS columns preserve precision for sorting, display units, and isolate battery alarms', async () => {
+  const page = loadPage(new Map(), 'UPSs');
+  await flush();
+  installMetricRow(page);
+  for (const [value, state, text] of [
+    ['99.999999', 'warning', '100 %'], ['49.999999', 'critical', '50 %'],
+    ['100', 'normal', '100 %'], [null, 'unknown', 'n/a'], ['Infinity', 'unknown', 'n/a']]) {
+    page.context.summary = {ups_levels: {
+      load: {value: '12.123456789', units: '%', state: 'unrated'},
+      battery: {value, state, units: '%'}, autonomy: {value: '600', units: 's', state: 'unrated'}
+    }};
+    vm.runInContext('updateRowSummary(metricRow, {}, summary)', page.context);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('battery').cell.dataset.metricState", page.context), state);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('battery').value.textContent", page.context), text);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('load').value.textContent", page.context), '12.12 %');
+    assert.equal(vm.runInContext("metricRow.metricCells.get('autonomy').value.textContent", page.context), '600 s');
+    assert.ok(!['critical', 'warning'].includes(vm.runInContext('metricRow.dataset.levelState', page.context)));
+  }
+  const order = vm.runInContext(`sortedBranchDevices([
+    {id: '1', name: 'A', ups_levels: {battery: {value: '50', raw_value: '49.9999'}}},
+    {id: '2', name: 'B', ups_levels: {battery: {value: '50', raw_value: '49.9998'}}},
+    {id: '3', name: 'C', ups_levels: {battery: {value: 'NaN'}}}
+  ], 'battery:asc').map(device => device.id).join(',')`, page.context);
+  assert.equal(order, '2,1,3');
 });
 
 test('only all abnormal numeric columns make the entire row abnormal', async () => {

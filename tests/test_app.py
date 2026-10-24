@@ -108,19 +108,73 @@ class AppTests(unittest.TestCase):
         device = {"id": "42", "name": "UPS 42", "technical_name": "ups-42",
                   "address": "192.0.2.42", "groups": ["Power/UPSs"]}
         with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.ups_levels", return_value={"42": {}}),
               patch("routes_devices.device_descriptions", return_value={"42": "UPS description"})):
             data = self.client.get("/api/devices/UPSs").json()["devices"][0]
-            self.assertEqual(data["device_description"], "UPS description")
+            self.assertEqual(data["ups_levels"], {})
             tree = self.client.get("/api/devices/UPSs?view=tree").json()["devices"][0]
             self.assertEqual(tree["groups"], ["Power/UPSs"])
             page = self.client.get("/devices/UPSs/42")
         self.assertEqual(page.status_code, 200)
-        self.assertIn('id="ping-monitor"', page.text)
+        self.assertIn('id="ups-load-panel"', page.text)
+        self.assertIn('id="ups-history-canvas"', page.text)
+        self.assertNotIn('id="ping-monitor"', page.text)
         self.assertIn("Device description</dt>", page.text)
         self.assertIn("UPS description", page.text)
-        self.assertRegex(page.text, r'src="/static/ping\.js\?v=\d+"')
+        self.assertRegex(page.text, r'src="/static/metric-history\.js\?v=\d+"')
+        self.assertNotIn('/static/ping.js', page.text)
         self.assertNotIn('src="http://', page.text)
         self.assertNotRegex(page.text, r'<link\b[^>]*href="http://')
+
+    def test_ups_items_thresholds_and_source_precision(self):
+        from zabbix_service import ups_levels
+        base = {"itemid": "1", "hostid": "42", "name": "Battery Capacity", "status": "0",
+                "value_type": "0", "units": "%", "lastclock": "100"}
+        for value, state in [("100", "normal"), ("99.999999", "warning"), ("50", "warning"),
+                             ("49.999999", "critical"), ("NaN", "unknown"), ("Infinity", "unknown")]:
+            with self.subTest(value=value), patch("zabbix_service.zabbix_call", return_value=[{**base, "lastvalue": value}]):
+                metric = ups_levels(["42"])["42"]["battery"]
+                self.assertEqual(metric["state"], state)
+                self.assertEqual(metric["raw_value"], None if state == "unknown" else value)
+        items = [{**base, "name": "Output Load L1", "lastvalue": "12.123456789"},
+                 {**base, "itemid": "2", "name": "autonomy", "lastvalue": "1234", "units": "s"},
+                 {**base, "lastvalue": "20", "status": "1"},
+                 {**base, "lastvalue": "30", "hostid": "99"},
+                 {**base, "lastvalue": "text", "value_type": "1"}]
+        with patch("zabbix_service.zabbix_call", return_value=items):
+            levels = ups_levels(["42"])["42"]
+        self.assertEqual(set(levels), {"load", "autonomy"})
+        self.assertEqual(levels["load"]["value"], "12.123456789")
+        self.assertEqual(levels["load"]["state"], "unrated")
+        self.assertEqual(levels["autonomy"]["units"], "s")
+
+    def test_ups_values_and_history_are_scoped(self):
+        path = "/api/devices/UPSs/42/ups-levels"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        self.assertEqual(self.client.get(path + "/81/history").status_code, 401)
+        self.login()
+        device = {"id": "42", "name": "UPS", "technical_name": "ups", "address": "192.0.2.42"}
+        item = {"id": "81", "label": "Output Load L1", "value": "12.123456789",
+                "raw_value": "12.123456789", "units": "%", "value_type": "0"}
+        values = {"42": {"load": item}}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.ups_levels", return_value=values),
+              patch("routes_devices.numeric_history", new_callable=AsyncMock,
+                    return_value={"points": [{"time": 123, "value": 12.123456789}]}) as history):
+            self.assertEqual(self.client.get(path).json()["items"], [item])
+            self.assertEqual(self.client.get("/api/devices/UPSs").json()["devices"][0]["ups_levels"], values["42"])
+            self.assertEqual(self.client.get("/api/devices/UPSs/summaries?ids=42").json()["summaries"]["42"]["ups_levels"], values["42"])
+            self.assertEqual(self.client.get(path + "/81/history?period=12h").json()["points"][0]["value"], 12.123456789)
+            history.assert_awaited_once_with(item, "12h")
+            self.assertEqual(self.client.get(path + "/99/history").status_code, 404)
+            self.assertEqual(self.client.get(path + "/81/history?period=bad").status_code, 422)
+            self.assertEqual(self.client.get(path.replace("/42/", "/99/")).status_code, 404)
+            self.assertEqual(self.client.get(path.replace("/UPSs/", "/Modems/")).status_code, 404)
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.ups_levels", side_effect=RuntimeError("Zabbix unavailable"))):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json()["items"], [])
 
     def test_edfa_section_and_basic_card(self):
         self.login()
@@ -1003,6 +1057,7 @@ class AppTests(unittest.TestCase):
         devices = [{"id": str(i), "name": f"Device {i:02}", "technical_name": f"device-{i}",
                     "address": f"192.0.2.{i}"} for i in range(1, 31)]
         for category, reader, kinds in [("EDFA", "edfa_levels", ("output", "input")),
+                                         ("UPSs", "ups_levels", ("load", "battery", "autonomy")),
                                          ("Modems", "modem_list_levels", ("us", "ds"))]:
             for kind in kinds:
                 levels = {str(i): {kind: {"value": "1", "raw_value": str(i / 10000)}}

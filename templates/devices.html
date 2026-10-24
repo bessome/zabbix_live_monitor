@@ -48,6 +48,9 @@ const metricColumns = category === "Modems"
   : category === "TV_Amplifires" ? [{key: "optical", label: "Опт. уровень", path: ["optical_level"], min: -3.4, max: Infinity}]
   : category === "EDFA" ? [{key: "output", label: "Optical output level", mobileLabel: "OUT", path: ["edfa_levels", "output"]},
      {key: "input", label: "Optical input level", mobileLabel: "IN", path: ["edfa_levels", "input"]}]
+  : category === "UPSs" ? [{key: "load", label: "Output Load L1", mobileLabel: "Load L1", path: ["ups_levels", "load"]},
+     {key: "battery", label: "Battery Capacity", mobileLabel: "Battery", path: ["ups_levels", "battery"]},
+     {key: "autonomy", label: "autonomy", path: ["ups_levels", "autonomy"]}]
   : [{key: "description", label: "Описание", path: ["device_description"], text: true}];
 const sortableList = metricColumns.some(column => !column.text);
 const listSortKeys = ["name", ...metricColumns.filter(column => !column.text).map(column => column.key === "optical" ? "level" : column.key)];
@@ -154,7 +157,7 @@ function paintLiveRow(row, pulse = false, pulseMetrics = false) {
     }
   }
 
-  if (!["Modems", "TV_Amplifires", "EDFA"].includes(category)) return;
+  if (!["Modems", "TV_Amplifires", "EDFA", "UPSs"].includes(category)) return;
   if ("summary" in live && row.liveSummary !== live.summary) {
     updateRowSummary(row, {id}, live.summary || {});
     row.liveSummary = live.summary;
@@ -173,6 +176,8 @@ function paintLiveRows(pulse = false, pulseMetrics = false) {
 }
 function summaryFromSnmp(data) {
   const items = data.items || [];
+  if (category === "UPSs") return {ups_levels: Object.fromEntries(metricColumns.map(column =>
+    [column.key, items.find(item => item.label === column.label) || null]))};
   if (category === "TV_Amplifires") return {optical_level: items[0] || null};
   if (category === "EDFA") return {edfa_levels: {
     output: items.find(item => item.label === "Optical output level") || null,
@@ -194,7 +199,8 @@ async function pollMonitorKind(kind) {
   const state = monitorRequests[kind];
   if (state.inFlight || !monitoredIds.size || document.hidden) return;
   const metricPath = category === "Modems" ? "/modem-channels"
-    : category === "TV_Amplifires" ? "/optical-power" : category === "EDFA" ? "/edfa-levels" : null;
+    : category === "TV_Amplifires" ? "/optical-power" : category === "EDFA" ? "/edfa-levels"
+    : category === "UPSs" ? "/ups-levels" : null;
   if (kind === "metrics" && !metricPath) return;
   state.inFlight = true;
   const revision = monitorRevision;
@@ -327,7 +333,7 @@ function updateRowSummary(row, device, summary) {
     const numeric = valid ? Number(metric.raw_value ?? metric.value) : NaN;
     const alert = valid && (metric.alert ?? (numeric < column.min || numeric > column.max));
     const rated = column.min != null || column.max != null || metric?.alert != null;
-    const state = !valid ? "unknown" : category === "EDFA" && ["normal", "warning", "critical"].includes(metric.state)
+    const state = !valid ? "unknown" : ["normal", "warning", "critical", "unrated"].includes(metric.state)
       ? metric.state : (alert ? "critical" : rated ? "normal" : "unrated");
     value.textContent = !summary ? "Загрузка…" : valid
       ? Number(Number(metric.value).toFixed(2)).toString() + (metric.units ? " " + metric.units : "") : "n/a";

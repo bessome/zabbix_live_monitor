@@ -226,12 +226,34 @@ def modem_list_levels(host_ids, *, include_raw=False):
 
 def edfa_levels(host_ids):
     """Latest enabled numeric EDFA items; keep source precision for the UI."""
+    def state_for(kind, number):
+        if kind == "output":
+            return "critical" if number <= 20 else "warning" if number < Decimal("22.7") else "normal"
+        return "critical" if number < -1 else "normal"
+
+    return _named_device_levels(host_ids, {"Optical output level": "output", "Optical input level": "input"}, state_for)
+
+
+def ups_levels(host_ids):
+    """UPS measurements from enabled numeric items, with original precision."""
+    def state_for(kind, number):
+        if kind == "battery":
+            return "critical" if number < 50 else "warning" if number < 100 else "normal"
+        return "unrated"
+
+    return _named_device_levels(host_ids, {
+        "Output Load L1": "load", "Battery Capacity": "battery", "autonomy": "autonomy",
+    }, state_for)
+
+
+def _named_device_levels(host_ids, labels, state_for):
     if not host_ids:
         return {}
-    names = {"optical output level": "output", "optical input level": "input"}
+    names = {label.casefold(): kind for label, kind in labels.items()}
+    kind_labels = {kind: label for label, kind in labels.items()}
     items = zabbix_call("item.get", {
         "output": ["itemid", "hostid", "name", "status", "value_type", "units", "lastvalue", "lastclock"],
-        "hostids": host_ids, "filter": {"name": ["Optical output level", "Optical input level"]},
+        "hostids": host_ids, "filter": {"name": list(labels)},
     })
     choices = {}
     for item in items:
@@ -253,13 +275,10 @@ def edfa_levels(host_ids):
         rank = (-clock, str(item.get("itemid", "")))
         state = "unknown"
         if value is not None:
-            if kind == "output":
-                state = "critical" if number <= 20 else "warning" if number < Decimal("22.7") else "normal"
-            else:
-                state = "critical" if number < -1 else "normal"
+            state = state_for(kind, number)
         key = (host_id, kind)
         if key not in choices or rank < choices[key][0]:
-            choices[key] = (rank, {"id": str(item["itemid"]), "label": "Optical " + kind + " level",
+            choices[key] = (rank, {"id": str(item["itemid"]), "label": kind_labels[kind],
                                    "value": value, "raw_value": value, "state": state, "units": str(item.get("units") or ""),
                                    "value_type": str(item["value_type"]), "lastclock": clock})
     result = {host_id: {} for host_id in host_ids}

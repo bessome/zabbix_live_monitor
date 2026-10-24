@@ -1,0 +1,10 @@
+{% set history_prefix = 'ups' if inline_history else 'modem' %}
+{% if inline_history %}<section id="{{ history_prefix }}-history-dialog" aria-labelledby="{{ history_prefix }}-history-title">{% else %}<dialog id="{{ history_prefix }}-history-dialog" class="modem-history-dialog" aria-labelledby="{{ history_prefix }}-history-title">{% endif %}
+<div class="modem-history-heading"><h2 id="{{ history_prefix }}-history-title">{{ 'Output Load L1' if inline_history else 'История канала' }}</h2>{% if not inline_history %}<button type="button" id="{{ history_prefix }}-history-close" aria-label="Закрыть график">×</button>{% endif %}</div>
+<div id="{{ history_prefix }}-history-periods" class="modem-history-periods" role="group" aria-label="Период графика">
+{% for period in ['1h', '12h', '24h', '2d', '14d'] %}<button type="button" data-period="{{ period }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ period }}</button>{% endfor %}
+</div>
+<p id="{{ history_prefix }}-history-status" role="status">Загрузка…</p>
+<div class="modem-history-chart"><canvas id="{{ history_prefix }}-history-canvas" role="img" aria-label="График {{ 'Output Load L1' if inline_history else 'значений канала' }} за 1h"></canvas></div>
+<div id="{{ history_prefix }}-history-stats" class="modem-history-stats"></div>
+{% if inline_history %}</section>{% else %}</dialog>{% endif %}

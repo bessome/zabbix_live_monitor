@@ -1,17 +1,20 @@
 (() => {
-  const root = document.getElementById("ping-monitor");
+  function initialize(inline) {
+  const root = document.getElementById("ping-monitor") || document.getElementById("ups-load-panel");
   if (!root) return;
+  if (inline && root.dataset.category !== "UPSs") return;
+  const historyElement = name => document.getElementById((inline ? "ups" : "modem") + "-history-" + name);
   const list = document.getElementById("modem-channels");
-  const opticalList = document.getElementById("optical-channels");
+  const opticalList = inline ? null : document.getElementById("optical-channels");
   const restartButton = document.getElementById("modem-restarts");
   const pingLoss = document.getElementById("ping-loss-history");
-  const dialog = document.getElementById("modem-history-dialog");
-  const canvas = document.getElementById("modem-history-canvas");
-  const status = document.getElementById("modem-history-status");
-  const stats = document.getElementById("modem-history-stats");
-  const title = document.getElementById("modem-history-title");
-  const close = document.getElementById("modem-history-close");
-  const periodButtons = [...document.querySelectorAll("#modem-history-periods button")];
+  const dialog = historyElement("dialog");
+  const canvas = historyElement("canvas");
+  const status = historyElement("status");
+  const stats = historyElement("stats");
+  const title = historyElement("title");
+  const close = historyElement("close");
+  const periodButtons = [...document.querySelectorAll((inline ? "#ups" : "#modem") + "-history-periods button")];
   const baseUrl = "/api/devices/" + encodeURIComponent(root.dataset.category)
     + "/" + encodeURIComponent(root.dataset.hostId);
   const displayTimezone = document.documentElement.dataset.timezone;
@@ -38,6 +41,9 @@
   let controller = null;
   const refreshIntervals = {"1h": 30000, "12h": 60000, "24h": 120000,
     "2d": 120000, "14d": 300000};
+  const isOpen = () => inline || dialog.open;
+  const metricEndpoint = {EDFA: "/edfa-levels/", UPSs: "/ups-levels/"}[root.dataset.category] || "/optical-power/";
+  const formatNumber = value => String(Number(Number(value).toFixed(2)));
 
   function clearChart() {
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -82,7 +88,6 @@
     const minY = firstTick * step;
     const maxY = lastTick * step;
     const yTickCount = lastTick - firstTick;
-    const tickPrecision = Math.max(0, -Math.floor(Math.log10(step)));
     const errorHigh = secondary.length ? Math.max(...secondary.map(point => point.value)) : 0;
     const errorMax = Math.max(1, errorHigh * 1.1);
     const x = time => left + (time - data.from) / (data.to - data.from) * plotWidth;
@@ -90,6 +95,11 @@
     const errorY = value => top + (errorMax - value) / errorMax * plotHeight;
     ctx.font = "11px system-ui, sans-serif";
     ctx.lineWidth = 1;
+    if (!data.secondary && data.units) {
+      ctx.fillStyle = colors.text;
+      ctx.textAlign = "left";
+      ctx.fillText(data.units, left, 11);
+    }
     if (data.secondary) {
       ctx.fillStyle = colors.line;
       ctx.textAlign = "left";
@@ -107,13 +117,12 @@
       ctx.stroke();
       ctx.fillStyle = colors.text;
       ctx.textAlign = "right";
-      ctx.fillText(((lastTick - i) * step).toFixed(tickPrecision), left - 5, yy + 4);
+      ctx.fillText(formatNumber((lastTick - i) * step), left - 5, yy + 4);
       if (data.secondary) {
         ctx.fillStyle = colors.error;
         ctx.textAlign = "left";
         const tick = errorMax * (1 - i / yTickCount);
-        ctx.fillText(tick >= 1000 ? (tick / 1000).toFixed(1) + "k" :
-          tick >= 10 ? tick.toFixed(0) : tick.toFixed(1), left + plotWidth + 5, yy + 4);
+        ctx.fillText(formatNumber(tick), left + plotWidth + 5, yy + 4);
       }
     }
     const tickStep = {"1h": 900, "12h": 7200, "24h": 14400,
@@ -190,7 +199,8 @@
       const last = data.points[data.points.length - 1];
       const unit = data.units ? " " + data.units : "";
       for (const [label, value] of [
-        ["Последнее", last.value], ["Мин", Math.min(...values)], ["Макс", Math.max(...values)]
+        ["Последнее", last.value], ["Мин", Math.min(...values)], ["Макс", Math.max(...values)],
+        ["Ср", values.reduce((sum, value) => sum + value, 0) / values.length]
       ]) {
         const element = document.createElement("span");
         element.textContent = label + ": " + Number(value.toFixed(2)) + unit;
@@ -208,7 +218,7 @@
   }
 
   async function refresh() {
-    if (!historyUrl || !dialog.open || controller) return;
+    if (!historyUrl || !isOpen() || controller) return;
     const requestedUrl = historyUrl;
     const requestedPeriod = period;
     const active = new AbortController();
@@ -222,9 +232,9 @@
       }
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "История Zabbix недоступна");
-      if (dialog.open && historyUrl === requestedUrl && period === requestedPeriod) show(data);
+      if (isOpen() && historyUrl === requestedUrl && period === requestedPeriod) show(data);
     } catch (error) {
-      if (error.name !== "AbortError" && dialog.open
+      if (error.name !== "AbortError" && isOpen()
           && historyUrl === requestedUrl && period === requestedPeriod) {
         status.textContent = error.message;
       }
@@ -260,7 +270,7 @@
     status.textContent = "Загрузка истории Zabbix…";
     stats.replaceChildren();
     clearChart();
-    dialog.showModal();
+    if (!inline) dialog.showModal();
     refresh();
     scheduleRefresh();
   }
@@ -275,22 +285,44 @@
     const row = event.target.closest(".optical-row");
     if (!row || !opticalList.contains(row)) return;
     openHistory(row.querySelector("span").textContent,
-      baseUrl + (root.dataset.category === "EDFA" ? "/edfa-levels/" : "/optical-power/") + encodeURIComponent(row.dataset.itemId) + "/history");
+      baseUrl + metricEndpoint + encodeURIComponent(row.dataset.itemId) + "/history");
   });
   if (restartButton) restartButton.addEventListener("click", () => {
     if (!restartButton.dataset.itemId) return;
     openHistory("Рестарты/ч", baseUrl + "/modem-restarts/"
       + encodeURIComponent(restartButton.dataset.itemId) + "/history");
   });
-  pingLoss.addEventListener("click", () => {
+  if (pingLoss) pingLoss.addEventListener("click", () => {
     openHistory("Потери пакетов Zabbix", baseUrl + "/ping-loss/history");
   });
-  close.addEventListener("click", () => dialog.close());
+  if (close) close.addEventListener("click", () => dialog.close());
   dialog.addEventListener("close", () => {
     clearInterval(timer);
     timer = null;
     if (controller) controller.abort();
     historyUrl = null;
   });
-  window.addEventListener("resize", () => { if (dialog.open && latest) draw(latest); });
+  if (inline) document.addEventListener("ups-load-item", event => {
+    const item = event.detail;
+    const url = item ? baseUrl + metricEndpoint + encodeURIComponent(item.id) + "/history" : null;
+    // Side-panel polling must not reset the selected chart or fetch it every five seconds.
+    if (url === historyUrl) {
+      if (!url) status.textContent = "Output Load L1 не найден в Zabbix.";
+      return;
+    }
+    if (controller) { controller.abort(); controller = null; }
+    clearInterval(timer);
+    if (url) openHistory(item.label, url);
+    else {
+      historyUrl = null;
+      latest = null;
+      clearChart();
+      stats.replaceChildren();
+      status.textContent = "Output Load L1 не найден в Zabbix.";
+    }
+  });
+  window.addEventListener("resize", () => { if (isOpen() && latest) draw(latest); });
+  }
+  initialize(false);
+  initialize(true);
 })();

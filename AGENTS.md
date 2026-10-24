@@ -2,6 +2,8 @@
 
 ## Numeric values and charts
 
+- UPSs displays separate `Output Load L1`, `Battery Capacity`, and `autonomy` numeric items in lists, trees, and cards, with sorting for each column. Battery Capacity < 50 is critical (red), 50 <= capacity < 100 is warning (orange), and capacity >= 100 is normal, using original values. Other UPS readings have no alarm thresholds. The UPS card uses the shared modem layout with an Output Load L1 history chart in place of the ping chart, readings on the right, and device details below the chart.
+
 - EDFA shows separate `Optical output level` and `Optical input level` columns in lists and tree branches, and both readings beside the ping chart in its card. Read enabled numeric Zabbix items with those exact names; use their units and the existing numeric history. Missing readings stay `n/a`. Do not apply Amplifires alarm thresholds to EDFA without explicit EDFA thresholds.
 - EDFA thresholds use original values: Output <= 20 is critical (red), 20 < Output < 22.7 is warning (orange), Output >= 22.7 is normal; Input < -1 is critical (red), Input >= -1 is normal. Reuse the server-provided state in lists, trees, and cards. Color the entire row only when both readings are abnormal; use orange if either is a warning, and keep a critical cell red.
 

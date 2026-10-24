@@ -5,12 +5,18 @@
   const state = document.getElementById("optical-state");
   const url = "/api/devices/" + encodeURIComponent(root.dataset.category)
     + "/" + encodeURIComponent(root.dataset.hostId)
-    + (root.dataset.category === "EDFA" ? "/edfa-levels" : "/optical-power");
+    + ({EDFA: "/edfa-levels", UPSs: "/ups-levels"}[root.dataset.category] || "/optical-power");
+  const ups = root.dataset.category === "UPSs";
   const previousValues = new Map();
   let signature = "";
   let inFlight = false;
 
   function render(items) {
+    if (ups) {
+      document.dispatchEvent(new CustomEvent("ups-load-item", {detail: items.find(item => item.label === "Output Load L1") || null}));
+      items = ["Output Load L1", "Battery Capacity", "autonomy"].map((label, index) =>
+        items.find(item => item.label === label) || {id: "missing:" + index, label, value: null});
+    }
     const nextSignature = items.map(item => item.id).join("|");
     if (nextSignature !== signature) {
       list.replaceChildren();
@@ -19,6 +25,7 @@
         row.type = "button";
         row.className = "optical-row";
         row.dataset.itemId = item.id;
+        row.disabled = item.id.startsWith("missing:");
         row.title = "Открыть график Zabbix";
         const label = document.createElement("span");
         label.textContent = item.label;
@@ -51,10 +58,10 @@
       number.classList.toggle("modem-value-changed", changed);
       previousValues.set(item.id, item.value);
       row.querySelector("strong").classList.toggle("optical-value-alert",
-        valid && (root.dataset.category === "EDFA" ? item.state === "critical"
+        valid && (["EDFA", "UPSs"].includes(root.dataset.category) ? item.state === "critical"
           : Number(item.raw_value ?? item.value) < -3.4));
       row.querySelector("strong").classList.toggle("optical-value-warning",
-        valid && root.dataset.category === "EDFA" && item.state === "warning");
+        valid && ["EDFA", "UPSs"].includes(root.dataset.category) && item.state === "warning");
     }
   }
 
@@ -85,8 +92,9 @@
       }
       render(data.items);
       state.textContent = data.items.length
-        ? "" : "Оптические показатели для этого устройства не найдены в Zabbix.";
+        ? "" : "Показатели для этого устройства не найдены в Zabbix.";
     } catch (error) {
+      if (ups) render([]);
       markUnavailable();
       state.textContent = error.message;
     } finally {

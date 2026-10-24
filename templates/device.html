@@ -29,7 +29,12 @@
 <table id="switch-cable-results" hidden><thead><tr><th>Пара</th><th>Статус</th><th>Длина</th><th>Ошибка</th></tr></thead><tbody id="switch-cable-pairs"></tbody></table>
 </dialog>
 {% endif %}
-<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires', 'EDFA') else '' }}">
+<div class="{{ 'device-monitor-grid' if category in ('Modems', 'TV_Amplifires', 'EDFA', 'UPSs') else '' }}">
+{% if category == 'UPSs' %}
+<section class="panel ping-panel" id="ups-load-panel" data-category="{{ category }}" data-host-id="{{ device.id }}">
+{% set inline_history = true %}{% include 'metric_history.html' %}
+</section>
+{% else %}
 <section class="panel ping-panel" id="ping-monitor" data-category="{{ category }}" data-host-id="{{ device.id }}">
 <div class="ping-heading"><h2>Пинг устройства</h2><span id="ping-state" class="ping-state">Ожидание…</span></div>
 <div class="ping-chart"><canvas id="ping-canvas" role="img" aria-label="График времени отклика и потерь пакетов за последнюю минуту"></canvas>
@@ -43,9 +48,10 @@
 <div class="ping-legend"><span><i class="ping-line"></i>RTT</span><span><i class="ping-loss-mark"></i>Loss</span><span title="SNMP sysUpTime">Uptime <strong id="ping-uptime">n/a</strong></span></div>
 <p id="ping-message" aria-live="polite">Ожидание первого результата…</p>
 </section>
-{% if category in ('TV_Amplifires', 'EDFA') %}
-<section class="panel device-side-panel optical-panel" id="optical-monitor" aria-label="Оптическая мощность" data-category="{{ category }}" data-host-id="{{ device.id }}">
-<p id="optical-state" class="modem-state" aria-live="polite">Загрузка оптических уровней…</p>
+{% endif %}
+{% if category in ('TV_Amplifires', 'EDFA', 'UPSs') %}
+<section class="panel device-side-panel optical-panel" id="optical-monitor" aria-label="Показатели устройства" data-category="{{ category }}" data-host-id="{{ device.id }}">
+<p id="optical-state" class="modem-state" aria-live="polite">Загрузка показателей…</p>
 <div id="optical-channels" class="optical-channels"></div>
 </section>
 {% endif %}
@@ -83,19 +89,7 @@
 <div id="victor-legend" class="victor-legend" aria-label="Последнее, минимум и максимум рядов"></div>
 </dialog>
 {% endif %}
-<dialog id="modem-history-dialog" class="modem-history-dialog" aria-labelledby="modem-history-title">
-<div class="modem-history-heading"><h2 id="modem-history-title">История канала</h2><button type="button" id="modem-history-close" aria-label="Закрыть график">×</button></div>
-<div id="modem-history-periods" class="modem-history-periods" role="group" aria-label="Период графика">
-<button type="button" data-period="1h" aria-pressed="true">1h</button>
-<button type="button" data-period="12h" aria-pressed="false">12h</button>
-<button type="button" data-period="24h" aria-pressed="false">24h</button>
-<button type="button" data-period="2d" aria-pressed="false">2d</button>
-<button type="button" data-period="14d" aria-pressed="false">14d</button>
-</div>
-<p id="modem-history-status" role="status">Загрузка…</p>
-<div class="modem-history-chart"><canvas id="modem-history-canvas" role="img" aria-label="График значений канала за 1h"></canvas></div>
-<div id="modem-history-stats" class="modem-history-stats"></div>
-</dialog>
+{% set inline_history = false %}{% include 'metric_history.html' %}
 <section class="panel device-details"><h2>Устройство</h2><dl>
 <dt>ID Zabbix</dt><dd>{{ device.id }}</dd>
 <dt>Техническое имя</dt><dd>{{ device.technical_name }}</dd>
@@ -105,11 +99,11 @@
 <dt>Адрес</dt><dd>{% if device_http_url %}<a href="{{ device_http_url }}" target="_blank" rel="noopener noreferrer" title="Открыть веб-интерфейс устройства">{{ device.address }}</a>{% else %}{{ device.address }}{% endif %}</dd>
 </dl></section>
 </div>
-<script src="{{ url_for('static', path='/ping.js').path }}?v={{ asset_version }}" defer></script>
+{% if category != 'UPSs' %}<script src="{{ url_for('static', path='/ping.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'Modems' %}<script src="/static/modem-status.js?v={{ asset_version }}" defer></script><script src="{{ url_for('static', path='/modem.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'Modems' %}<script src="{{ url_for('static', path='/modem-overview.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% if category == 'Modems' %}<script src="{{ url_for('static', path='/victor.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
-{% if category in ('TV_Amplifires', 'EDFA') %}<script src="{{ url_for('static', path='/optical.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
-{% if category == 'Switches' %}<script src="{{ url_for('static', path='/switch.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 <script src="{{ url_for('static', path='/metric-history.js').path }}?v={{ asset_version }}" defer></script>
+{% if category in ('TV_Amplifires', 'EDFA', 'UPSs') %}<script src="{{ url_for('static', path='/optical.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
+{% if category == 'Switches' %}<script src="{{ url_for('static', path='/switch.js').path }}?v={{ asset_version }}" defer></script>{% endif %}
 {% endblock %}
