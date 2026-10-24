@@ -74,7 +74,7 @@ class AppTests(unittest.TestCase):
         self.assertNotIn("settings-menu", nav)
         self.assertNotIn(">Главная</a>", nav)
         links = re.findall(r'href="/devices/([^"]+)"', nav)
-        self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "EDFA", "VOIP", "Routers"])
+        self.assertEqual(links, ["TV_Amplifires", "Switches", "Modems", "EDFA", "VOIP", "Routers", "UPSs"])
         self.assertIn('href="/onu-ont"', nav)
 
     def test_static_assets_use_origin_relative_urls(self):
@@ -95,6 +95,32 @@ class AppTests(unittest.TestCase):
         self.assertNotIn('href="http://', devices_page.text)
         self.assertNotIn('src="http://', devices_page.text)
         self.assertEqual(self.client.get("/static/pagination.css").status_code, 200)
+
+    def test_ups_section_uses_shared_device_views_and_card(self):
+        self.assertEqual(self.client.get("/devices/UPSs", follow_redirects=False).status_code, 303)
+        self.assertEqual(self.client.get("/api/devices/UPSs").status_code, 401)
+        self.login()
+        self.assertIn('data-category="UPSs"', self.client.get("/settings").text)
+        listing = self.client.get("/devices/UPSs")
+        self.assertEqual(listing.status_code, 200)
+        self.assertIn('class="device-table device-metric-table', listing.text)
+        self.assertIn('data-device-view="tree"', listing.text)
+        device = {"id": "42", "name": "UPS 42", "technical_name": "ups-42",
+                  "address": "192.0.2.42", "groups": ["Power/UPSs"]}
+        with (patch("routes_devices.host_rows", return_value=[device]),
+              patch("routes_devices.device_descriptions", return_value={"42": "UPS description"})):
+            data = self.client.get("/api/devices/UPSs").json()["devices"][0]
+            self.assertEqual(data["device_description"], "UPS description")
+            tree = self.client.get("/api/devices/UPSs?view=tree").json()["devices"][0]
+            self.assertEqual(tree["groups"], ["Power/UPSs"])
+            page = self.client.get("/devices/UPSs/42")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="ping-monitor"', page.text)
+        self.assertIn("Device description</dt>", page.text)
+        self.assertIn("UPS description", page.text)
+        self.assertRegex(page.text, r'src="/static/ping\.js\?v=\d+"')
+        self.assertNotIn('src="http://', page.text)
+        self.assertNotRegex(page.text, r'<link\b[^>]*href="http://')
 
     def test_edfa_section_and_basic_card(self):
         self.login()
