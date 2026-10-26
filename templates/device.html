@@ -57,7 +57,7 @@
 {% endif %}
 {% if category == 'Modems' %}
 <section class="panel device-side-panel modem-panel" id="modem-monitor" aria-label="Показатели каналов модема" data-category="{{ category }}" data-host-id="{{ device.id }}">
-<div class="modem-graph-actions"><button type="button" id="modem-overview-open" class="modem-overview-button">Общий график</button><button type="button" id="victor-open" class="modem-overview-button">Виктор</button></div>
+<div class="modem-graph-actions"><button type="button" id="modem-overview-open" class="modem-overview-button">Общий график</button><button type="button" id="victor-open" class="modem-overview-button">График 2</button></div>
 <p id="modem-state" class="modem-state" aria-live="polite">Загрузка каналов…</p>
 <div id="modem-channels" class="modem-channels"></div>
 <button type="button" id="modem-restarts" class="modem-restarts" hidden title="Открыть историю рестартов Zabbix"><span>Рестарты/ч</span><strong id="modem-restarts-value" class="modem-number">—</strong></button>
@@ -76,8 +76,8 @@
 <div id="modem-overview-legend" class="modem-overview-legend"></div>
 </dialog>
 <dialog id="victor-dialog" class="modem-history-dialog victor-dialog" aria-labelledby="victor-title">
-<div class="modem-history-heading"><h2 id="victor-title">{{ device.name|device_name(device.address) }} — Levels</h2><button type="button" id="victor-close" aria-label="Закрыть график Виктор">×</button></div>
-<div id="victor-periods" class="modem-history-periods" role="group" aria-label="Период графика Виктор">
+<div class="modem-history-heading"><h2 id="victor-title">{{ device.name|device_name(device.address) }} — Levels</h2><button type="button" id="victor-close" aria-label="Закрыть График 2">×</button></div>
+<div id="victor-periods" class="modem-history-periods" role="group" aria-label="Период графика 2">
 <button type="button" data-period="1h" aria-pressed="true">1h</button>
 <button type="button" data-period="12h" aria-pressed="false">12h</button>
 <button type="button" data-period="24h" aria-pressed="false">24h</button>
