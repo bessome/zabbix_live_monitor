@@ -17,7 +17,7 @@ RUN groupadd --gid 10001 monitor \
     && chown monitor:monitor /data
 
 COPY main.py app_config.py app_storage.py app_web.py zabbix_service.py \
-     routes_account.py routes_devices.py routes_settings.py \
+     routes_account.py routes_devices.py routes_settings.py registration_mail.py \
      ping_monitor.py snmp_monitor.py switch_monitor.py cable_test.py mac_vendors.py \
      cmts_monitor.py cmts_groups.py cmts_cli.py modem_status.py modem_reboot.py docsis_modem.py routes_cmts.py routes_onu.py ./
 COPY templates ./templates
