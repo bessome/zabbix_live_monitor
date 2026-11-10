@@ -1,4 +1,6 @@
 """Login, profile and health-check routes."""
+import asyncio
+import logging
 import secrets
 import sqlite3
 import time
@@ -9,8 +11,70 @@ from fastapi.responses import RedirectResponse
 
 from app_storage import check_password, connect, hash_password, record_activity
 from app_web import add_message, checked_form, render, require_user, user_for
+from routes_settings import identifier_in_use, normalized_email
+from registration_mail import notify_registration
 
 router = APIRouter()
+
+
+@router.get("/register")
+def register_page(request: Request):
+    if user_for(request):
+        return RedirectResponse("/", status_code=303)
+    return render(request, "register.html")
+
+
+def submit_registration(username, email, password):
+    with closing(connect()) as con:
+        # Serialize duplicate checks with all subsequent writes.
+        con.execute("BEGIN IMMEDIATE")
+        if identifier_in_use(con, username, email):
+            return False
+        con.execute(
+            "INSERT INTO users(username,email,password_hash,role,active,registration_pending) "
+            "VALUES (?,?,?,'read',0,1)", (username, email, hash_password(password)))
+        try:
+            notify_registration(username, email)
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return True
+
+
+@router.post("/register")
+async def register(request: Request):
+    form = await checked_form(request)
+    username = str(form.get("username", "")).strip()
+    email = normalized_email(form.get("email", ""))
+    password = str(form.get("password", ""))
+    confirmation = str(form.get("password_confirm", ""))
+    error = None
+    if not username or len(username) > 80 or any(ord(c) < 32 for c in username):
+        error = "Укажите логин длиной от 1 до 80 символов."
+    elif not email or not email.endswith("@stv.ee"):
+        error = "Регистрация доступна только с почтой @stv.ee."
+    elif len(password) < 9:
+        error = "Пароль должен содержать не менее 9 символов."
+    elif password != confirmation:
+        error = "Пароли не совпадают."
+    if error:
+        add_message(request, error, "error")
+        return RedirectResponse("/register", status_code=303)
+    try:
+        created = await asyncio.to_thread(submit_registration, username, email, password)
+        if not created:
+            add_message(request, "Логин или email уже используется.", "error")
+            return RedirectResponse("/register", status_code=303)
+    except sqlite3.IntegrityError:
+        add_message(request, "Логин или email уже используется.", "error")
+        return RedirectResponse("/register", status_code=303)
+    except Exception:
+        logging.getLogger(__name__).exception("Registration notification failed")
+        add_message(request, "Не удалось отправить заявку. Попробуйте позже или обратитесь к администратору.", "error")
+        return RedirectResponse("/register", status_code=303)
+    add_message(request, "Заявка отправлена администратору. Вход станет доступен после активации учётной записи.")
+    return RedirectResponse("/login", status_code=303)
 
 @router.get("/")
 def index(request: Request):

@@ -114,6 +114,8 @@ def init_db():
                         "CHECK (theme IN ('light', 'dark'))")
         if "email" not in columns:
             con.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        if "registration_pending" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN registration_pending INTEGER NOT NULL DEFAULT 0")
         cmts_columns = {row["name"] for row in con.execute("PRAGMA table_info(cmts)")}
         if "city" not in cmts_columns:
             con.execute("ALTER TABLE cmts ADD COLUMN city TEXT NOT NULL DEFAULT ''")

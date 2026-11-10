@@ -1,7 +1,39 @@
 {% extends "base.html" %}{% block title %}Пользователи · Zabbix Live Monitoring{% endblock %}
-{% block content %}<h1>Пользователи</h1>
-{% if missing_email_count %}<p class="message">У {{ missing_email_count }} существующих пользователей email ещё не задан. Укажите его ниже, чтобы они могли входить по адресу.</p>{% endif %}
-<section class="panel"><h2>Email Admin</h2><form method="post" action="/settings/admin-email">
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', path='/users.css').path }}?v={{ asset_version }}">
+<section class="panel users-page">
+<div class="users-heading"><h1>Пользователи</h1><button type="button" id="add-user" hidden>Добавить пользователя</button></div>
+<p class="users-intro">Создавайте и управляйте учётными записями пользователей. Права доступа определяются ролью. Новые заявки на регистрацию требуют активации администратором. Нажмите на пользователя, чтобы открыть настройки.</p>
+{% if missing_email_count %}<p class="message">У {{ missing_email_count }} существующих пользователей email ещё не задан. Укажите его в настройках учётной записи.</p>{% endif %}
+<details id="create-user" class="users-disclosure"><summary>Добавить пользователя</summary>
+<section class="panel"><h2>Добавить пользователя</h2><form method="post" action="/settings/users">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Имя <input name="username" required maxlength="80"></label>
+<label>Email <input name="email" type="email" required maxlength="254" autocomplete="off"></label>
+<label>Пароль <input name="password" type="password" required minlength="9" autocomplete="new-password"></label>
+<label>Повторите пароль <input name="password_confirm" type="password" required minlength="9" autocomplete="new-password"></label>
+<label>Права <select name="role"><option value="read">Read</option><option value="execute">Read + execute</option></select></label>
+<button type="submit">Создать</button></form></section>
+
+</details>
+<div class="users-toolbar">
+<label class="users-search"><span class="visually-hidden">Поиск пользователей</span><input type="search" id="users-search" placeholder="Поиск пользователей" autocomplete="off"></label>
+<div class="users-sort"><label for="users-sort">Сортировка</label><select id="users-sort"><option value="name">Имя</option><option value="role">Роль</option><option value="state">Состояние</option><option value="activity">Последняя активность</option></select><button type="button" id="users-direction" aria-label="Изменить направление сортировки" title="По возрастанию">↑</button></div>
+</div>
+<p class="users-count" id="users-count" role="status">Всего пользователей: {{ users|length }}</p>
+<div class="users-list" id="users-list">
+{% for user in users %}
+<article class="user-entry" data-name="{{ user.username }}" data-email="{{ user.email or '' }}" data-role="{{ user.role }}" data-state="{{ 0 if user.registration_pending else (1 if user.active else 2) }}" data-activity="{{ user.last_activity or 0 }}">
+<details class="user-details">
+<summary class="user-row">
+<span class="user-avatar" aria-hidden="true">{{ user.username[:2]|upper }}</span>
+<span class="user-identity"><span class="user-name">{{ user.username }}</span><span class="user-email">{{ user.email or 'Email не задан' }}</span></span>
+<span class="user-access"><span class="user-role">{{ 'Администратор' if user.role == 'admin' else ('Read + execute' if user.role == 'execute' else 'Read') }}</span><span class="user-state {{ 'pending' if user.registration_pending else ('active' if user.active else 'disabled') }}">{{ 'Ожидает активации' if user.registration_pending else ('Активен' if user.active else 'Отключён') }}</span></span>
+<span class="user-activity"><span>Последняя активность</span><span>{{ user.last_activity_display or 'Нет данных' }}</span></span>
+<span class="user-chevron" aria-hidden="true">⌄</span>
+</summary>
+<div class="user-editor"><h2>Настройки: {{ user.username }}</h2>
+{% if user.role == 'admin' %}<section class="panel"><h2>Email Admin</h2><form method="post" action="/settings/admin-email">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Email <input type="email" name="email" value="{{ admin_user.email or '' }}" required maxlength="254" autocomplete="email"></label>
 <button type="submit">Сохранить email</button></form></section>
@@ -11,18 +43,7 @@
 <label>Новый пароль <input type="password" name="new_password" required minlength="9" autocomplete="new-password"></label>
 <label>Повторите новый пароль <input type="password" name="new_password_confirm" required minlength="9" autocomplete="new-password"></label>
 <button type="submit">Изменить пароль</button></form></section>
-<section class="panel"><h2>Добавить пользователя</h2><form method="post" action="/settings/users">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<label>Имя <input name="username" required maxlength="80"></label>
-<label>Email <input name="email" type="email" required maxlength="254" autocomplete="off"></label>
-<label>Пароль <input name="password" type="password" required minlength="9" autocomplete="new-password"></label>
-<label>Повторите пароль <input name="password_confirm" type="password" required minlength="9" autocomplete="new-password"></label>
-<label>Права <select name="role"><option value="read">Read</option><option value="execute">Read + execute</option></select></label>
-<button type="submit">Создать</button></form></section>
-<section class="panel"><h2>Учётные записи</h2><div class="table-wrap"><table class="users-table">
-<thead><tr><th>Имя</th><th>Email</th><th>Роль</th><th>Состояние</th><th>Изменить</th></tr></thead><tbody>
-{% for user in users %}<tr><td data-label="Пользователь">{{ user.username }}</td><td data-label="Email">{{ user.email or "Не задан" }}</td><td data-label="Роль">{{ user.role }}</td><td data-label="Состояние">{{ "Активен" if user.active else "Отключён" }}</td><td data-label="Изменить">
-{% if user.role != "admin" %}<form method="post" action="/settings/users/{{ user.id }}" class="inline-form">
+{% else %}<form method="post" action="/settings/users/{{ user.id }}" class="inline-form">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="email" name="email" value="{{ user.email or '' }}" required maxlength="254" aria-label="Email пользователя {{ user.username }}" placeholder="Email">
 <select name="role" aria-label="Роль пользователя {{ user.username }}">
@@ -35,5 +56,13 @@
 </select>
 <input type="password" name="password" minlength="9" autocomplete="new-password" aria-label="Новый пароль пользователя {{ user.username }}" placeholder="Новый пароль (необязательно)">
 <input type="password" name="password_confirm" minlength="9" autocomplete="new-password" aria-label="Повторите новый пароль пользователя {{ user.username }}" placeholder="Повторите новый пароль">
-<button type="submit">Сохранить</button></form>{% else %}Главный администратор{% endif %}</td></tr>{% endfor %}
-</tbody></table></div></section>{% endblock %}
+<button type="submit">Сохранить</button></form>{% endif %}
+</div>
+</details>
+</article>
+{% endfor %}
+</div>
+<p id="users-empty" class="users-empty" hidden>Пользователи не найдены. Измените поисковый запрос.</p>
+</section>
+<script src="{{ url_for('static', path='/users.js').path }}?v={{ asset_version }}" defer></script>
+{% endblock %}

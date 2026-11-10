@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}Регистрация · Zabbix Live Monitoring{% endblock %}
+{% block content %}<section class="panel narrow"><h1>Регистрация</h1>
+<p>Только для сотрудников с почтой @stv.ee. После регистрации учётную запись должен активировать администратор.</p>
+<form method="post" action="/register">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Логин <input name="username" autocomplete="username" required maxlength="80" autofocus></label>
+<label>Email <input type="email" name="email" autocomplete="email" required maxlength="254" pattern="[^@\s]+@[sS][tT][vV]\.[eE][eE]" placeholder="name@stv.ee"></label>
+<label>Пароль <input type="password" name="password" autocomplete="new-password" required minlength="9"></label>
+<label>Повторите пароль <input type="password" name="password_confirm" autocomplete="new-password" required minlength="9"></label>
+<button type="submit">Зарегистрироваться</button>
+</form><p><a href="/login">Войти</a></p></section>{% endblock %}

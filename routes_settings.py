@@ -322,7 +322,12 @@ def users_page(request: Request):
     require_admin(request)
     with closing(connect()) as con:
         users = con.execute(
-            "SELECT id,username,email,role,active FROM users ORDER BY username").fetchall()
+            "SELECT id,username,email,role,active,registration_pending, "
+            "(SELECT MAX(occurred_at) FROM activity_log WHERE user_id=users.id) AS last_activity FROM users "
+            "ORDER BY registration_pending DESC, username").fetchall()
+    users = [{**dict(user), "last_activity_display": (
+        format_display_timestamp(user["last_activity"]) if user["last_activity"] else None)
+    } for user in users]
     admin_user = next((user for user in users if user["role"] == "admin"), None)
     return render(request, "users.html", users=users, admin_user=admin_user,
                   missing_email_count=sum(not user["email"] for user in users))
@@ -428,6 +433,8 @@ async def update_user(request: Request, user_id: int):
         try:
             con.execute("UPDATE users SET email=?,role=?,active=? WHERE id=?",
                         (email, role, active, user_id))
+            if active:
+                con.execute("UPDATE users SET registration_pending=0 WHERE id=?", (user_id,))
             if password:
                 con.execute("UPDATE users SET password_hash=? WHERE id=?",
                             (hash_password(password), user_id))

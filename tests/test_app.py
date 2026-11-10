@@ -55,6 +55,58 @@ class AppTests(unittest.TestCase):
         return self.client.post("/login", data={"csrf_token": csrf,
                                "username": name, "password": password})
 
+    def registration(self, username, email, password="registration-pass", confirmation=None):
+        return self.client.post("/register", data={
+            "csrf_token": self.token("/register"), "username": username,
+            "email": email, "password": password,
+            "password_confirm": password if confirmation is None else confirmation})
+
+    def test_registration_validation_and_csrf(self):
+        self.assertIn('href="/register"', self.client.get("/login").text)
+        self.assertEqual(self.client.post("/register", data={}).status_code, 400)
+        with patch("routes_account.notify_registration") as notify:
+            for email in ("x@example.com", "x@stv.ee.evil", "x@stvee", "x@@stv.ee"):
+                self.assertIn("только с почтой", self.registration("invalidreg", email).text)
+            self.assertIn("не менее 9", self.registration("invalidreg", "x@stv.ee", "short").text)
+            self.assertIn("не совпадают", self.registration("invalidreg", "x@stv.ee", confirmation="different").text)
+            self.assertIn("уже используется", self.registration("admin", "x@stv.ee").text)
+            notify.assert_not_called()
+        with closing(self.storage.connect()) as con:
+            self.assertIsNone(con.execute("SELECT id FROM users WHERE username='invalidreg'").fetchone())
+
+    def test_registration_activation(self):
+        with patch("routes_account.notify_registration") as notify:
+            response = self.registration("selfregistered", "SelfRegistered@STV.EE")
+            self.assertIn("после активации", response.text)
+            notify.assert_called_once_with("selfregistered", "selfregistered@stv.ee")
+            self.assertIn("уже используется", self.registration("SELFREGISTERED", "other@stv.ee").text)
+            self.assertIn("уже используется", self.registration("otherreg", "selfregistered@stv.ee").text)
+            self.assertEqual(notify.call_count, 1)
+        with closing(self.storage.connect()) as con:
+            user = con.execute("SELECT * FROM users WHERE username='selfregistered'").fetchone()
+        self.assertEqual((user["active"], user["role"], user["registration_pending"]), (0, "read", 1))
+        self.assertTrue(self.storage.check_password("registration-pass", user["password_hash"]))
+        self.assertEqual(self.login("selfregistered", "registration-pass").url.path, "/login")
+        self.assertEqual(self.client.get("/settings/users", follow_redirects=False).status_code, 303)
+        self.login()
+        self.assertIn("Ожидает активации", self.client.get("/settings/users").text)
+        self.client.post(f'/settings/users/{user["id"]}', data={
+            "csrf_token": self.token("/settings/users"), "email": user["email"],
+            "role": "read", "active": "1", "password": "", "password_confirm": ""})
+        with closing(self.storage.connect()) as con:
+            row = con.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
+        self.assertEqual((row["active"], row["registration_pending"]), (1, 0))
+        self.client.post("/logout", data={"csrf_token": self.token("/profile")})
+        self.assertEqual(self.login(user["email"], "registration-pass").url.path, "/")
+        self.assertEqual(self.client.post(f'/settings/users/{user["id"]}', data={
+            "csrf_token": self.token("/profile"), "active": "1"}).status_code, 403)
+
+    def test_registration_mail_failure_rolls_back(self):
+        with patch("routes_account.notify_registration", side_effect=RuntimeError("SMTP unavailable")):
+            self.assertIn("Не удалось отправить", self.registration("mailfailreg", "mailfailreg@stv.ee").text)
+        with closing(self.storage.connect()) as con:
+            self.assertIsNone(con.execute("SELECT id FROM users WHERE username='mailfailreg'").fetchone())
+
     def test_home_page_after_login(self):
         response = self.client.get("/", follow_redirects=False)
         self.assertEqual(response.status_code, 303)
@@ -95,6 +147,14 @@ class AppTests(unittest.TestCase):
         self.assertNotIn('href="http://', devices_page.text)
         self.assertNotIn('src="http://', devices_page.text)
         self.assertEqual(self.client.get("/static/pagination.css").status_code, 200)
+        users_page = self.client.get("/settings/users")
+        self.assertEqual(users_page.status_code, 200)
+        self.assertRegex(users_page.text, r'href="/static/users\.css\?v=\d+"')
+        self.assertRegex(users_page.text, r'src="/static/users\.js\?v=\d+"')
+        self.assertNotIn('href="http://', users_page.text)
+        self.assertNotIn('src="http://', users_page.text)
+        self.assertEqual(self.client.get("/static/users.css").status_code, 200)
+        self.assertEqual(self.client.get("/static/users.js").status_code, 200)
 
     def test_ups_section_uses_shared_device_views_and_card(self):
         self.assertEqual(self.client.get("/devices/UPSs", follow_redirects=False).status_code, 303)
