@@ -3,10 +3,25 @@ import os
 import unittest
 from unittest.mock import patch
 
-from registration_mail import notify_registration
+from registration_mail import notify_activation, notify_registration
 
 
 class RegistrationMailTests(unittest.TestCase):
+    def test_activation_without_tls(self):
+        env = {"SMTP_HOST": "relay.example.com", "SMTP_FROM": "monitor@stv.ee",
+               "SMTP_SECURITY": "none", "SMTP_PORT": "25"}
+        with patch.dict(os.environ, env, clear=True), patch("registration_mail.smtplib.SMTP") as smtp:
+            client = smtp.return_value.__enter__.return_value
+            client.send_message.return_value = {}
+            notify_activation("newuser", "newuser@stv.ee")
+            smtp.assert_called_once_with("relay.example.com", 25, timeout=15)
+            client.starttls.assert_not_called()
+            client.login.assert_not_called()
+            message = client.send_message.call_args.args[0]
+            self.assertEqual(message["To"], "newuser@stv.ee")
+            self.assertIn("активирована", message["Subject"])
+            self.assertIn("newuser", message.get_content())
+
     def test_starttls_notification(self):
         env = {"SMTP_HOST": "smtp.example.com", "SMTP_FROM": "monitor@stv.ee",
                "SMTP_USERNAME": "monitor", "SMTP_PASSWORD": "smtp-secret"}

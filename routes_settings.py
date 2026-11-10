@@ -1,6 +1,7 @@
 """Administrative settings, Zabbix catalog and user management."""
 import asyncio
 import ipaddress
+import logging
 import os
 import re
 import sqlite3
@@ -17,6 +18,7 @@ from app_storage import (DEFAULT_ACTIVITY_RETENTION_DAYS, check_password,
 from app_web import add_message, checked_form, render, require_admin
 from cmts_groups import apply_plan, build_plan
 from mac_vendors import database_status, update_database
+from registration_mail import notify_activation
 from switch_monitor import DEFAULT_EXCLUDED_NAMES, parse_excluded_names
 from zabbix_service import category_filter, clear_caches, zabbix_call, zabbix_catalog
 
@@ -406,6 +408,7 @@ async def update_user(request: Request, user_id: int):
     require_admin(request)
     form = await checked_form(request)
     with closing(connect()) as con:
+        con.execute("BEGIN IMMEDIATE")
         target = con.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
         if not target:
             raise HTTPException(404)
@@ -441,6 +444,14 @@ async def update_user(request: Request, user_id: int):
             con.commit()
         except sqlite3.IntegrityError:
             add_message(request, "Имя или email уже используется.", "error")
+            return RedirectResponse("/settings/users", status_code=303)
+    if active and not target["active"]:
+        try:
+            await asyncio.to_thread(notify_activation, target["username"], email)
+        except Exception:
+            logging.getLogger(__name__).exception("Activation notification failed")
+            add_message(request, "Учётная запись активирована, но письмо пользователю "
+                        "отправить не удалось. Проверьте настройки SMTP.", "error")
             return RedirectResponse("/settings/users", status_code=303)
     add_message(request, "Пользователь обновлён.")
     return RedirectResponse("/settings/users", status_code=303)

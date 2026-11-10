@@ -90,9 +90,12 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.get("/settings/users", follow_redirects=False).status_code, 303)
         self.login()
         self.assertIn("Ожидает активации", self.client.get("/settings/users").text)
-        self.client.post(f'/settings/users/{user["id"]}', data={
-            "csrf_token": self.token("/settings/users"), "email": user["email"],
-            "role": "read", "active": "1", "password": "", "password_confirm": ""})
+        with patch("routes_settings.notify_activation") as activation:
+            for _ in range(2):
+                self.client.post(f'/settings/users/{user["id"]}', data={
+                    "csrf_token": self.token("/settings/users"), "email": user["email"],
+                    "role": "read", "active": "1", "password": "", "password_confirm": ""})
+            activation.assert_called_once_with("selfregistered", user["email"])
         with closing(self.storage.connect()) as con:
             row = con.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
         self.assertEqual((row["active"], row["registration_pending"]), (1, 0))
@@ -106,6 +109,22 @@ class AppTests(unittest.TestCase):
             self.assertIn("Не удалось отправить", self.registration("mailfailreg", "mailfailreg@stv.ee").text)
         with closing(self.storage.connect()) as con:
             self.assertIsNone(con.execute("SELECT id FROM users WHERE username='mailfailreg'").fetchone())
+
+    def test_activation_mail_failure_keeps_account_active(self):
+        with patch("routes_account.notify_registration"):
+            self.registration("activationmailfail", "activationmailfail@stv.ee")
+        self.login()
+        with closing(self.storage.connect()) as con:
+            user = con.execute("SELECT * FROM users WHERE username='activationmailfail'").fetchone()
+        data = {"email": user["email"], "role": "read", "active": "1"}
+        with patch("routes_settings.notify_activation", side_effect=RuntimeError("SMTP unavailable")) as notify:
+            data["csrf_token"] = self.token("/settings/users")
+            response = self.client.post(f'/settings/users/{user["id"]}', data=data)
+            self.assertIn("письмо пользователю отправить не удалось", response.text)
+            notify.assert_called_once_with(user["username"], user["email"])
+        with closing(self.storage.connect()) as con:
+            row = con.execute("SELECT active,registration_pending FROM users WHERE id=?", (user["id"],)).fetchone()
+        self.assertEqual(tuple(row), (1, 0))
 
     def test_home_page_after_login(self):
         response = self.client.get("/", follow_redirects=False)

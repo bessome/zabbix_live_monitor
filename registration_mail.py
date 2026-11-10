@@ -6,6 +6,25 @@ from email.message import EmailMessage
 
 
 def notify_registration(username, email):
+    send_notification(
+        "maksim@stv.ee", "Zabbix Live Monitoring: заявка на регистрацию",
+        f"Новая заявка на регистрацию.\nЛогин: {username}\nEmail: {email}\n\n"
+        "Для активации войдите в приложение под администратором, откройте "
+        "Настройки → Пользователи, выберите «Активен» и сохраните учётную запись.\n",
+    )
+
+
+def notify_activation(username, email):
+    send_notification(
+        email, "Zabbix Live Monitoring: учётная запись активирована",
+        f"Здравствуйте, {username}!\n\n"
+        "Ваша учётная запись в Zabbix Live Monitoring активирована.\n"
+        "Теперь вы можете войти в приложение с логином или email "
+        "и паролем, указанным при регистрации.\n",
+    )
+
+
+def send_notification(recipient, subject, body):
     host = os.environ.get("SMTP_HOST", "").strip()
     sender = os.environ.get("SMTP_FROM", "").strip()
     if not host or not sender:
@@ -16,13 +35,9 @@ def notify_registration(username, email):
     port = int(os.environ.get("SMTP_PORT") or (465 if security == "ssl" else 587))
     message = EmailMessage()
     message["From"] = sender
-    message["To"] = "maksim@stv.ee"
-    message["Subject"] = "Zabbix Live Monitoring: заявка на регистрацию"
-    message.set_content(
-        f"Новая заявка на регистрацию.\nЛогин: {username}\nEmail: {email}\n\n"
-        "Для активации войдите в приложение под администратором, откройте "
-        "Настройки → Пользователи, выберите «Активен» и сохраните учётную запись.\n"
-    )
+    message["To"] = recipient
+    message["Subject"] = subject
+    message.set_content(body)
     context = ssl.create_default_context()
     client = smtplib.SMTP_SSL if security == "ssl" else smtplib.SMTP
     kwargs = {"context": context} if security == "ssl" else {}
@@ -33,4 +48,4 @@ def notify_registration(username, email):
         if login:
             smtp.login(login, os.environ.get("SMTP_PASSWORD", ""))
         if smtp.send_message(message):
-            raise RuntimeError("Registration notification recipient refused")
+            raise RuntimeError("Notification recipient refused")
