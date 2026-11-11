@@ -4,4 +4,6 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Имя пользователя или email <input name="username" autocomplete="username" required autofocus></label>
 <label>Пароль <input type="password" name="password" autocomplete="current-password" required></label>
-<button type="submit">Войти</button></form><p><a href="/register">Зарегистрироваться</a></p></section>{% endblock %}
+<button type="submit">Войти</button></form>
+<div class="login-registration"><a class="registration-link" href="/register">Зарегистрироваться</a></div>
+</section>{% endblock %}
