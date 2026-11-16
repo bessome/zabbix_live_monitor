@@ -222,7 +222,7 @@ async def devices_api(request: Request, category: str, q: str = "",
     elif category == "Modems":
         allowed_sorts.update(("us", "ds"))
     elif category == "UPSs":
-        allowed_sorts.update(("load", "battery", "autonomy"))
+        allowed_sorts.update(("load", "battery", "autonomy", "ups_state"))
     if sort_by not in allowed_sorts or sort_dir not in ("asc", "desc"):
         raise HTTPException(422, "Invalid sort parameters")
     if page < 1 or per_page not in (25, 50, 100, 250) or view not in ("list", "tree"):

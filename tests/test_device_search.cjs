@@ -74,7 +74,7 @@ test('amplifier sort applies to the whole API query and survives navigation', as
 
 test('all numeric list columns sort through the API and restore their direction', async () => {
   for (const [category, keys] of [['EDFA', ['output', 'input']], ['Modems', ['us', 'ds']],
-    ['UPSs', ['load', 'battery', 'autonomy']]]) {
+    ['UPSs', ['load', 'battery', 'autonomy', 'ups_state']]]) {
     for (const key of keys) {
       const storage = new Map();
       const page = loadPage(storage, category);
