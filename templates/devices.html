@@ -337,7 +337,7 @@ function updateRowSummary(row, device, summary) {
     const state = !valid ? "unknown" : ["normal", "warning", "critical", "unrated"].includes(metric.state)
       ? metric.state : (alert ? "critical" : rated ? "normal" : "unrated");
     value.textContent = !summary ? "Загрузка…" : valid
-      ? Number(Number(metric.value).toFixed(2)).toString() + (metric.units ? " " + metric.units : "") : "n/a";
+      ? (metric.display_value ?? Number(Number(metric.value).toFixed(2)).toString()) + (metric.units ? " " + metric.units : "") : "n/a";
     if (state === "critical" || state === "warning") value.title = column.label + " вне нормы";
     cell.dataset.metricState = state;
     states.push(state);

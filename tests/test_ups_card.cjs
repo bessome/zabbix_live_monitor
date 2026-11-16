@@ -78,7 +78,7 @@ test('UPS card keeps load history inline and opens battery history separately', 
     {id: 'load', label: 'Output Load L1', value: '12.123456789', units: '%', state: 'unrated'},
     {id: 'battery', label: 'Battery Capacity', value: '49.999999', units: '%', state: 'critical'},
     {id: 'autonomy', label: 'Autonomy', value: '600', units: 's', state: 'unrated'},
-    {id: 'ups_state', label: 'Ups state', value: '2', units: '', state: 'unrated'}
+    {id: 'ups_state', label: 'Ups state', value: '2', display_value: 'Normal', units: '', state: 'unrated'}
   ]);
   await flush();
   await page.timers.find(timer => timer.ms === 5000).fn();
@@ -92,7 +92,7 @@ test('UPS card keeps load history inline and opens battery history separately', 
   assert.equal(rows[1].querySelector('.modem-number').textContent, '50');
   assert.ok(rows[1].querySelector('strong').classList.values.has('optical-value-alert'));
   assert.equal(rows[2].querySelector('.modem-units').textContent, ' s');
-  assert.equal(rows[3].querySelector('.modem-number').textContent, '2');
+  assert.equal(rows[3].querySelector('.modem-number').textContent, 'Normal');
   page.ids.get('optical-channels').listeners.click({target: rows[1]});
   await flush();
   assert.equal(page.ids.get('modem-history-dialog').open, true);

@@ -241,10 +241,16 @@ def ups_levels(host_ids):
             return "critical" if number < 50 else "warning" if number < 100 else "normal"
         return "unrated"
 
-    return _named_device_levels(host_ids, {
+    levels = _named_device_levels(host_ids, {
         "Output Load L1": "load", "Battery Capacity": "battery", "Autonomy": "autonomy",
         "Ups state": "ups_state",
     }, state_for, case_insensitive=True)
+    for metrics in levels.values():
+        metric = metrics.get("ups_state")
+        if metric and metric["value"] is not None:
+            metric["display_value"] = {Decimal(2): "Normal", Decimal(3): "Normal",
+                                       Decimal(5): "Battery"}.get(Decimal(metric["value"]))
+    return levels
 
 
 def _named_device_levels(host_ids, labels, state_for, *, case_insensitive=False):

@@ -53,7 +53,7 @@
       const changed = previousValues.has(item.id)
         && previousValues.get(item.id) !== item.value && item.value != null;
       const valid = item.value != null && item.value !== "" && Number.isFinite(Number(item.value));
-      number.textContent = valid ? String(Number(Number(item.value).toFixed(2))) : "n/a";
+      number.textContent = valid ? (item.display_value ?? String(Number(Number(item.value).toFixed(2)))) : "n/a";
       units.textContent = !valid || !item.units ? "" : " " + item.units;
       number.classList.toggle("modem-value-changed", changed);
       previousValues.set(item.id, item.value);

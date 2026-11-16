@@ -517,13 +517,15 @@ test('UPS columns preserve precision for sorting, display units, and isolate bat
     ['100', 'normal', '100 %'], [null, 'unknown', 'n/a'], ['Infinity', 'unknown', 'n/a']]) {
     page.context.summary = {ups_levels: {
       load: {value: '12.123456789', units: '%', state: 'unrated'},
-      battery: {value, state, units: '%'}, autonomy: {value: '600', units: 's', state: 'unrated'}
+      battery: {value, state, units: '%'}, autonomy: {value: '600', units: 's', state: 'unrated'},
+      ups_state: {value: '5', display_value: 'Battery', state: 'unrated'}
     }};
     vm.runInContext('updateRowSummary(metricRow, {}, summary)', page.context);
     assert.equal(vm.runInContext("metricRow.metricCells.get('battery').cell.dataset.metricState", page.context), state);
     assert.equal(vm.runInContext("metricRow.metricCells.get('battery').value.textContent", page.context), text);
     assert.equal(vm.runInContext("metricRow.metricCells.get('load').value.textContent", page.context), '12.12 %');
     assert.equal(vm.runInContext("metricRow.metricCells.get('autonomy').value.textContent", page.context), '600 s');
+    assert.equal(vm.runInContext("metricRow.metricCells.get('ups_state').value.textContent", page.context), 'Battery');
     assert.ok(!['critical', 'warning'].includes(vm.runInContext('metricRow.dataset.levelState', page.context)));
   }
   const order = vm.runInContext(`sortedBranchDevices([

@@ -227,6 +227,17 @@ class AppTests(unittest.TestCase):
         self.assertEqual(levels["load"]["state"], "unrated")
         self.assertEqual(levels["autonomy"]["units"], "s")
 
+    def test_ups_state_labels_preserve_source_codes(self):
+        from zabbix_service import ups_levels
+        base = {"itemid": "7", "hostid": "42", "name": "Ups state", "status": "0",
+                "value_type": "3", "units": "", "lastclock": "100"}
+        for value, label in [("2", "Normal"), ("3", "Normal"), ("5", "Battery"),
+                             ("4", None), ("NaN", None)]:
+            with self.subTest(value=value), patch("zabbix_service.zabbix_call", return_value=[{**base, "lastvalue": value}]):
+                metric = ups_levels(["42"])["42"]["ups_state"]
+                self.assertEqual(metric.get("display_value"), label)
+                self.assertEqual(metric["raw_value"], None if value == "NaN" else value)
+
     def test_ups_api_search_ignores_name_case_and_keeps_l1(self):
         from zabbix_service import ups_levels
         def item(item_id, name, value, units="%"):
