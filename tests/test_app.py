@@ -275,12 +275,14 @@ class AppTests(unittest.TestCase):
         device = {"id": "42", "name": "UPS", "technical_name": "ups", "address": "192.0.2.42"}
         item = {"id": "81", "label": "Output Load L1", "value": "12.123456789",
                 "raw_value": "12.123456789", "units": "%", "value_type": "0"}
-        values = {"42": {"load": item}}
+        state_item = {"id": "82", "label": "Ups state", "value": "5", "raw_value": "5",
+                      "display_value": "Battery", "units": "", "value_type": "3"}
+        values = {"42": {"load": item, "ups_state": state_item}}
         with (patch("routes_devices.host_rows", return_value=[device]),
               patch("routes_devices.ups_levels", return_value=values),
               patch("routes_devices.numeric_history", new_callable=AsyncMock,
                     return_value={"points": [{"time": 123, "value": 12.123456789}]}) as history):
-            self.assertEqual(self.client.get(path).json()["items"], [item])
+            self.assertEqual(self.client.get(path).json()["items"], [item, state_item])
             self.assertEqual(self.client.get("/api/devices/UPSs").json()["devices"][0]["ups_levels"], values["42"])
             self.assertEqual(self.client.get("/api/devices/UPSs/summaries?ids=42").json()["summaries"]["42"]["ups_levels"], values["42"])
             self.assertEqual(self.client.get(path + "/81/history?period=12h").json()["points"][0]["value"], 12.123456789)

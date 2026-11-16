@@ -633,7 +633,7 @@ async def ups_current(request: Request, category: str, host_id: str):
         levels = (await asyncio.to_thread(ups_levels, [host_id])).get(host_id, {})
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc), "items": []}, status_code=503)
-    return JSONResponse({"items": [levels[key] for key in ("load", "battery", "autonomy") if key in levels],
+    return JSONResponse({"items": [levels[key] for key in ("load", "battery", "autonomy", "ups_state") if key in levels],
                          "updated_at": int(time.time())}, headers={"Cache-Control": "no-store"})
 
 
