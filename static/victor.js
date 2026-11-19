@@ -18,6 +18,30 @@
   const hourFormat = new Intl.DateTimeFormat("ru-RU", {
     timeZone: timezone, hour: "2-digit", minute: "2-digit"
   });
+  const dateFormat = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: timezone, day: "2-digit", month: "2-digit"
+  });
+  const calendarFormat = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  });
+  const timeSteps = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800,
+    14400, 21600, 43200, 86400, 172800, 604800];
+
+  function timeTicks(from, to, step) {
+    const ticks = [];
+    // Check local calendar boundaries, including timezone/DST changes. Do not
+    // divide a rolling range into fractions: those produce labels like 14:55.
+    const probe = step < 3600 ? 60 : 900;
+    for (let stamp = Math.ceil(from / probe) * probe; stamp <= to; stamp += probe) {
+      const parts = Object.fromEntries(calendarFormat.formatToParts(new Date(stamp * 1000))
+        .filter(part => part.type !== "literal").map(part => [part.type, Number(part.value)]));
+      const local = Date.UTC(parts.year, parts.month - 1, parts.day,
+        parts.hour, parts.minute) / 1000;
+      if (local % step === 0) ticks.push(stamp);
+    }
+    return ticks;
+  }
   const rows = [
     {key: "ds_snr", name: "DS S/N ratio", color: "#00ba12", fill: true},
     {key: "us", name: "US Level", color: "#1234e8"},
@@ -31,7 +55,7 @@
   let timer = null;
 
   function format(value) {
-    return Number(value.toFixed(2)).toFixed(2);
+    return Number.isFinite(value) ? String(Number(value.toFixed(2))) : "—";
   }
 
   function clearChart() {
@@ -70,7 +94,7 @@
     const left = width < 460 ? 43 : 54;
     const right = 12;
     const top = 16;
-    const bottom = 34;
+    const bottom = period === "1h" ? 32 : 48;
     const plotWidth = Math.max(1, width - left - right);
     const plotHeight = Math.max(1, height - top - bottom);
     const byKey = Object.fromEntries(data.series.map(series => [series.key, series]));
@@ -80,9 +104,14 @@
     const x = time => left + (time - data.from) / (data.to - data.from) * plotWidth;
     const y = value => top + (high - value) / (high - low) * plotHeight;
 
-    for (let index = 0; index <= 24; index++) {
-      const xx = left + index / 24 * plotWidth;
-      ctx.strokeStyle = index % 6 === 0 ? "#e1baba" : "#f2e7e7";
+    const targetStep = (data.to - data.from) / Math.max(2, Math.floor(plotWidth / 64));
+    const tickStep = timeSteps.find(step => step >= targetStep) || timeSteps.at(-1);
+    const ticks = timeTicks(data.from, data.to, tickStep);
+    const minorStep = timeSteps.filter(step => step <= tickStep / 2).at(-1) || tickStep;
+    const majorTicks = new Set(ticks);
+    for (const stamp of timeTicks(data.from, data.to, minorStep)) {
+      const xx = x(stamp);
+      ctx.strokeStyle = majorTicks.has(stamp) ? "#e1baba" : "#f2e7e7";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(xx + .5, top);
@@ -132,13 +161,21 @@
     }
     ctx.restore();
 
-    const tickCount = width < 500 ? 2 : 4;
     ctx.fillStyle = "#333";
-    for (let index = 0; index <= tickCount; index++) {
-      const xx = left + index / tickCount * plotWidth;
-      ctx.textAlign = index === 0 ? "left" : index === tickCount ? "right" : "center";
-      const time = new Date((data.from + index / tickCount * (data.to - data.from)) * 1000);
-      ctx.fillText((period === "1h" ? hourFormat : timeFormat).format(time), xx, height - 9);
+    ctx.textAlign = "center";
+    let previousDate = null;
+    for (const stamp of ticks) {
+      const xx = x(stamp);
+      const time = new Date(stamp * 1000);
+      const date = dateFormat.format(time);
+      const label = tickStep >= 86400 ? date : hourFormat.format(time);
+      const halfWidth = ctx.measureText(label).width / 2;
+      const labelX = Math.max(left + halfWidth, Math.min(width - right - halfWidth, xx));
+      ctx.fillText(label, labelX, height - (period === "1h" ? 9 : 24));
+      if (period !== "1h" && tickStep < 86400 && date !== previousDate) {
+        ctx.fillText(date, labelX, height - 9);
+      }
+      previousDate = date;
     }
     if (!values.length) {
       ctx.fillStyle = "#555";
@@ -176,8 +213,10 @@
       entry.append(swatch, name, statistics);
       legend.appendChild(entry);
     }
-    status.textContent = data.series.some(series => series.aggregation === "hourly_average")
-      ? "14d — почасовое среднее Zabbix" : "";
+    status.textContent = [timeFormat.format(new Date(data.from * 1000)) + " — "
+      + timeFormat.format(new Date(data.to * 1000)),
+    data.series.some(series => series.aggregation === "hourly_average")
+      ? "14d — почасовое среднее Zabbix" : ""].filter(Boolean).join(" · ");
     canvas.setAttribute("aria-label", "График DS SNR, US Level и DS Level за " + data.period);
     draw(data);
   }
