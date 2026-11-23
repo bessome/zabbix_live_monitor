@@ -184,8 +184,10 @@ def modem_list_levels(host_ids, *, include_raw=False):
         "output": ["itemid", "hostid", "name", "status", "value_type",
                    "units", "lastvalue", "lastclock"],
         "hostids": host_ids,
-        "search": {"name": ["Level", "SNR"]},
-        "searchByAny": True,
+        # All supported US/DS names contain "channel". A single search keeps
+        # this query scoped to hostids without broad OR search conditions.
+        "search": {"name": "channel"},
+        "filter": {"status": "0", "value_type": ["0", "3"]},
     })
     choices = {}
     for item in items:

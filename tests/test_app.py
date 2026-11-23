@@ -1082,8 +1082,10 @@ class AppTests(unittest.TestCase):
             })
             self.assertEqual(api.call_args.args[0], "item.get")
             self.assertEqual(api.call_args.args[1]["hostids"], ["1", "2", "3", "4", "5"])
-            self.assertEqual(api.call_args.args[1]["search"], {"name": ["Level", "SNR"]})
-            self.assertTrue(api.call_args.args[1]["searchByAny"])
+            self.assertEqual(api.call_args.args[1]["search"], {"name": "channel"})
+            self.assertNotIn("searchByAny", api.call_args.args[1])
+            self.assertEqual(api.call_args.args[1]["filter"],
+                             {"status": "0", "value_type": ["0", "3"]})
         self.assertEqual(self.zabbix.modem_list_levels([]), {})
 
     def test_modem_list_api_uses_zabbix_levels_instead_of_descriptions(self):
