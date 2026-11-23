@@ -84,6 +84,7 @@ const displayTime = new Intl.DateTimeFormat("en-GB", {
 let currentPage = 1;
 let lastPage = 1;
 let requestSequence = 0;
+let pendingRefreshes = 0;
 const monitoredIds = new Set();
 const liveValues = new Map();
 const monitorRequests = {ping: {inFlight: false, controller: null}, metrics: {inFlight: false, controller: null}};
@@ -576,6 +577,7 @@ function applyView() {
   viewButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.deviceView === view)));
 }
 async function refresh() {
+  pendingRefreshes++;
   saveSearch();
   const sequence = ++requestSequence;
   const params = new URLSearchParams({q: search.value.trim(), page: String(currentPage), per_page: pageSize.value, view});
@@ -616,6 +618,8 @@ async function refresh() {
     document.getElementById("updated").textContent = displayTime.format(new Date(data.updated_at * 1000));
   } catch (error) {
     if (sequence === requestSequence) status.textContent = error.message;
+  } finally {
+    pendingRefreshes--;
   }
 }
 function goTo(page) { currentPage = page; refresh(); }
@@ -696,5 +700,5 @@ refresh();
 pollMonitored();
 setInterval(() => pollMonitorKind("ping"), 1000);
 setInterval(() => pollMonitorKind("metrics"), 5000);
-setInterval(refresh, 15000);
+setInterval(() => { if (!pendingRefreshes) refresh(); }, 15000);
 </script>{% endblock %}

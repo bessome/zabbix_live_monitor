@@ -176,22 +176,28 @@ def device_descriptions(host_ids):
     return descriptions
 
 
-def modem_list_levels(host_ids, *, include_raw=False):
+def modem_list_levels(host_ids, *, include_raw=False, metric=None):
     """Read current US level, DS level and DS SNR per visible modem."""
     if not host_ids:
         return {}
-    items = zabbix_call("item.get", {
-        "output": ["itemid", "hostid", "name", "status", "value_type",
-                   "units", "lastvalue", "lastclock"],
-        "hostids": host_ids,
-        # All supported US/DS names contain "channel". A single search keeps
-        # this query scoped to hostids without broad OR search conditions.
-        "search": {"name": "channel"},
-        "filter": {"status": "0", "value_type": ["0", "3"]},
-    })
+    searches = {None: "channel", "us": "Upstream channel", "ds": "Level", "ds_snr": "SNR"}
+    search = searches[metric]
+    host_ids = list(dict.fromkeys(str(host_id) for host_id in host_ids))
+    # Numeric sorting covers the whole catalogue, not just the current page.
+    # Bound each API request even when that catalogue contains thousands of hosts.
+    items = []
+    for offset in range(0, len(host_ids), 100):
+        items.extend(zabbix_call("item.get", {
+            "output": ["itemid", "hostid", "name", "status", "value_type",
+                       "units", "lastvalue", "lastclock"],
+            "hostids": host_ids[offset:offset + 100],
+            "search": {"name": search},
+            "filter": {"status": "0", "value_type": ["0", "3"]},
+        }))
+    host_id_set = set(host_ids)
     choices = {}
     for item in items:
-        if (str(item.get("hostid")) not in host_ids
+        if (str(item.get("hostid")) not in host_id_set
                 or str(item.get("status")) != "0"
                 or str(item.get("value_type")) not in ("0", "3")):
             continue
@@ -210,6 +216,8 @@ def modem_list_levels(host_ids, *, include_raw=False):
         match = us or ds or snr
         channel = int(match.group(1)) if match.group(1) else 9999
         kind = "us" if us else "ds" if ds else "ds_snr"
+        if metric is not None and kind != metric:
+            continue
         # Prefer a numbered channel over a generic item, then the lowest channel.
         rank = (channel, -clock, str(item.get("itemid", "")))
         key = (str(item["hostid"]), kind)

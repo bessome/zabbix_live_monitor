@@ -1201,12 +1201,51 @@ class AppTests(unittest.TestCase):
                     self.assertEqual(first.status_code, 200)
                     self.assertEqual([row["id"] for row in first.json()["devices"]],
                                      [str(i) for i in range(1, 26)])
-                    self.assertEqual(read.call_count, 1)
+                    self.assertEqual(read.call_count, 2 if category == "Modems" else 1)
+                    if category == "Modems":
+                        self.assertEqual(read.call_args_list[0].kwargs,
+                                         {"include_raw": True, "metric": kind})
+                        self.assertEqual(read.call_args_list[1].args[0], [str(i) for i in range(1, 26)])
                     second = self.client.get(path + "&page=2").json()["devices"]
                     self.assertEqual([row["id"] for row in second], ["26", "27", "28", "29", "30"])
                     desc = self.client.get(path + "&sort_dir=desc").json()["devices"]
                     self.assertEqual(desc[0]["id"], "28")
                     self.assertEqual(self.client.get(path + "&sort_dir=bad").status_code, 422)
+
+    def test_modem_snr_sort_batches_catalogue_and_hydrates_visible_page(self):
+        self.login()
+        devices = [{"id": str(i), "name": f"Modem {i:03}", "technical_name": str(i),
+                    "address": f"192.0.2.{i}"} for i in range(1, 206)]
+
+        def api(method, params):
+            self.assertEqual(method, "item.get")
+            if len(params["hostids"]) > 100:
+                raise RuntimeError("The read operation timed out")
+            snr_only = params["search"]["name"] == "SNR"
+            items = []
+            for host_id in params["hostids"]:
+                base = {"hostid": host_id, "status": "0", "value_type": "0", "lastclock": "200"}
+                items.append({**base, "itemid": host_id + "1", "name": "Downstream channel SNR",
+                              "units": "dB", "lastvalue": str(35 + int(host_id) / 10000)})
+                if not snr_only:
+                    items.append({**base, "itemid": host_id + "2", "name": "Upstream channel US Level",
+                                  "units": "dBmV", "lastvalue": "40"})
+                    items.append({**base, "itemid": host_id + "3", "name": "Downstream channel Level",
+                                  "units": "dBmV", "lastvalue": "0"})
+            return items
+
+        with (patch("routes_devices.host_rows", return_value=devices),
+              patch("zabbix_service.zabbix_call", side_effect=api) as calls):
+            response = self.client.get("/api/devices/Modems?sort_by=ds_snr&sort_dir=desc&per_page=25")
+            self.assertEqual(response.status_code, 200)
+            result = response.json()
+            self.assertEqual([row["id"] for row in result["devices"]],
+                             [str(i) for i in range(205, 180, -1)])
+            self.assertEqual(result["total"], 205)
+            self.assertEqual(set(result["devices"][0]["modem_levels"]), {"us", "ds", "ds_snr"})
+            self.assertEqual([len(call.args[1]["hostids"]) for call in calls.call_args_list], [100, 100, 5, 25])
+            self.assertEqual([call.args[1]["search"]["name"] for call in calls.call_args_list],
+                             ["SNR", "SNR", "SNR", "channel"])
 
     def test_amplifier_sort_source_retains_raw_precision(self):
         item = {"itemid": "1", "hostid": "42", "name": "Optical input power", "status": "0",

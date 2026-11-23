@@ -91,6 +91,23 @@ test('all numeric list columns sort through the API and restore their direction'
   }
 });
 
+test('periodic list refresh waits for the active catalogue request', async () => {
+  const page = loadPage(new Map(), 'Modems');
+  await flush();
+  vm.runInContext(`var finishRefresh; var refreshCalls = 0;
+    fetch = () => { refreshCalls++; return new Promise(resolve => { finishRefresh = resolve; }); };
+    refresh();`, page.context);
+  const periodic = page.intervals.find(item => item.ms === 15000);
+  periodic.handler();
+  periodic.handler();
+  assert.equal(vm.runInContext('refreshCalls', page.context), 1);
+  vm.runInContext(`finishRefresh({ok: false, json: async () => ({error: 'timeout'})})`, page.context);
+  await flush();
+  assert.equal(vm.runInContext('pendingRefreshes', page.context), 0);
+  periodic.handler();
+  assert.equal(vm.runInContext('refreshCalls', page.context), 2);
+});
+
 test('amplifier level column rounds presentation and keeps missing values neutral', async () => {
   const page = loadPage(new Map(), 'TV_Amplifires');
   await flush();

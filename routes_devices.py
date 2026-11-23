@@ -255,7 +255,7 @@ async def devices_api(request: Request, category: str, q: str = "",
                 all_device_levels = await asyncio.to_thread(
                     {"EDFA": edfa_levels, "Modems": modem_list_levels, "UPSs": ups_levels}[category],
                     [row["id"] for row in rows],
-                    **({"include_raw": True} if category == "Modems" else {}))
+                    **({"include_raw": True, "metric": sort_by} if category == "Modems" else {}))
             except RuntimeError as exc:
                 return JSONResponse({"error": str(exc)}, status_code=503)
             values = {}
@@ -307,8 +307,9 @@ async def devices_api(request: Request, category: str, q: str = "",
         edfa_values = {}
         ups_values = {}
         if category == "Modems":
-            modem_levels = (all_device_levels if all_device_levels is not None else
-                            await asyncio.to_thread(modem_list_levels, host_ids))
+            # The catalogue query above contains only the sorting metric.
+            # Fetch every visible column only after choosing this page's hosts.
+            modem_levels = await asyncio.to_thread(modem_list_levels, host_ids)
             optical_levels = {}
             descriptions = {}
         elif category == "TV_Amplifires":
