@@ -45,7 +45,7 @@ const rows = document.getElementById("rows");
 const metricColumns = category === "Modems"
   ? [{key: "us", label: "US Level", path: ["modem_levels", "us"], min: 20, max: 52},
      {key: "ds", label: "DS Level", path: ["modem_levels", "ds"], min: -15, max: 18},
-     {key: "ds_snr", label: "DS SNR", mobileLabel: "SNR", path: ["modem_levels", "ds_snr"]}]
+     {key: "ds_snr", label: "DS SNR", mobileLabel: "SNR", path: ["modem_levels", "ds_snr"], min: 30, minExclusive: true}]
   : category === "TV_Amplifires" ? [{key: "optical", label: "Опт. уровень", path: ["optical_level"], min: -3.4, max: Infinity}]
   : category === "EDFA" ? [{key: "output", label: "Optical output level", mobileLabel: "OUT", path: ["edfa_levels", "output"]},
      {key: "input", label: "Optical input level", mobileLabel: "IN", path: ["edfa_levels", "input"]}]
@@ -337,7 +337,7 @@ function updateRowSummary(row, device, summary) {
     }
     const valid = metric?.value != null && metric.value !== "" && Number.isFinite(Number(metric.value));
     const numeric = valid ? Number(metric.raw_value ?? metric.value) : NaN;
-    const alert = valid && (metric.alert ?? (numeric < column.min || numeric > column.max));
+    const alert = valid && (metric.alert ?? ((column.minExclusive ? numeric <= column.min : numeric < column.min) || numeric > column.max));
     const rated = column.min != null || column.max != null || metric?.alert != null;
     const state = !valid ? "unknown" : ["normal", "warning", "critical", "unrated"].includes(metric.state)
       ? metric.state : (alert ? "critical" : rated ? "normal" : "unrated");

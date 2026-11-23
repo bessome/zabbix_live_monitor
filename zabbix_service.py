@@ -217,7 +217,9 @@ def modem_list_levels(host_ids, *, include_raw=False):
                 rounded = Decimal(0)
             choices[key] = (rank, {"value": format(rounded.normalize(), "f"),
                                    "units": str(item.get("units") or "")})
-            if kind != "ds_snr":
+            if kind == "ds_snr":
+                choices[key][1]["alert"] = value <= 30
+            else:
                 choices[key][1]["alert"] = (value < (20 if kind == "us" else -15)
                                             or value > (52 if kind == "us" else 18))
             if include_raw or kind == "ds_snr":

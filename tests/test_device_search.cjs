@@ -407,12 +407,14 @@ test('DS SNR formats live values and sorts at source precision with missing valu
   const page = loadPage(new Map(), 'Modems');
   await flush();
   installMetricRow(page);
-  for (const [value, expected] of [['35.123456', '35.12 dB'], ['35.00', '35 dB'],
-    ['-0.00001', '0 dB'], [null, 'n/a'], ['Infinity', 'n/a']]) {
+  for (const [value, expected, state] of [['35.123456', '35.12 dB', 'normal'], ['35.00', '35 dB', 'normal'],
+    ['30', '30 dB', 'critical'], ['29.999', '30 dB', 'critical'], ['30.001', '30 dB', 'normal'],
+    ['-0.00001', '0 dB', 'critical'], [null, 'n/a', 'unknown'], ['Infinity', 'n/a', 'unknown']]) {
     page.context.snrValue = value;
     vm.runInContext(`updateRowSummary(metricRow, {}, summaryFromSnmp({items: [
       {label: 'DS SNR', value: snrValue, units: 'dB'}]}))`, page.context);
     assert.equal(vm.runInContext("metricRow.metricCells.get('ds_snr').value.textContent", page.context), expected);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('ds_snr').cell.dataset.metricState", page.context), state);
   }
   vm.runInContext(`var snrDevices = [
     {id: '1', name: 'A', modem_levels: {ds_snr: {value: '35', raw_value: '35.002'}}},

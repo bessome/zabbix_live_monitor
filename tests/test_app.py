@@ -1071,10 +1071,10 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.zabbix.modem_list_levels(["1", "2", "3", "4", "5"]), {
                 "1": {"us": {"value": "45.3", "units": "dBmV", "alert": False},
                       "ds": {"value": "-3.4", "units": "dBmV", "alert": False},
-                      "ds_snr": {"value": "35.12", "raw_value": "35.12345", "units": "dB"}},
+                      "ds_snr": {"value": "35.12", "raw_value": "35.12345", "units": "dB", "alert": False}},
                 "2": {"us": {"value": "42.13", "units": "dBmV", "alert": False},
                       "ds": {"value": "0", "units": "dBmV", "alert": False},
-                      "ds_snr": {"value": "0", "raw_value": "-0.00001", "units": "dB"}},
+                      "ds_snr": {"value": "0", "raw_value": "-0.00001", "units": "dB", "alert": True}},
                 "3": {"us": {"value": "20", "units": "dBmV", "alert": True},
                       "ds": {"value": "-15", "units": "dBmV", "alert": True}},
                 "4": {"ds": {"value": "18", "units": "dBmV", "alert": False}},
