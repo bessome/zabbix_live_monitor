@@ -220,7 +220,7 @@ async def devices_api(request: Request, category: str, q: str = "",
     elif category == "EDFA":
         allowed_sorts.update(("output", "input"))
     elif category == "Modems":
-        allowed_sorts.update(("us", "ds"))
+        allowed_sorts.update(("us", "ds", "ds_snr"))
     elif category == "UPSs":
         allowed_sorts.update(("load", "battery", "autonomy", "ups_state"))
     if sort_by not in allowed_sorts or sort_dir not in ("asc", "desc"):

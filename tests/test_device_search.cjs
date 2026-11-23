@@ -73,7 +73,7 @@ test('amplifier sort applies to the whole API query and survives navigation', as
 });
 
 test('all numeric list columns sort through the API and restore their direction', async () => {
-  for (const [category, keys] of [['EDFA', ['output', 'input']], ['Modems', ['us', 'ds']],
+  for (const [category, keys] of [['EDFA', ['output', 'input']], ['Modems', ['us', 'ds', 'ds_snr']],
     ['UPSs', ['load', 'battery', 'autonomy', 'ups_state']]]) {
     for (const key of keys) {
       const storage = new Map();
@@ -391,6 +391,7 @@ test('SNMP summary selects lowest channel and keeps missing values unavailable',
   ]})`, page.context);
   assert.equal(summary.modem_levels.us.value, null);
   assert.equal(summary.modem_levels.ds.value, '-3');
+  assert.equal(summary.modem_levels.ds_snr.value, '35');
   const amplifier = loadPage(new Map(), 'TV_Amplifires', '1', async url => ({
     ok: true, json: async () => url.endsWith('/optical-power')
       ? {items: [{id: '1', label: 'Optical input power', value: '-4.2', units: 'dBm'}]}
@@ -400,6 +401,25 @@ test('SNMP summary selects lowest channel and keeps missing values unavailable',
   vm.runInContext('selectMonitor("1", true)', amplifier.context);
   await flush();
   assert.equal(vm.runInContext('liveValues.get("1").summary.optical_level.value', amplifier.context), '-4.2');
+});
+
+test('DS SNR formats live values and sorts at source precision with missing values last', async () => {
+  const page = loadPage(new Map(), 'Modems');
+  await flush();
+  installMetricRow(page);
+  for (const [value, expected] of [['35.123456', '35.12 dB'], ['35.00', '35 dB'],
+    ['-0.00001', '0 dB'], [null, 'n/a'], ['Infinity', 'n/a']]) {
+    page.context.snrValue = value;
+    vm.runInContext(`updateRowSummary(metricRow, {}, summaryFromSnmp({items: [
+      {label: 'DS SNR', value: snrValue, units: 'dB'}]}))`, page.context);
+    assert.equal(vm.runInContext("metricRow.metricCells.get('ds_snr').value.textContent", page.context), expected);
+  }
+  vm.runInContext(`var snrDevices = [
+    {id: '1', name: 'A', modem_levels: {ds_snr: {value: '35', raw_value: '35.002'}}},
+    {id: '2', name: 'B', modem_levels: {ds_snr: {value: '35', raw_value: '35.001'}}},
+    {id: '3', name: 'C', modem_levels: {}}];`, page.context);
+  assert.equal(vm.runInContext("sortedBranchDevices(snrDevices, 'ds_snr:asc').map(d => d.id).join(',')", page.context), '2,1,3');
+  assert.equal(vm.runInContext("sortedBranchDevices(snrDevices, 'ds_snr:desc').map(d => d.id).join(',')", page.context), '1,2,3');
 });
 
 test('EDFA polling reads both Zabbix levels and clears them after an error', async () => {
@@ -541,8 +561,8 @@ test('only all abnormal numeric columns make the entire row abnormal', async () 
   await flush();
   installMetricRow(page);
   for (const [us, ds, rowState, usState, dsState] of [
-    [40, 20, 'mixed', 'normal', 'critical'], [60, 20, 'critical', 'critical', 'critical'],
-    [null, 20, 'mixed', 'unknown', 'critical'], [40, 0, 'normal', 'normal', 'normal'],
+    [40, 20, 'mixed', 'normal', 'critical'], [60, 20, 'mixed', 'critical', 'critical'],
+    [null, 20, 'mixed', 'unknown', 'critical'], [40, 0, 'unknown', 'normal', 'normal'],
     [null, null, 'unknown', 'unknown', 'unknown']]) {
     page.context.testSummary = {modem_levels: {us: {value: us}, ds: {value: ds}}};
     vm.runInContext('updateRowSummary(metricRow, {}, testSummary)', page.context);
@@ -591,7 +611,7 @@ test('every list has separate value cells and the favorite action remains last',
         optical_level: {value: '-2', units: 'dBm'},
         edfa_levels: {output: {value: '19.12345', units: 'dBm'}, input: {value: '-5', units: 'dBm'}}});
     `, page.context);
-    assert.equal(vm.runInContext('renderedRow.children.length', page.context), ['Modems', 'EDFA'].includes(category) ? 4 : 3);
+    assert.equal(vm.runInContext('renderedRow.children.length', page.context), category === 'Modems' ? 5 : category === 'EDFA' ? 4 : 3);
     assert.equal(vm.runInContext('renderedRow.children.at(-1).className', page.context), 'device-favorite-cell');
     assert.equal(vm.runInContext('renderedRow.children[0].children.length', page.context), 1);
     assert.equal(vm.runInContext('renderedRow.children[0].children[0].children.at(-1).textContent', page.context),
@@ -599,6 +619,8 @@ test('every list has separate value cells and the favorite action remains last',
     if (category === 'Modems') {
       assert.equal(vm.runInContext('renderedRow.children[1].dataset.label', page.context), 'US Level');
       assert.equal(vm.runInContext('renderedRow.children[2].dataset.label', page.context), 'DS Level');
+      assert.equal(vm.runInContext('renderedRow.children[3].dataset.label', page.context), 'DS SNR');
+      assert.equal(vm.runInContext('renderedRow.children[3].children[0].textContent', page.context), 'n/a');
       assert.equal(vm.runInContext('renderedRow.children[1].children[0].textContent', page.context), '40 dBmV');
     }
     if (category === 'EDFA') {

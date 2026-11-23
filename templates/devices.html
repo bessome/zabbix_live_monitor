@@ -44,7 +44,8 @@ const rows = document.getElementById("rows");
 // One definition per visible value; reuse for list rows and every tree branch.
 const metricColumns = category === "Modems"
   ? [{key: "us", label: "US Level", path: ["modem_levels", "us"], min: 20, max: 52},
-     {key: "ds", label: "DS Level", path: ["modem_levels", "ds"], min: -15, max: 18}]
+     {key: "ds", label: "DS Level", path: ["modem_levels", "ds"], min: -15, max: 18},
+     {key: "ds_snr", label: "DS SNR", mobileLabel: "SNR", path: ["modem_levels", "ds_snr"]}]
   : category === "TV_Amplifires" ? [{key: "optical", label: "Опт. уровень", path: ["optical_level"], min: -3.4, max: Infinity}]
   : category === "EDFA" ? [{key: "output", label: "Optical output level", mobileLabel: "OUT", path: ["edfa_levels", "output"]},
      {key: "input", label: "Optical input level", mobileLabel: "IN", path: ["edfa_levels", "input"]}]
@@ -191,6 +192,10 @@ function summaryFromSnmp(data) {
     candidates.sort((a, b) => channel(a) - channel(b));
     levels[kind.toLowerCase()] = candidates[0] || null;
   }
+  const snr = items.filter(item => /^DS(?:\d+)?\b/.test(item.label || "") && item.label.endsWith(" SNR"));
+  snr.sort((a, b) => Number(a.label.match(/^DS(\d+)/)?.[1] || 9999)
+    - Number(b.label.match(/^DS(\d+)/)?.[1] || 9999));
+  levels.ds_snr = snr[0] || null;
   return {modem_levels: levels};
 }
 function pollMonitored() {

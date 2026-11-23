@@ -30,6 +30,7 @@ _cache_lock = threading.Lock()
 _search_letters = str.maketrans({"ä": "a", "ö": "o", "õ": "o", "ü": "u"})
 _list_us_level = re.compile(r"^Upstream channel\s+US(\d*)\s+Level$", re.I)
 _list_ds_level = re.compile(r"^Downstream channel(?:\s+(\d+)\s+\S+MHz)?\s+Level$", re.I)
+_list_ds_snr = re.compile(r"^Downstream channel(?:\s+(\d+)\s+\S+MHz)?\s+SNR$", re.I)
 
 def category_filter(category):
     if category not in CATEGORIES:
@@ -176,14 +177,15 @@ def device_descriptions(host_ids):
 
 
 def modem_list_levels(host_ids, *, include_raw=False):
-    """Read one current US and DS level per visible modem from Zabbix."""
+    """Read current US level, DS level and DS SNR per visible modem."""
     if not host_ids:
         return {}
     items = zabbix_call("item.get", {
         "output": ["itemid", "hostid", "name", "status", "value_type",
                    "units", "lastvalue", "lastclock"],
         "hostids": host_ids,
-        "search": {"name": "Level"},
+        "search": {"name": ["Level", "SNR"]},
+        "searchByAny": True,
     })
     choices = {}
     for item in items:
@@ -193,7 +195,8 @@ def modem_list_levels(host_ids, *, include_raw=False):
             continue
         us = _list_us_level.fullmatch(str(item.get("name", "")).strip())
         ds = _list_ds_level.fullmatch(str(item.get("name", "")).strip())
-        if not us and not ds:
+        snr = _list_ds_snr.fullmatch(str(item.get("name", "")).strip())
+        if not us and not ds and not snr:
             continue
         try:
             clock = int(item.get("lastclock") or 0)
@@ -202,9 +205,9 @@ def modem_list_levels(host_ids, *, include_raw=False):
             continue
         if clock <= 0 or not value.is_finite():
             continue
-        match = us or ds
+        match = us or ds or snr
         channel = int(match.group(1)) if match.group(1) else 9999
-        kind = "us" if us else "ds"
+        kind = "us" if us else "ds" if ds else "ds_snr"
         # Prefer a numbered channel over a generic item, then the lowest channel.
         rank = (channel, -clock, str(item.get("itemid", "")))
         key = (str(item["hostid"]), kind)
@@ -213,10 +216,11 @@ def modem_list_levels(host_ids, *, include_raw=False):
             if rounded == 0:
                 rounded = Decimal(0)
             choices[key] = (rank, {"value": format(rounded.normalize(), "f"),
-                                   "units": str(item.get("units") or ""),
-                                   "alert": value < (20 if kind == "us" else -15)
-                                   or value > (52 if kind == "us" else 18)})
-            if include_raw:
+                                   "units": str(item.get("units") or "")})
+            if kind != "ds_snr":
+                choices[key][1]["alert"] = (value < (20 if kind == "us" else -15)
+                                            or value > (52 if kind == "us" else 18))
+            if include_raw or kind == "ds_snr":
                 choices[key][1]["raw_value"] = str(value)
     result = {}
     for (host_id, kind), (_, metric) in choices.items():

@@ -1052,7 +1052,7 @@ class AppTests(unittest.TestCase):
             item("3", "1", "Upstream channel US2 Level", "47.0"),
             item("4", "1", "Downstream channel 3 447MHz Level", "-2.5"),
             item("5", "1", "Downstream channel 1 435MHz Level", "-3.4000000000000004"),
-            item("6", "1", "Downstream channel 1 435MHz SNR", "35"),
+            item("6", "1", "Downstream channel 1 435MHz SNR", "35.12345", units="dB"),
             item("7", "1", "Upstream channel US Level", "90"),
             item("12", "1", "Downstream channel Level", "30"),
             item("8", "2", "Upstream channel US Level", "42.126"),
@@ -1062,13 +1062,19 @@ class AppTests(unittest.TestCase):
             item("13", "3", "Downstream channel Level", "-15.001"),
             item("14", "4", "Downstream channel Level", "18"),
             item("15", "5", "Downstream channel Level", "18.001"),
+            item("16", "1", "Downstream channel 2 443MHz SNR", "36", units="dB"),
+            item("17", "2", "Downstream channel SNR", "-0.00001", units="dB"),
+            item("18", "3", "Downstream channel SNR", "NaN", units="dB"),
+            item("19", "3", "Downstream channel SNR", "35", clock="0", units="dB"),
         ]
         with patch("zabbix_service.zabbix_call", return_value=items) as api:
             self.assertEqual(self.zabbix.modem_list_levels(["1", "2", "3", "4", "5"]), {
                 "1": {"us": {"value": "45.3", "units": "dBmV", "alert": False},
-                      "ds": {"value": "-3.4", "units": "dBmV", "alert": False}},
+                      "ds": {"value": "-3.4", "units": "dBmV", "alert": False},
+                      "ds_snr": {"value": "35.12", "raw_value": "35.12345", "units": "dB"}},
                 "2": {"us": {"value": "42.13", "units": "dBmV", "alert": False},
-                      "ds": {"value": "0", "units": "dBmV", "alert": False}},
+                      "ds": {"value": "0", "units": "dBmV", "alert": False},
+                      "ds_snr": {"value": "0", "raw_value": "-0.00001", "units": "dB"}},
                 "3": {"us": {"value": "20", "units": "dBmV", "alert": True},
                       "ds": {"value": "-15", "units": "dBmV", "alert": True}},
                 "4": {"ds": {"value": "18", "units": "dBmV", "alert": False}},
@@ -1076,7 +1082,8 @@ class AppTests(unittest.TestCase):
             })
             self.assertEqual(api.call_args.args[0], "item.get")
             self.assertEqual(api.call_args.args[1]["hostids"], ["1", "2", "3", "4", "5"])
-            self.assertEqual(api.call_args.args[1]["search"], {"name": "Level"})
+            self.assertEqual(api.call_args.args[1]["search"], {"name": ["Level", "SNR"]})
+            self.assertTrue(api.call_args.args[1]["searchByAny"])
         self.assertEqual(self.zabbix.modem_list_levels([]), {})
 
     def test_modem_list_api_uses_zabbix_levels_instead_of_descriptions(self):
@@ -1179,7 +1186,7 @@ class AppTests(unittest.TestCase):
                     "address": f"192.0.2.{i}"} for i in range(1, 31)]
         for category, reader, kinds in [("EDFA", "edfa_levels", ("output", "input")),
                                          ("UPSs", "ups_levels", ("load", "battery", "autonomy", "ups_state")),
-                                         ("Modems", "modem_list_levels", ("us", "ds"))]:
+                                         ("Modems", "modem_list_levels", ("us", "ds", "ds_snr"))]:
             for kind in kinds:
                 levels = {str(i): {kind: {"value": "1", "raw_value": str(i / 10000)}}
                           for i in range(1, 29)}
