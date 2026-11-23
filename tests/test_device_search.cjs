@@ -56,11 +56,20 @@ function installMetricRow(page) {
   `, page.context);
 }
 
-test('amplifier sort applies to the whole API query and survives navigation', async () => {
+function clickSortHeading(page, key) {
+  page.context.headingKey = key;
+  vm.runInContext(`var clickedHeading = {dataset: {amplifierSort: headingKey},
+    closest() { return {setAttribute() {}}; },
+    addEventListener(event, handler) { this[event] = handler; }};
+    bindAmplifierSortButton(clickedHeading); clickedHeading.click();`, page.context);
+}
+
+test('column clicks sort the whole list but reopening defaults to name', async () => {
   const storage = new Map();
   const page = loadPage(storage, 'TV_Amplifires');
   await flush();
-  page.element('amplifier-sort').listeners.change({target: {value: 'level:desc'}});
+  clickSortHeading(page, 'level');
+  clickSortHeading(page, 'level');
   await flush();
   let params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
   assert.equal(params.get('sort_by'), 'level');
@@ -68,25 +77,33 @@ test('amplifier sort applies to the whole API query and survives navigation', as
   assert.equal(params.get('page'), '1');
   const restored = loadPage(storage, 'TV_Amplifires');
   params = new URL(restored.requests[0], 'https://example.test').searchParams;
-  assert.equal(params.get('sort_by'), 'level');
-  assert.equal(params.get('sort_dir'), 'desc');
+  assert.equal(params.get('sort_by'), 'name');
+  assert.equal(params.get('sort_dir'), 'asc');
 });
 
-test('all numeric list columns sort through the API and restore their direction', async () => {
+test('all numeric columns sort only through headings and ignore saved sorting', async () => {
   for (const [category, keys] of [['EDFA', ['output', 'input']], ['Modems', ['us', 'ds', 'ds_snr']],
     ['UPSs', ['load', 'battery', 'autonomy', 'ups_state']]]) {
     for (const key of keys) {
       const storage = new Map();
       const page = loadPage(storage, category);
       await flush();
-      page.element('amplifier-sort').listeners.change({target: {value: key + ':desc'}});
+      clickSortHeading(page, key);
+      await flush();
+      assert.equal(new URL(page.requests.at(-1), 'https://example.test').searchParams.get('sort_dir'), 'asc');
+      clickSortHeading(page, key);
       await flush();
       const params = new URL(page.requests.at(-1), 'https://example.test').searchParams;
       assert.equal(params.get('sort_by'), key);
       assert.equal(params.get('sort_dir'), 'desc');
+      const saved = JSON.parse(storage.get('zabbix-device-search:1:' + category));
+      saved.amplifierSort = key + ':desc';
+      saved.branchSorts = [['City/Street', key + ':desc']];
+      storage.set('zabbix-device-search:1:' + category, JSON.stringify(saved));
       const restored = loadPage(storage, category);
-      assert.equal(new URL(restored.requests[0], 'https://example.test').searchParams.get('sort_by'), key);
-      assert.equal(vm.runInContext('amplifierSort', restored.context), key + ':desc');
+      assert.equal(new URL(restored.requests[0], 'https://example.test').searchParams.get('sort_by'), 'name');
+      assert.equal(vm.runInContext('amplifierSort', restored.context), 'name:asc');
+      assert.equal(vm.runInContext('branchSorts.size', restored.context), 0);
     }
   }
 });
@@ -177,7 +194,7 @@ test('tree sorting changes only the branch whose header was clicked', async () =
   assert.equal(vm.runInContext("openGroups.has('City/Street')", page.context), true);
   assert.equal(page.requests.length, requestCount);
   const saved = JSON.parse(storage.get('zabbix-device-search:1:TV_Amplifires'));
-  assert.deepEqual(saved.branchSorts, [['City/Street', 'level:desc']]);
+  assert.equal(saved.branchSorts, undefined);
 });
 
 test('returning from monitoring restores the query, page and page size', async () => {

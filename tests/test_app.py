@@ -1179,7 +1179,7 @@ class AppTests(unittest.TestCase):
             self.assertEqual(self.client.get(path + "&sort_dir=invalid").status_code, 422)
             self.assertEqual(self.client.get("/api/devices/Modems?sort_by=level").status_code, 422)
         page = self.client.get("/devices/TV_Amplifires")
-        self.assertIn('id="amplifier-sort"', page.text)
+        self.assertNotIn('id="amplifier-sort"', page.text)
         self.assertIn('button.dataset.amplifierSort = key', page.text)
 
     def test_edfa_and_modem_sorting_before_pagination(self):
